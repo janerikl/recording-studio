@@ -61,6 +61,15 @@ MainWindow::MainWindow(QWidget* parent)
         "Remove Track", this);
     m_removeTrackAction->setToolTip("Remove the Active track");
 
+    m_zoomInAction = new QAction(QIcon::fromTheme("zoom-in-symbolic"), "Zoom In", this);
+    m_zoomInAction->setToolTip("Zoom In (Ctrl++)");
+    m_zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    m_zoomOutAction = new QAction(QIcon::fromTheme("zoom-out-symbolic"), "Zoom Out", this);
+    m_zoomOutAction->setToolTip("Zoom Out (Ctrl+-)");
+    m_zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    m_zoomResetAction = new QAction(QIcon::fromTheme("zoom-original-symbolic"), "Reset Zoom", this);
+    m_zoomResetAction->setToolTip("Reset Zoom");
+
     auto* importAction =
         new QAction(QIcon::fromTheme("document-open-symbolic"), "Import...", this);
     auto* exportAction =
@@ -95,6 +104,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(exportAction, &QAction::triggered, this, &MainWindow::onExportClicked);
     connect(m_addTrackAction, &QAction::triggered, this, &MainWindow::onAddTrackClicked);
     connect(m_removeTrackAction, &QAction::triggered, this, &MainWindow::onRemoveTrackClicked);
+    connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomInClicked);
+    connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOutClicked);
+    connect(m_zoomResetAction, &QAction::triggered, this, &MainWindow::onZoomResetClicked);
     connect(m_deleteClipAction, &QAction::triggered, this, &MainWindow::onDeleteClipClicked);
     connect(saveSessionAction, &QAction::triggered, this, &MainWindow::onSaveSessionClicked);
     connect(loadSessionAction, &QAction::triggered, this, &MainWindow::onLoadSessionClicked);
@@ -132,6 +144,10 @@ MainWindow::MainWindow(QWidget* parent)
     toolbar->addSeparator();
     toolbar->addAction(m_addTrackAction);
     toolbar->addAction(m_removeTrackAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_zoomInAction);
+    toolbar->addAction(m_zoomOutAction);
+    toolbar->addAction(m_zoomResetAction);
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -366,6 +382,24 @@ void MainWindow::updatePlayhead() {
 void MainWindow::updateMeters() {
     m_inputMeter->setLevels(m_engine->inputPeakL(), m_engine->inputPeakR());
     m_outputMeter->setLevels(m_engine->outputPeakL(), m_engine->outputPeakR());
+}
+
+void MainWindow::onZoomInClicked() {
+    m_zoomFactor = std::min(kMaxZoom, m_zoomFactor * 1.5f);
+    refreshMasterAndScale();
+    updatePlayhead();
+}
+
+void MainWindow::onZoomOutClicked() {
+    m_zoomFactor = std::max(kMinZoom, m_zoomFactor / 1.5f);
+    refreshMasterAndScale();
+    updatePlayhead();
+}
+
+void MainWindow::onZoomResetClicked() {
+    m_zoomFactor = 1.0f;
+    refreshMasterAndScale();
+    updatePlayhead();
 }
 
 void MainWindow::drainCaptureRing() {
@@ -730,7 +764,11 @@ int64_t MainWindow::refreshTimelineScale() {
     // locally — now computed once here so every lane and the ruler agree.
     int64_t floor = static_cast<int64_t>(m_session->sampleRate) * 30;
     int64_t headroom = static_cast<int64_t>(m_session->sampleRate) * 10;
-    int64_t total = std::max(floor, maxEnd + headroom);
+    int64_t base = std::max(floor, maxEnd + headroom);
+    // m_zoomFactor > 1 shows fewer seconds across the same widget width (zoomed
+    // in); content past the visible window is simply not drawn — there's no
+    // horizontal scrolling, so zooming in trades overview for detail.
+    int64_t total = std::max<int64_t>(1, static_cast<int64_t>(base / m_zoomFactor));
 
     m_timeline->setSharedTimelineLength(total);
     m_ruler->setTimelineLength(total);

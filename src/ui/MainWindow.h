@@ -73,6 +73,9 @@ private slots:
     void drainCaptureRing();
     void updatePlayhead();
     void updateMeters();
+    void onZoomInClicked();
+    void onZoomOutClicked();
+    void onZoomResetClicked();
 
 private:
     void updateStatusLabel();
@@ -105,6 +108,15 @@ private:
     QAction* m_redoAction = nullptr;
     QAction* m_addTrackAction = nullptr;
     QAction* m_removeTrackAction = nullptr;
+    QAction* m_zoomInAction = nullptr;
+    QAction* m_zoomOutAction = nullptr;
+    QAction* m_zoomResetAction = nullptr;
+    // >1 = zoomed in (fewer seconds visible, clips appear wider); clamped to
+    // a sane range. Applied on top of the content-based floor/headroom scale
+    // in refreshTimelineScale().
+    float m_zoomFactor = 1.0f;
+    static constexpr float kMinZoom = 0.25f;
+    static constexpr float kMaxZoom = 8.0f;
     std::vector<SessionSnapshot> m_undoStack;
     std::vector<SessionSnapshot> m_redoStack;
     static constexpr size_t kMaxUndoDepth = 50;
