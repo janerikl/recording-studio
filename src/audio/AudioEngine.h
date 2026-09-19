@@ -1,14 +1,24 @@
 #pragma once
 
 #include <RtAudio.h>
+#include <QString>
 #include <atomic>
 #include <memory>
+#include <vector>
 
 #include "RingBuffer.h"
 #include "TransportClock.h"
 #include "model/Session.h"
 
 namespace rsd {
+
+struct DeviceOption {
+    unsigned int id = 0;
+    QString name;
+    unsigned int maxOutputChannels = 0;
+    unsigned int maxInputChannels = 0;
+    std::vector<unsigned int> sampleRates;
+};
 
 class AudioEngine {
 public:
@@ -18,6 +28,22 @@ public:
     bool start();
     void stop();
     bool isRunning() const { return m_running; }
+
+    std::vector<DeviceOption> listDevices() const;
+
+    // kUseSystemDefault = use RtAudio's default device for that role (device
+    // index 0 is a real, valid device in this RtAudio version, so it can't
+    // double as an "unset" sentinel). Takes effect on the next
+    // start()/restart() — the stream isn't reopened automatically.
+    static constexpr unsigned int kUseSystemDefault = static_cast<unsigned int>(-1);
+    static constexpr unsigned int kNoInputDevice = static_cast<unsigned int>(-2);
+    void setPreferredOutputDevice(unsigned int id) { m_preferredOutputDevice = id; }
+    void setPreferredInputDevice(unsigned int id) { m_preferredInputDevice = id; }
+    void setPreferredSampleRate(unsigned int sr) { m_preferredSampleRate = sr; }
+    unsigned int preferredOutputDevice() const { return m_preferredOutputDevice; }
+    unsigned int preferredInputDevice() const { return m_preferredInputDevice; }
+
+    bool restart(); // stop() then start() with current preferred settings
 
     void setSession(Session* session) { m_session = session; }
 
@@ -47,6 +73,10 @@ private:
     unsigned int m_sampleRate = 48000;
     unsigned int m_channels = 2;
     bool m_running = false;
+
+    unsigned int m_preferredOutputDevice = kUseSystemDefault;
+    unsigned int m_preferredInputDevice = kUseSystemDefault;
+    unsigned int m_preferredSampleRate = 48000;
 
     Session* m_session = nullptr;
     TransportClock m_transport;

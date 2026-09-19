@@ -45,6 +45,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* loadSessionButton = new QPushButton("Load Session...", buttonRow);
     m_undoButton = new QPushButton("Undo", buttonRow);
     m_redoButton = new QPushButton("Redo", buttonRow);
+    auto* settingsButton = new QPushButton("Settings...", buttonRow);
     m_stopButton->setEnabled(false);
     m_deleteClipButton->setEnabled(false);
     m_undoButton->setEnabled(false);
@@ -64,6 +65,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(loadSessionButton, &QPushButton::clicked, this, &MainWindow::onLoadSessionClicked);
     connect(m_undoButton, &QPushButton::clicked, this, &MainWindow::onUndoClicked);
     connect(m_redoButton, &QPushButton::clicked, this, &MainWindow::onRedoClicked);
+    connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onSettingsClicked);
 
     buttonLayout->addWidget(m_recordButton);
     buttonLayout->addWidget(m_playButton);
@@ -78,6 +80,7 @@ MainWindow::MainWindow(QWidget* parent)
     buttonLayout->addWidget(loadSessionButton);
     buttonLayout->addWidget(m_undoButton);
     buttonLayout->addWidget(m_redoButton);
+    buttonLayout->addWidget(settingsButton);
     layout->addWidget(buttonRow);
 
     m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
@@ -380,6 +383,25 @@ void MainWindow::onSaveSessionClicked() {
     }
 
     QMessageBox::information(this, "Session Saved", "Saved to: " + path);
+}
+
+void MainWindow::onSettingsClicked() {
+    onStopClicked(); // don't restart the stream mid-playback/recording
+
+    SettingsDialog dialog(*m_engine, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    // Existing clips keep their sample counts at whatever rate they were
+    // recorded/imported at — changing the engine's rate here doesn't
+    // resample them, so pitch/duration will shift for prior content. Fine
+    // for a rate chosen before recording; a caveat for changing mid-session.
+    m_session->sampleRate = static_cast<int>(dialog.chosenSampleRate());
+    m_ruler->setSampleRate(m_session->sampleRate);
+    refreshTimelineScale();
+
+    m_recordButton->setEnabled(true);
+    m_playButton->setEnabled(true);
+    m_playFromStartButton->setEnabled(true);
 }
 
 void MainWindow::onLoadSessionClicked() {

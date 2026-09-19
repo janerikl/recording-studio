@@ -12,6 +12,7 @@
 #include "ui/LevelMeterWidget.h"
 #include "ui/TimelineView.h"
 #include "ui/TimeRulerWidget.h"
+#include "ui/SettingsDialog.h"
 
 namespace rsd {
 
@@ -54,6 +55,7 @@ private slots:
     void onExportClicked();
     void onSaveSessionClicked();
     void onLoadSessionClicked();
+    void onSettingsClicked();
     void onAddTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);

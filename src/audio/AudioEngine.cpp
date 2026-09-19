@@ -107,18 +107,29 @@ bool AudioEngine::start() {
     }
 
     RtAudio::StreamParameters outParams;
-    outParams.deviceId = m_rtAudio->getDefaultOutputDevice();
+    outParams.deviceId = m_preferredOutputDevice != kUseSystemDefault
+                              ? m_preferredOutputDevice
+                              : m_rtAudio->getDefaultOutputDevice();
     outParams.nChannels = m_channels;
 
     RtAudio::StreamParameters inParams;
-    inParams.deviceId = m_rtAudio->getDefaultInputDevice();
-    inParams.nChannels = m_channels;
-
-    const bool haveInput = inParams.deviceId != 0;
+    bool haveInput = m_preferredInputDevice != kNoInputDevice;
+    if (haveInput) {
+        inParams.deviceId = m_preferredInputDevice != kUseSystemDefault
+                                 ? m_preferredInputDevice
+                                 : m_rtAudio->getDefaultInputDevice();
+        inParams.nChannels = m_channels;
+        // Confirm the resolved device actually supports input — a bare
+        // device index isn't enough evidence (index 0 is a real device in
+        // this RtAudio version, and might be output-only).
+        RtAudio::DeviceInfo devInfo = m_rtAudio->getDeviceInfo(inParams.deviceId);
+        if (!devInfo.probed || devInfo.inputChannels == 0) haveInput = false;
+    }
     if (!haveInput) {
         std::cerr << "No input device found; recording will be unavailable, playback only.\n";
     }
 
+    m_sampleRate = m_preferredSampleRate;
     unsigned int bufferFrames = 512;
 
     try {
@@ -143,6 +154,29 @@ void AudioEngine::stop() {
         std::cerr << "RtAudio stop error: " << e.what() << "\n";
     }
     m_running = false;
+}
+
+bool AudioEngine::restart() {
+    stop();
+    return start();
+}
+
+std::vector<DeviceOption> AudioEngine::listDevices() const {
+    std::vector<DeviceOption> result;
+    unsigned int count = m_rtAudio->getDeviceCount();
+    for (unsigned int id = 0; id < count; ++id) {
+        RtAudio::DeviceInfo info = m_rtAudio->getDeviceInfo(id);
+        if (!info.probed || info.name.empty()) continue;
+
+        DeviceOption opt;
+        opt.id = id;
+        opt.name = QString::fromStdString(info.name);
+        opt.maxOutputChannels = info.outputChannels;
+        opt.maxInputChannels = info.inputChannels;
+        for (unsigned int sr : info.sampleRates) opt.sampleRates.push_back(sr);
+        result.push_back(std::move(opt));
+    }
+    return result;
 }
 
 } // namespace rsd
