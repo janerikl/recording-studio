@@ -17,7 +17,11 @@ add_executable(recording_studio
     src/main.cpp
     src/audio/AudioEngine.cpp
     src/io/AudioFileIO.cpp
+    src/waveform/WaveformCache.cpp
     src/ui/MainWindow.cpp
+    src/ui/WaveformWidget.cpp
+    src/ui/TrackWidgets.cpp
+    src/ui/TimelineView.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)

@@ -17,11 +17,10 @@ MainWindow::MainWindow(QWidget* parent)
       m_engine(std::make_unique<AudioEngine>()),
       m_session(std::make_unique<Session>()) {
     setWindowTitle("Recording Studio");
-    resize(800, 600);
+    resize(900, 600);
 
     m_session->sampleRate = static_cast<int>(m_engine->sampleRate());
     m_session->channels = static_cast<int>(m_engine->channels());
-    m_track = m_session->addTrack("Track 1");
     m_engine->setSession(m_session.get());
 
     auto* central = new QWidget(this);
@@ -35,6 +34,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_stopButton = new QPushButton("Stop", buttonRow);
     auto* importButton = new QPushButton("Import...", buttonRow);
     auto* exportButton = new QPushButton("Export...", buttonRow);
+    auto* addTrackButton = new QPushButton("Add Track", buttonRow);
+    auto* removeTrackButton = new QPushButton("Remove Track", buttonRow);
     m_stopButton->setEnabled(false);
 
     connect(m_recordButton, &QPushButton::clicked, this, &MainWindow::onRecordClicked);
@@ -42,17 +43,24 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_stopButton, &QPushButton::clicked, this, &MainWindow::onStopClicked);
     connect(importButton, &QPushButton::clicked, this, &MainWindow::onImportClicked);
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::onExportClicked);
+    connect(addTrackButton, &QPushButton::clicked, this, &MainWindow::onAddTrackClicked);
+    connect(removeTrackButton, &QPushButton::clicked, this, &MainWindow::onRemoveTrackClicked);
 
     buttonLayout->addWidget(m_recordButton);
     buttonLayout->addWidget(m_playButton);
     buttonLayout->addWidget(m_stopButton);
     buttonLayout->addWidget(importButton);
     buttonLayout->addWidget(exportButton);
+    buttonLayout->addWidget(addTrackButton);
+    buttonLayout->addWidget(removeTrackButton);
     layout->addWidget(buttonRow);
 
-    m_statusLabel = new QLabel("Stopped — 0 clips", central);
+    m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
     layout->addWidget(m_statusLabel);
-    layout->addStretch();
+
+    m_timeline = new TimelineView(central);
+    connect(m_timeline, &TimelineView::trackSelected, this, &MainWindow::onTrackSelected);
+    layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
 
@@ -65,9 +73,42 @@ MainWindow::MainWindow(QWidget* parent)
         m_recordButton->setEnabled(false);
         m_playButton->setEnabled(false);
     }
+
+    onAddTrackClicked(); // start with one track
+}
+
+void MainWindow::onAddTrackClicked() {
+    ++m_trackCounter;
+    auto track = m_session->addTrack(QString("Track %1").arg(m_trackCounter));
+    m_timeline->addTrack(track);
+    if (!m_activeTrack) m_activeTrack = track;
+    updateStatusLabel();
+}
+
+void MainWindow::onRemoveTrackClicked() {
+    if (!m_activeTrack) return;
+    auto idToRemove = m_activeTrack->id;
+
+    auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
+                            [&](const auto& t) { return t->id == idToRemove; });
+    if (it == m_session->tracks.end()) return;
+
+    m_timeline->removeTrack(idToRemove);
+    m_session->tracks.erase(it);
+    m_activeTrack = m_session->tracks.empty() ? nullptr : m_session->tracks.front();
+    updateStatusLabel();
+}
+
+void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
+    m_activeTrack = std::move(track);
 }
 
 void MainWindow::onRecordClicked() {
+    if (!m_activeTrack) {
+        QMessageBox::warning(this, "No Track", "Add a track first.");
+        return;
+    }
+
     m_activeRecordingClip = std::make_shared<Clip>();
     m_activeRecordingClip->buffer = std::make_shared<AudioBuffer>();
     m_activeRecordingClip->buffer->channels = m_session->channels;
@@ -81,7 +122,7 @@ void MainWindow::onRecordClicked() {
     m_recordButton->setEnabled(false);
     m_playButton->setEnabled(false);
     m_stopButton->setEnabled(true);
-    m_statusLabel->setText("Recording...");
+    m_statusLabel->setText("Recording into " + m_activeTrack->name + "...");
 }
 
 void MainWindow::onPlayClicked() {
@@ -99,10 +140,11 @@ void MainWindow::onStopClicked() {
     m_engine->transport().setState(TransportState::Stopped);
     m_ringDrainTimer->stop();
 
-    if (wasRecording && m_activeRecordingClip) {
+    if (wasRecording && m_activeRecordingClip && m_activeTrack) {
         drainCaptureRing(); // flush any remaining samples
         m_activeRecordingClip->lengthSamples = m_activeRecordingClip->buffer->frameCount();
-        m_track->addClip(m_activeRecordingClip);
+        m_activeTrack->addClip(m_activeRecordingClip);
+        refreshWaveformFor(m_activeTrack);
         m_activeRecordingClip.reset();
     }
 
@@ -124,6 +166,11 @@ void MainWindow::drainCaptureRing() {
 }
 
 void MainWindow::onImportClicked() {
+    if (!m_activeTrack) {
+        QMessageBox::warning(this, "No Track", "Add a track first.");
+        return;
+    }
+
     QString path = QFileDialog::getOpenFileName(this, "Import Audio File", QString(),
                                                   "Audio Files (*.wav *.flac *.ogg *.aiff)");
     if (path.isEmpty()) return;
@@ -141,16 +188,22 @@ void MainWindow::onImportClicked() {
     clip->sourceOffsetSamples = 0;
     clip->lengthSamples = buffer->frameCount();
 
-    m_track->addClip(clip);
+    m_activeTrack->addClip(clip);
     updateStatusLabel();
+    refreshWaveformFor(m_activeTrack);
 }
 
 void MainWindow::onExportClicked() {
-    QString path = QFileDialog::getSaveFileName(this, "Export Audio File", QString(),
+    if (!m_activeTrack) {
+        QMessageBox::warning(this, "No Track", "Add a track first.");
+        return;
+    }
+
+    QString path = QFileDialog::getSaveFileName(this, "Export Active Track", QString(),
                                                   "WAV Files (*.wav)");
     if (path.isEmpty()) return;
 
-    auto rendered = renderTrackToBuffer(*m_track);
+    auto rendered = renderTrackToBuffer(*m_activeTrack);
     if (!AudioFileIO::writeFile(path, *rendered)) {
         QMessageBox::warning(this, "Export Failed", "Could not write: " + path);
         return;
@@ -190,15 +243,18 @@ std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track)
     return out;
 }
 
+void MainWindow::refreshWaveformFor(const std::shared_ptr<Track>& track) {
+    if (!track) return;
+    m_timeline->refreshTrackWaveform(track->id, renderTrackToBuffer(*track));
+}
+
 void MainWindow::updateStatusLabel() {
-    auto clips = m_track->clipsSnapshot();
-    double totalSeconds = 0.0;
-    for (auto& clip : *clips) {
-        totalSeconds += static_cast<double>(clip->lengthSamples) / m_session->sampleRate;
+    int totalClips = 0;
+    for (auto& track : m_session->tracks) {
+        totalClips += static_cast<int>(track->clipsSnapshot()->size());
     }
-    m_statusLabel->setText(QString("Stopped — %1 clip(s), %2s total")
-                                .arg(clips->size())
-                                .arg(totalSeconds, 0, 'f', 2));
+    m_statusLabel->setText(
+        QString("Stopped — %1 track(s), %2 clip(s)").arg(m_session->tracks.size()).arg(totalClips));
 }
 
 } // namespace rsd
