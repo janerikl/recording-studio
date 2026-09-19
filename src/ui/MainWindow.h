@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QTimer>
 #include <memory>
+#include <vector>
 
 #include "audio/AudioEngine.h"
 #include "model/Session.h"
@@ -49,6 +50,7 @@ private:
     std::unique_ptr<Session> m_session;
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
+    std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
     std::shared_ptr<Track> m_trackWithClipSelection;
 
     QPushButton* m_recordButton = nullptr;

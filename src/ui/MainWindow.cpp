@@ -4,6 +4,8 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QMessageBox>
+#include <QShortcut>
+#include <QStringList>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <algorithm>
@@ -104,6 +106,27 @@ MainWindow::MainWindow(QWidget* parent)
 
     onAddTrackClicked(); // start with one track
     refreshTimelineScale();
+
+    // Space toggles play/stop; Delete/Backspace removes the selected clip;
+    // R starts recording. Standard transport/editor conventions.
+    auto* spaceShortcut = new QShortcut(QKeySequence(Qt::Key_Space), this);
+    connect(spaceShortcut, &QShortcut::activated, this, [this]() {
+        if (m_engine->transport().state() == TransportState::Stopped) {
+            onPlayClicked();
+        } else {
+            onStopClicked();
+        }
+    });
+
+    auto* deleteShortcut = new QShortcut(QKeySequence(Qt::Key_Delete), this);
+    connect(deleteShortcut, &QShortcut::activated, this, &MainWindow::onDeleteClipClicked);
+    auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
+    connect(backspaceShortcut, &QShortcut::activated, this, &MainWindow::onDeleteClipClicked);
+
+    auto* recordShortcut = new QShortcut(QKeySequence(Qt::Key_R), this);
+    connect(recordShortcut, &QShortcut::activated, this, [this]() {
+        if (m_engine->transport().state() == TransportState::Stopped) onRecordClicked();
+    });
 }
 
 void MainWindow::onAddTrackClicked() {
@@ -149,7 +172,16 @@ void MainWindow::onDeleteClipClicked() {
 }
 
 void MainWindow::onRecordClicked() {
-    if (!m_activeTrack) {
+    // Record-armed tracks are the target; if none are armed, fall back to
+    // whichever track is Active so recording still works out of the box.
+    m_recordTargetTracks.clear();
+    for (auto& track : m_session->tracks) {
+        if (track->recordArmed.load()) m_recordTargetTracks.push_back(track);
+    }
+    if (m_recordTargetTracks.empty() && m_activeTrack) {
+        m_recordTargetTracks.push_back(m_activeTrack);
+    }
+    if (m_recordTargetTracks.empty()) {
         QMessageBox::warning(this, "No Track", "Add a track first.");
         return;
     }
@@ -169,7 +201,10 @@ void MainWindow::onRecordClicked() {
     m_playButton->setEnabled(false);
     m_playFromStartButton->setEnabled(false);
     m_stopButton->setEnabled(true);
-    m_statusLabel->setText("Recording into " + m_activeTrack->name + "...");
+
+    QStringList names;
+    for (auto& t : m_recordTargetTracks) names << t->name;
+    m_statusLabel->setText("Recording into " + names.join(", ") + "...");
 }
 
 void MainWindow::onPlayClicked() {
@@ -200,12 +235,21 @@ void MainWindow::onStopClicked() {
     m_ringDrainTimer->stop();
     m_playheadTimer->stop();
 
-    if (wasRecording && m_activeRecordingClip && m_activeTrack) {
+    if (wasRecording && m_activeRecordingClip && !m_recordTargetTracks.empty()) {
         drainCaptureRing(); // flush any remaining samples
         m_activeRecordingClip->lengthSamples = m_activeRecordingClip->buffer->frameCount();
-        m_activeTrack->addClip(m_activeRecordingClip);
-        refreshWaveformFor(m_activeTrack);
+
+        // Every armed track gets its own Clip (so each can be trimmed/moved
+        // independently later) but they all share the same recorded
+        // AudioBuffer — identical audio, no data duplicated in memory.
+        for (auto& track : m_recordTargetTracks) {
+            auto clip = std::make_shared<Clip>(*m_activeRecordingClip);
+            clip->id = QUuid::createUuid();
+            track->addClip(clip);
+            refreshWaveformFor(track);
+        }
         m_activeRecordingClip.reset();
+        m_recordTargetTracks.clear();
         refreshTimelineScale();
     }
 

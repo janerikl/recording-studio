@@ -55,8 +55,19 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     if (state == TransportState::Playing || state == TransportState::Recording) {
         int64_t pos = self->m_transport.positionSamples();
         if (self->m_session) {
+            bool anySoloed = false;
             for (auto& track : self->m_session->tracks) {
-                if (track->muted.load(std::memory_order_relaxed)) continue;
+                if (track->soloed.load(std::memory_order_relaxed)) { anySoloed = true; break; }
+            }
+
+            for (auto& track : self->m_session->tracks) {
+                bool soloed = track->soloed.load(std::memory_order_relaxed);
+                bool muted = track->muted.load(std::memory_order_relaxed);
+                // Solo overrides mute for the soloed track(s); when any track
+                // is soloed, every non-soloed track is implicitly silenced.
+                bool audible = anySoloed ? soloed : !muted;
+                if (!audible) continue;
+
                 auto clips = track->clipsSnapshot();
                 for (auto& clip : *clips) {
                     self->mixClipInto(out, nFrames, pos, *clip, track->gain);
