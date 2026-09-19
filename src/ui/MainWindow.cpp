@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "io/AudioFileIO.h"
+#include "io/SessionIO.h"
 
 namespace rsd {
 
@@ -38,6 +39,8 @@ MainWindow::MainWindow(QWidget* parent)
     auto* addTrackButton = new QPushButton("Add Track", buttonRow);
     auto* removeTrackButton = new QPushButton("Remove Track", buttonRow);
     m_deleteClipButton = new QPushButton("Delete Selected Clip", buttonRow);
+    auto* saveSessionButton = new QPushButton("Save Session...", buttonRow);
+    auto* loadSessionButton = new QPushButton("Load Session...", buttonRow);
     m_stopButton->setEnabled(false);
     m_deleteClipButton->setEnabled(false);
 
@@ -51,6 +54,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(addTrackButton, &QPushButton::clicked, this, &MainWindow::onAddTrackClicked);
     connect(removeTrackButton, &QPushButton::clicked, this, &MainWindow::onRemoveTrackClicked);
     connect(m_deleteClipButton, &QPushButton::clicked, this, &MainWindow::onDeleteClipClicked);
+    connect(saveSessionButton, &QPushButton::clicked, this, &MainWindow::onSaveSessionClicked);
+    connect(loadSessionButton, &QPushButton::clicked, this, &MainWindow::onLoadSessionClicked);
 
     buttonLayout->addWidget(m_recordButton);
     buttonLayout->addWidget(m_playButton);
@@ -61,6 +66,8 @@ MainWindow::MainWindow(QWidget* parent)
     buttonLayout->addWidget(addTrackButton);
     buttonLayout->addWidget(removeTrackButton);
     buttonLayout->addWidget(m_deleteClipButton);
+    buttonLayout->addWidget(saveSessionButton);
+    buttonLayout->addWidget(loadSessionButton);
     layout->addWidget(buttonRow);
 
     m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
@@ -278,6 +285,55 @@ void MainWindow::onExportClicked() {
     }
 
     QMessageBox::information(this, "Export Complete", "Saved to: " + path);
+}
+
+void MainWindow::onSaveSessionClicked() {
+    QString path = QFileDialog::getSaveFileName(this, "Save Session", QString(),
+                                                  "Recording Studio Project (*.rsdproj)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".rsdproj")) path += ".rsdproj";
+
+    if (!SessionIO::saveSession(path, *m_session)) {
+        QMessageBox::warning(this, "Save Failed", "Could not save session to: " + path);
+        return;
+    }
+
+    QMessageBox::information(this, "Session Saved", "Saved to: " + path);
+}
+
+void MainWindow::onLoadSessionClicked() {
+    QString path = QFileDialog::getOpenFileName(this, "Load Session", QString(),
+                                                  "Recording Studio Project (*.rsdproj)");
+    if (path.isEmpty()) return;
+
+    onStopClicked(); // stop any playback/recording before swapping session state
+
+    if (!SessionIO::loadSession(path, *m_session)) {
+        QMessageBox::warning(this, "Load Failed", "Could not load session from: " + path);
+        return;
+    }
+
+    rebuildTimelineFromSession();
+    QMessageBox::information(this, "Session Loaded", "Loaded: " + path);
+}
+
+void MainWindow::rebuildTimelineFromSession() {
+    m_timeline->clear();
+    m_activeTrack.reset();
+    m_trackWithClipSelection.reset();
+    m_deleteClipButton->setEnabled(false);
+
+    m_trackCounter = 0;
+    for (auto& track : m_session->tracks) {
+        m_timeline->addTrack(track);
+        if (!m_activeTrack) m_activeTrack = track;
+        ++m_trackCounter;
+    }
+
+    m_engine->transport().setPositionSamples(0);
+    updateStatusLabel();
+    refreshTimelineScale();
+    updatePlayhead();
 }
 
 std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track) const {

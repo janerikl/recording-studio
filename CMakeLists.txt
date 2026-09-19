@@ -17,6 +17,7 @@ add_executable(recording_studio
     src/main.cpp
     src/audio/AudioEngine.cpp
     src/io/AudioFileIO.cpp
+    src/io/SessionIO.cpp
     src/waveform/WaveformCache.cpp
     src/ui/MainWindow.cpp
     src/ui/WaveformWidget.cpp

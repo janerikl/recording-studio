@@ -26,6 +26,8 @@ private slots:
     void onStopClicked();
     void onImportClicked();
     void onExportClicked();
+    void onSaveSessionClicked();
+    void onLoadSessionClicked();
     void onAddTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
@@ -40,6 +42,7 @@ private:
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
     void refreshTimelineScale();
     void startPlayback();
+    void rebuildTimelineFromSession();
     std::shared_ptr<AudioBuffer> renderTrackToBuffer(const Track& track) const;
 
     std::unique_ptr<AudioEngine> m_engine;

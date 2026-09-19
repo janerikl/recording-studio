@@ -42,6 +42,15 @@ void TimelineView::removeTrack(const QUuid& trackId) {
     m_rows.erase(it);
 }
 
+void TimelineView::clear() {
+    for (auto& [id, row] : m_rows) {
+        m_selectGroup->removeButton(row->selectButton());
+        m_layout->removeWidget(row);
+        row->deleteLater();
+    }
+    m_rows.clear();
+}
+
 void TimelineView::refreshTrackWaveform(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;

@@ -21,6 +21,7 @@ public:
 
     void addTrack(std::shared_ptr<Track> track);
     void removeTrack(const QUuid& trackId);
+    void clear(); // remove all rows, e.g. before loading a new session
     void refreshTrackWaveform(const QUuid& trackId);
     void deleteSelectedClipOn(const QUuid& trackId);
     void setSharedTimelineLength(int64_t samples);
