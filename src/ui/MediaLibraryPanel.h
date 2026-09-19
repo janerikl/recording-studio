@@ -34,6 +34,10 @@ public:
     std::shared_ptr<AudioBuffer> bufferAt(int index) const;
     QString nameAt(int index) const;
 
+    // Adds an entry directly, e.g. restoring one from a loaded session, even
+    // if its buffer isn't (yet) referenced by any track's clip.
+    void addEntry(const QString& name, std::shared_ptr<AudioBuffer> buffer);
+
     static constexpr auto kMimeType = "application/x-rsd-library-index";
 
 signals:
@@ -49,7 +53,6 @@ protected:
 
 private:
     bool containsBuffer(const AudioBuffer* buffer) const;
-    void addEntry(const QString& name, std::shared_ptr<AudioBuffer> buffer);
 
     QVector<std::shared_ptr<AudioBuffer>> m_buffers;
     QVector<QString> m_names;

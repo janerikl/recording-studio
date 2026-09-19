@@ -522,7 +522,12 @@ void MainWindow::onSaveSessionClicked() {
     if (path.isEmpty()) return;
     if (!path.endsWith(".rsdproj")) path += ".rsdproj";
 
-    if (!SessionIO::saveSession(path, *m_session)) {
+    QVector<LibraryEntry> libraryEntries;
+    for (int i = 0; i < m_mediaLibrary->count(); ++i) {
+        libraryEntries.append({m_mediaLibrary->nameAt(i), m_mediaLibrary->bufferAt(i)});
+    }
+
+    if (!SessionIO::saveSession(path, *m_session, libraryEntries)) {
         QMessageBox::warning(this, "Save Failed", "Could not save session to: " + path);
         return;
     }
@@ -556,7 +561,8 @@ void MainWindow::onLoadSessionClicked() {
 
     onStopClicked(); // stop any playback/recording before swapping session state
 
-    if (!SessionIO::loadSession(path, *m_session)) {
+    QVector<LibraryEntry> libraryEntries;
+    if (!SessionIO::loadSession(path, *m_session, libraryEntries)) {
         QMessageBox::warning(this, "Load Failed", "Could not load session from: " + path);
         return;
     }
@@ -564,6 +570,11 @@ void MainWindow::onLoadSessionClicked() {
     m_undoStack.clear();
     m_redoStack.clear();
     updateUndoRedoButtons();
+
+    m_mediaLibrary->resetLibrary();
+    for (auto& entry : libraryEntries) {
+        m_mediaLibrary->addEntry(entry.first, entry.second);
+    }
 
     rebuildTimelineFromSession();
     QMessageBox::information(this, "Session Loaded", "Loaded: " + path);

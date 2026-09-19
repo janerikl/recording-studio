@@ -18,7 +18,8 @@ static QString audioFilesDirFor(const QString& projectPath) {
     return info.absolutePath() + "/" + info.completeBaseName() + "_audiofiles";
 }
 
-bool SessionIO::saveSession(const QString& projectPath, const Session& session) {
+bool SessionIO::saveSession(const QString& projectPath, const Session& session,
+                             const QVector<LibraryEntry>& libraryEntries) {
     QString audioDir = audioFilesDirFor(projectPath);
     QDir().mkpath(audioDir);
 
@@ -75,6 +76,34 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session) 
     }
     root["tracks"] = tracksJson;
 
+    QJsonArray libraryJson;
+    for (auto& entry : libraryEntries) {
+        const QString& name = entry.first;
+        auto& buffer = entry.second;
+        if (!buffer) continue;
+
+        QString relPath;
+        auto it = writtenFiles.find(buffer.get());
+        if (it != writtenFiles.end()) {
+            relPath = it.value();
+        } else {
+            QString fileName = QUuid::createUuid().toString(QUuid::WithoutBraces) + ".wav";
+            QString fullPath = audioDir + "/" + fileName;
+            if (!AudioFileIO::writeFile(fullPath, *buffer)) {
+                std::cerr << "Failed to write audio file: " << fullPath.toStdString() << "\n";
+                continue;
+            }
+            relPath = QFileInfo(audioDir).fileName() + "/" + fileName;
+            writtenFiles[buffer.get()] = relPath;
+        }
+
+        QJsonObject entryJson;
+        entryJson["name"] = name;
+        entryJson["audioFile"] = relPath;
+        libraryJson.append(entryJson);
+    }
+    root["mediaLibrary"] = libraryJson;
+
     QFile file(projectPath);
     if (!file.open(QIODevice::WriteOnly)) {
         std::cerr << "Failed to write project file: " << projectPath.toStdString() << "\n";
@@ -84,7 +113,8 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session) 
     return true;
 }
 
-bool SessionIO::loadSession(const QString& projectPath, Session& outSession) {
+bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
+                             QVector<LibraryEntry>& outLibraryEntries) {
     QFile file(projectPath);
     if (!file.open(QIODevice::ReadOnly)) {
         std::cerr << "Failed to open project file: " << projectPath.toStdString() << "\n";
@@ -152,6 +182,28 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession) {
         }
 
         outSession.tracks.push_back(track);
+    }
+
+    for (const auto& entryVal : root["mediaLibrary"].toArray()) {
+        QJsonObject entryJson = entryVal.toObject();
+        QString relPath = entryJson["audioFile"].toString();
+        QString fullPath = baseDir.absoluteFilePath(relPath);
+
+        std::shared_ptr<AudioBuffer> buffer;
+        auto it = loadedBuffers.find(fullPath);
+        if (it != loadedBuffers.end()) {
+            buffer = it.value();
+        } else {
+            buffer = AudioFileIO::loadFile(fullPath);
+            if (!buffer) {
+                std::cerr << "Missing audio file referenced by session: " << fullPath.toStdString()
+                          << "\n";
+                continue;
+            }
+            loadedBuffers[fullPath] = buffer;
+        }
+
+        outLibraryEntries.append({entryJson["name"].toString(), buffer});
     }
 
     return true;
