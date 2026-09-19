@@ -6,12 +6,13 @@
 namespace rsd {
 
 QVector<WaveformCache::PeakPair> WaveformCache::computePeaks(const AudioBuffer& buffer,
-                                                              int numColumns) {
+                                                              int numColumns, int channel) {
     QVector<PeakPair> peaks(std::max(0, numColumns), {0.0f, 0.0f});
 
     const int64_t frameCount = buffer.frameCount();
     if (frameCount <= 0 || numColumns <= 0 || buffer.channels <= 0) return peaks;
 
+    const int fixedChannel = channel >= 0 ? std::min(channel, buffer.channels - 1) : -1;
     const double framesPerColumn = static_cast<double>(frameCount) / numColumns;
 
     for (int col = 0; col < numColumns; ++col) {
@@ -24,13 +25,18 @@ QVector<WaveformCache::PeakPair> WaveformCache::computePeaks(const AudioBuffer& 
         float maxV = std::numeric_limits<float>::lowest();
 
         for (int64_t f = startFrame; f < endFrame; ++f) {
-            float mono = 0.0f;
-            for (int ch = 0; ch < buffer.channels; ++ch) {
-                mono += buffer.samples[f * buffer.channels + ch];
+            float value;
+            if (fixedChannel >= 0) {
+                value = buffer.samples[f * buffer.channels + fixedChannel];
+            } else {
+                value = 0.0f;
+                for (int ch = 0; ch < buffer.channels; ++ch) {
+                    value += buffer.samples[f * buffer.channels + ch];
+                }
+                value /= buffer.channels;
             }
-            mono /= buffer.channels;
-            minV = std::min(minV, mono);
-            maxV = std::max(maxV, mono);
+            minV = std::min(minV, value);
+            maxV = std::max(maxV, value);
         }
 
         if (minV > maxV) { minV = maxV = 0.0f; }

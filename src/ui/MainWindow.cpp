@@ -355,8 +355,8 @@ void MainWindow::updatePlayhead() {
 }
 
 void MainWindow::updateMeters() {
-    m_inputMeter->setLevel(m_engine->inputPeak());
-    m_outputMeter->setLevel(m_engine->outputPeak());
+    m_inputMeter->setLevels(m_engine->inputPeakL(), m_engine->inputPeakR());
+    m_outputMeter->setLevels(m_engine->outputPeakL(), m_engine->outputPeakR());
 }
 
 void MainWindow::drainCaptureRing() {

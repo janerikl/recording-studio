@@ -57,12 +57,17 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     // Measured regardless of transport state so a level meter can show
     // input signal before the user even hits Record.
     if (in) {
-        float peak = 0.0f;
-        size_t inSamples = static_cast<size_t>(nFrames) * self->m_channels;
-        for (size_t i = 0; i < inSamples; ++i) peak = std::max(peak, std::abs(in[i]));
-        self->m_inputPeak.store(peak, std::memory_order_relaxed);
+        float peakL = 0.0f, peakR = 0.0f;
+        for (unsigned int i = 0; i < nFrames; ++i) {
+            peakL = std::max(peakL, std::abs(in[i * self->m_channels]));
+            unsigned int rCh = self->m_channels > 1 ? 1u : 0u;
+            peakR = std::max(peakR, std::abs(in[i * self->m_channels + rCh]));
+        }
+        self->m_inputPeakL.store(peakL, std::memory_order_relaxed);
+        self->m_inputPeakR.store(peakR, std::memory_order_relaxed);
     } else {
-        self->m_inputPeak.store(0.0f, std::memory_order_relaxed);
+        self->m_inputPeakL.store(0.0f, std::memory_order_relaxed);
+        self->m_inputPeakR.store(0.0f, std::memory_order_relaxed);
     }
 
     if (state == TransportState::Playing || state == TransportState::Recording) {
@@ -90,10 +95,14 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
         self->m_transport.advance(nFrames);
     }
 
-    float outPeak = 0.0f;
-    size_t outSamples = static_cast<size_t>(nFrames) * self->m_channels;
-    for (size_t i = 0; i < outSamples; ++i) outPeak = std::max(outPeak, std::abs(out[i]));
-    self->m_outputPeak.store(outPeak, std::memory_order_relaxed);
+    float outPeakL = 0.0f, outPeakR = 0.0f;
+    for (unsigned int i = 0; i < nFrames; ++i) {
+        outPeakL = std::max(outPeakL, std::abs(out[i * self->m_channels]));
+        unsigned int rCh = self->m_channels > 1 ? 1u : 0u;
+        outPeakR = std::max(outPeakR, std::abs(out[i * self->m_channels + rCh]));
+    }
+    self->m_outputPeakL.store(outPeakL, std::memory_order_relaxed);
+    self->m_outputPeakR.store(outPeakR, std::memory_order_relaxed);
 
     return 0;
 }

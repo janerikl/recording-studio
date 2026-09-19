@@ -8,13 +8,15 @@
 namespace rsd {
 
 // Precomputes per-column (min, max) peak pairs from an AudioBuffer so
-// painting never has to rescan raw samples. Channels are averaged into a
-// single mono peak trace for display purposes.
+// painting never has to rescan raw samples.
 class WaveformCache {
 public:
     using PeakPair = std::pair<float, float>; // (min, max)
 
-    static QVector<PeakPair> computePeaks(const AudioBuffer& buffer, int numColumns);
+    // channel == -1 averages all channels into one mono trace; otherwise
+    // picks that single channel index (clamped to the buffer's channel count).
+    static QVector<PeakPair> computePeaks(const AudioBuffer& buffer, int numColumns,
+                                           int channel = -1);
 };
 
 } // namespace rsd

@@ -123,13 +123,30 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
                 sub.samples.assign(
                     clip->buffer->samples.begin() + srcStart * sub.channels,
                     clip->buffer->samples.begin() + (srcStart + clampedLen) * sub.channels);
-                auto peaks = WaveformCache::computePeaks(sub, w);
-                painter.setPen(QColor(90, 170, 230));
-                for (int i = 0; i < peaks.size(); ++i) {
-                    auto [minV, maxV] = peaks[i];
-                    int yTop = midY - static_cast<int>(maxV * halfHeight);
-                    int yBottom = midY - static_cast<int>(minV * halfHeight);
-                    painter.drawLine(x0 + i, yTop, x0 + i, yBottom);
+
+                auto drawChannel = [&](int channel, int centerY, float halfH) {
+                    auto peaks = WaveformCache::computePeaks(sub, w, channel);
+                    painter.setPen(QColor(90, 170, 230));
+                    for (int i = 0; i < peaks.size(); ++i) {
+                        auto [minV, maxV] = peaks[i];
+                        int yTop = centerY - static_cast<int>(maxV * halfH);
+                        int yBottom = centerY - static_cast<int>(minV * halfH);
+                        painter.drawLine(x0 + i, yTop, x0 + i, yBottom);
+                    }
+                };
+
+                if (sub.channels >= 2) {
+                    // Stereo: split the lane into a top (L) and bottom (R)
+                    // half instead of averaging channels into one trace.
+                    int quarterH = height() / 4;
+                    int topCenter = height() / 4;
+                    int bottomCenter = (3 * height()) / 4;
+                    drawChannel(0, topCenter, quarterH - 4.0f);
+                    painter.setPen(QColor(70, 70, 70));
+                    painter.drawLine(x0, midY, x0 + w, midY);
+                    drawChannel(1, bottomCenter, quarterH - 4.0f);
+                } else {
+                    drawChannel(-1, midY, halfHeight);
                 }
             }
         }

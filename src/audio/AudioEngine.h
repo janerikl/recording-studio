@@ -56,11 +56,14 @@ public:
     unsigned int sampleRate() const { return m_sampleRate; }
     unsigned int channels() const { return m_channels; }
 
-    // Peak (0..1) of the most recent audio callback buffer. Input is
-    // measured whenever a mic is present (even when stopped, so users can
-    // see signal before hitting Record); output reflects the current mix.
-    float inputPeak() const { return m_inputPeak.load(std::memory_order_relaxed); }
-    float outputPeak() const { return m_outputPeak.load(std::memory_order_relaxed); }
+    // Per-channel peak (0..1) of the most recent audio callback buffer.
+    // Channel 1 mirrors channel 0 for mono streams. Input is measured
+    // whenever a mic is present (even when stopped, so users can see signal
+    // before hitting Record); output reflects the current mix.
+    float inputPeakL() const { return m_inputPeakL.load(std::memory_order_relaxed); }
+    float inputPeakR() const { return m_inputPeakR.load(std::memory_order_relaxed); }
+    float outputPeakL() const { return m_outputPeakL.load(std::memory_order_relaxed); }
+    float outputPeakR() const { return m_outputPeakR.load(std::memory_order_relaxed); }
 
 private:
     static int rtCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
@@ -83,8 +86,10 @@ private:
     RingBuffer<float> m_captureRing{48000 * 2 * 10}; // 10s headroom at 48kHz stereo
     std::shared_ptr<Track> m_recordTarget;
 
-    std::atomic<float> m_inputPeak{0.0f};
-    std::atomic<float> m_outputPeak{0.0f};
+    std::atomic<float> m_inputPeakL{0.0f};
+    std::atomic<float> m_inputPeakR{0.0f};
+    std::atomic<float> m_outputPeakL{0.0f};
+    std::atomic<float> m_outputPeakR{0.0f};
 };
 
 } // namespace rsd

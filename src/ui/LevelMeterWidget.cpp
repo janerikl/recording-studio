@@ -7,18 +7,25 @@ namespace rsd {
 
 LevelMeterWidget::LevelMeterWidget(const QString& label, QWidget* parent)
     : QWidget(parent), m_label(label) {
-    setFixedHeight(20);
-    setMinimumWidth(120);
+    setFixedHeight(34);
+    setMinimumWidth(140);
 }
 
-void LevelMeterWidget::setLevel(float level0to1) {
-    level0to1 = std::clamp(level0to1, 0.0f, 1.0f);
-    if (level0to1 > m_displayLevel) {
-        m_displayLevel = level0to1; // snap up instantly
-    } else {
-        m_displayLevel *= 0.85f; // decay smoothly
-    }
+static float decay(float current, float incoming) {
+    incoming = std::clamp(incoming, 0.0f, 1.0f);
+    return incoming > current ? incoming : current * 0.85f;
+}
+
+void LevelMeterWidget::setLevels(float left0to1, float right0to1) {
+    m_displayLeft = decay(m_displayLeft, left0to1);
+    m_displayRight = decay(m_displayRight, right0to1);
     update();
+}
+
+static QColor levelColor(float level) {
+    if (level > 0.9f) return QColor(220, 60, 60);
+    if (level > 0.7f) return QColor(230, 190, 60);
+    return QColor(80, 180, 100);
 }
 
 void LevelMeterWidget::paintEvent(QPaintEvent*) {
@@ -31,16 +38,18 @@ void LevelMeterWidget::paintEvent(QPaintEvent*) {
 
     int barX = labelWidth;
     int barWidth = std::max(0, width() - barX - 4);
-    int filled = static_cast<int>(m_displayLevel * barWidth);
 
-    painter.fillRect(barX, 3, barWidth, height() - 6, QColor(40, 40, 40));
+    auto drawBar = [&](int y, int h, float level, const char* chLabel) {
+        painter.fillRect(barX, y, barWidth, h, QColor(40, 40, 40));
+        int filled = static_cast<int>(level * barWidth);
+        if (filled > 0) painter.fillRect(barX, y, filled, h, levelColor(level));
+        painter.setPen(QColor(140, 140, 140));
+        painter.drawText(QRect(barX + 2, y, 16, h), Qt::AlignVCenter | Qt::AlignLeft, chLabel);
+    };
 
-    if (filled > 0) {
-        QColor color = m_displayLevel > 0.9f ? QColor(220, 60, 60)
-                        : m_displayLevel > 0.7f ? QColor(230, 190, 60)
-                                                 : QColor(80, 180, 100);
-        painter.fillRect(barX, 3, filled, height() - 6, color);
-    }
+    int barHeight = (height() - 6) / 2;
+    drawBar(2, barHeight, m_displayLeft, "L");
+    drawBar(4 + barHeight, barHeight, m_displayRight, "R");
 }
 
 } // namespace rsd
