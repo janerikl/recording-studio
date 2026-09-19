@@ -15,6 +15,7 @@
 #include "ui/TimelineView.h"
 #include "ui/TimeRulerWidget.h"
 #include "ui/SettingsDialog.h"
+#include "ui/WaveformWidget.h"
 
 namespace rsd {
 
@@ -33,7 +34,8 @@ struct ClipSnapshot {
 struct TrackSnapshot {
     QUuid id;
     QString name;
-    float gain = 1.0f;
+    float gainL = 1.0f;
+    float gainR = 1.0f;
     bool muted = false;
     bool soloed = false;
     bool recordArmed = false;
@@ -75,6 +77,7 @@ private:
     void updateStatusLabel();
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
     void refreshTimelineScale();
+    void refreshMasterAndScale();
     void startPlayback();
     void rebuildTimelineFromSession();
     SessionSnapshot captureSnapshot() const;
@@ -83,6 +86,7 @@ private:
     void updateUndoRedoButtons();
     static QIcon recordIcon();
     std::shared_ptr<AudioBuffer> renderTrackToBuffer(const Track& track) const;
+    std::shared_ptr<AudioBuffer> renderSessionToBuffer() const;
 
     std::unique_ptr<AudioEngine> m_engine;
     std::unique_ptr<Session> m_session;
@@ -109,6 +113,7 @@ private:
     QTimer* m_meterTimer = nullptr;
     TimelineView* m_timeline = nullptr;
     TimeRulerWidget* m_ruler = nullptr;
+    WaveformWidget* m_masterWaveform = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;

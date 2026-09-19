@@ -152,6 +152,13 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_ruler, &TimeRulerWidget::seekRequested, this, &MainWindow::onSeekRequested);
     layout->addWidget(m_ruler);
 
+    // Compact summary strip: the mixed-down combination of every track,
+    // respecting solo/mute/gain — refreshed only on structural changes (not
+    // a live oscilloscope), via refreshMasterAndScale().
+    m_masterWaveform = new WaveformWidget(central);
+    m_masterWaveform->setFixedHeight(80);
+    layout->addWidget(m_masterWaveform);
+
     m_timeline = new TimelineView(central);
     connect(m_timeline, &TimelineView::trackSelected, this, &MainWindow::onTrackSelected);
     connect(m_timeline, &TimelineView::clipSelectionChanged, this,
@@ -183,7 +190,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
 
     onAddTrackClicked(); // start with one track
-    refreshTimelineScale();
+    refreshMasterAndScale();
 
     // Space toggles play/stop; Delete/Backspace removes the selected clip;
     // R starts recording. Standard transport/editor conventions.
@@ -214,7 +221,7 @@ void MainWindow::onAddTrackClicked() {
     m_timeline->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
     updateStatusLabel();
-    refreshTimelineScale();
+    refreshMasterAndScale();
 }
 
 void MainWindow::onRemoveTrackClicked() {
@@ -230,7 +237,7 @@ void MainWindow::onRemoveTrackClicked() {
     m_session->tracks.erase(it);
     m_activeTrack = m_session->tracks.empty() ? nullptr : m_session->tracks.front();
     updateStatusLabel();
-    refreshTimelineScale();
+    refreshMasterAndScale();
 }
 
 void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
@@ -249,7 +256,7 @@ void MainWindow::onDeleteClipClicked() {
     m_deleteClipAction->setEnabled(false);
     m_trackWithClipSelection.reset();
     updateStatusLabel();
-    refreshTimelineScale();
+    refreshMasterAndScale();
 }
 
 void MainWindow::onRecordClicked() {
@@ -332,7 +339,7 @@ void MainWindow::onStopClicked() {
         }
         m_activeRecordingClip.reset();
         m_recordTargetTracks.clear();
-        refreshTimelineScale();
+        refreshMasterAndScale();
     }
 
     m_recordAction->setEnabled(true);
@@ -397,7 +404,7 @@ void MainWindow::onImportClicked() {
     m_activeTrack->addClip(clip);
     updateStatusLabel();
     refreshWaveformFor(m_activeTrack);
-    refreshTimelineScale();
+    refreshMasterAndScale();
 }
 
 void MainWindow::onExportClicked() {
@@ -445,7 +452,7 @@ void MainWindow::onSettingsClicked() {
     // for a rate chosen before recording; a caveat for changing mid-session.
     m_session->sampleRate = static_cast<int>(dialog.chosenSampleRate());
     m_ruler->setSampleRate(m_session->sampleRate);
-    refreshTimelineScale();
+    refreshMasterAndScale();
 
     m_recordAction->setEnabled(true);
     m_playAction->setEnabled(true);
@@ -487,7 +494,7 @@ void MainWindow::rebuildTimelineFromSession() {
 
     m_engine->transport().setPositionSamples(0);
     updateStatusLabel();
-    refreshTimelineScale();
+    refreshMasterAndScale();
     updatePlayhead();
 }
 
@@ -501,7 +508,8 @@ SessionSnapshot MainWindow::captureSnapshot() const {
         TrackSnapshot ts;
         ts.id = track->id;
         ts.name = track->name;
-        ts.gain = track->gain;
+        ts.gainL = track->gainL.load();
+        ts.gainR = track->gainR.load();
         ts.muted = track->muted.load();
         ts.soloed = track->soloed.load();
         ts.recordArmed = track->recordArmed.load();
@@ -527,7 +535,8 @@ void MainWindow::restoreSnapshot(const SessionSnapshot& snapshot) {
         auto track = std::make_shared<Track>();
         track->id = ts.id;
         track->name = ts.name;
-        track->gain = ts.gain;
+        track->gainL.store(ts.gainL);
+        track->gainR.store(ts.gainR);
         track->muted.store(ts.muted);
         track->soloed.store(ts.soloed);
         track->recordArmed.store(ts.recordArmed);
@@ -612,9 +621,61 @@ std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track)
     return out;
 }
 
+std::shared_ptr<AudioBuffer> MainWindow::renderSessionToBuffer() const {
+    bool anySoloed = false;
+    for (auto& track : m_session->tracks) {
+        if (track->soloed.load()) { anySoloed = true; break; }
+    }
+
+    int64_t totalFrames = 0;
+    for (auto& track : m_session->tracks) {
+        for (auto& clip : *track->clipsSnapshot()) {
+            totalFrames = std::max(totalFrames, clip->sessionStartSample + clip->lengthSamples);
+        }
+    }
+
+    auto out = std::make_shared<AudioBuffer>();
+    out->channels = m_session->channels;
+    out->sampleRate = m_session->sampleRate;
+    out->samples.assign(static_cast<size_t>(totalFrames) * out->channels, 0.0f);
+
+    for (auto& track : m_session->tracks) {
+        bool soloed = track->soloed.load();
+        bool muted = track->muted.load();
+        bool audible = anySoloed ? soloed : !muted;
+        if (!audible) continue;
+
+        float gainL = track->gainL.load();
+        float gainR = track->gainR.load();
+
+        for (auto& clip : *track->clipsSnapshot()) {
+            if (clip->muted || !clip->buffer) continue;
+            for (int64_t i = 0; i < clip->lengthSamples; ++i) {
+                int64_t sourceFrame = clip->sourceOffsetSamples + i;
+                if (sourceFrame < 0 || sourceFrame >= clip->buffer->frameCount()) continue;
+                int64_t destFrame = clip->sessionStartSample + i;
+
+                for (int ch = 0; ch < out->channels; ++ch) {
+                    int srcCh = ch % clip->buffer->channels;
+                    float g = (ch % 2 == 0) ? gainL : gainR;
+                    out->samples[destFrame * out->channels + ch] +=
+                        clip->buffer->samples[sourceFrame * clip->buffer->channels + srcCh] * g;
+                }
+            }
+        }
+    }
+
+    return out;
+}
+
 void MainWindow::refreshWaveformFor(const std::shared_ptr<Track>& track) {
     if (!track) return;
     m_timeline->refreshTrackWaveform(track->id);
+}
+
+void MainWindow::refreshMasterAndScale() {
+    refreshTimelineScale();
+    m_masterWaveform->setBuffer(renderSessionToBuffer());
 }
 
 void MainWindow::refreshTimelineScale() {

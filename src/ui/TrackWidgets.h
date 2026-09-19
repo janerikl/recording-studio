@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QCheckBox>
+#include <QDial>
 #include <QLabel>
 #include <QRadioButton>
+#include <QSlider>
 #include <QWidget>
 #include <memory>
 
@@ -34,6 +36,9 @@ private:
     QCheckBox* m_muteBox = nullptr;
     QCheckBox* m_soloBox = nullptr;
     QCheckBox* m_armBox = nullptr;
+    QDial* m_panDial = nullptr;
+    QSlider* m_gainLSlider = nullptr;
+    QSlider* m_gainRSlider = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
 };
 

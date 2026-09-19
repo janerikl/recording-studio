@@ -70,7 +70,7 @@ private:
                            double streamTime, RtAudioStreamStatus status, void* userData);
 
     void mixClipInto(float* out, unsigned int nFrames, int64_t playheadStart, const Clip& clip,
-                      float trackGain) const;
+                      float gainL, float gainR) const;
 
     std::unique_ptr<RtAudio> m_rtAudio;
     unsigned int m_sampleRate = 48000;

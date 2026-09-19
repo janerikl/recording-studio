@@ -14,7 +14,7 @@ AudioEngine::~AudioEngine() {
 }
 
 void AudioEngine::mixClipInto(float* out, unsigned int nFrames, int64_t playheadStart,
-                               const Clip& clip, float trackGain) const {
+                               const Clip& clip, float gainL, float gainR) const {
     if (clip.muted || !clip.buffer) return;
 
     const int64_t clipEnd = clip.sessionStartSample + clip.lengthSamples;
@@ -31,7 +31,8 @@ void AudioEngine::mixClipInto(float* out, unsigned int nFrames, int64_t playhead
         for (unsigned int ch = 0; ch < m_channels; ++ch) {
             unsigned int srcCh = ch % static_cast<unsigned int>(clip.buffer->channels);
             float sample = clip.buffer->samples[sourceFrame * clip.buffer->channels + srcCh];
-            out[i * m_channels + ch] += sample * trackGain;
+            float g = (ch % 2 == 0) ? gainL : gainR;
+            out[i * m_channels + ch] += sample * g;
         }
     }
 }
@@ -88,7 +89,9 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
 
                 auto clips = track->clipsSnapshot();
                 for (auto& clip : *clips) {
-                    self->mixClipInto(out, nFrames, pos, *clip, track->gain);
+                    self->mixClipInto(out, nFrames, pos, *clip,
+                                       track->gainL.load(std::memory_order_relaxed),
+                                       track->gainR.load(std::memory_order_relaxed));
                 }
             }
         }

@@ -35,7 +35,8 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session) 
         QJsonObject trackJson;
         trackJson["id"] = track->id.toString();
         trackJson["name"] = track->name;
-        trackJson["gain"] = track->gain;
+        trackJson["gainL"] = track->gainL.load();
+        trackJson["gainR"] = track->gainR.load();
         trackJson["muted"] = track->muted.load();
         trackJson["soloed"] = track->soloed.load();
 
@@ -114,7 +115,8 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession) {
         auto track = std::make_shared<Track>();
         track->id = QUuid(trackJson["id"].toString());
         track->name = trackJson["name"].toString();
-        track->gain = static_cast<float>(trackJson["gain"].toDouble(1.0));
+        track->gainL.store(static_cast<float>(trackJson["gainL"].toDouble(1.0)));
+        track->gainR.store(static_cast<float>(trackJson["gainR"].toDouble(1.0)));
         track->muted.store(trackJson["muted"].toBool(false));
         track->soloed.store(trackJson["soloed"].toBool(false));
 

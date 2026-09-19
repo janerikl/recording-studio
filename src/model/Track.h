@@ -23,7 +23,11 @@ public:
     std::atomic<bool> muted{false};
     std::atomic<bool> soloed{false};
     std::atomic<bool> recordArmed{false};
-    float gain = 1.0f;
+    // Per-channel gain, not a single scalar: lets the mixer apply independent
+    // left/right levels. A pan control is a UI convenience that derives both
+    // of these via a linear pan law rather than being stored separately.
+    std::atomic<float> gainL{1.0f};
+    std::atomic<float> gainR{1.0f};
 
     Track() { m_clips.store(std::make_shared<const ClipList>()); }
 
