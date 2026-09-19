@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.21)
+project(recording_studio LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTORCC ON)
+
+find_package(Qt6 COMPONENTS Widgets REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(RTAUDIO REQUIRED IMPORTED_TARGET rtaudio)
+pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
+
+add_executable(recording_studio
+    src/main.cpp
+    src/audio/AudioEngine.cpp
+    src/ui/MainWindow.cpp
+)
+
+target_include_directories(recording_studio PRIVATE src)
+
+target_link_libraries(recording_studio PRIVATE
+    Qt6::Widgets
+    PkgConfig::RTAUDIO
+    PkgConfig::SNDFILE
+)
+
+option(BUILD_TESTS "Build unit tests" OFF)
+if(BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
