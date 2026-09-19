@@ -35,6 +35,59 @@ public:
         m_clips.store(std::const_pointer_cast<const ClipList>(updated));
     }
 
+    // Replaces the clip with matching id in a single atomic swap (RT-safe:
+    // the audio thread never observes a clip list missing the entry mid-edit).
+    void replaceClip(const QUuid& clipId, std::shared_ptr<Clip> newClip) {
+        auto current = m_clips.load();
+        auto updated = std::make_shared<ClipList>(*current);
+        for (auto& c : *updated) {
+            if (c->id == clipId) {
+                c = std::move(newClip);
+                break;
+            }
+        }
+        m_clips.store(std::const_pointer_cast<const ClipList>(updated));
+    }
+
+    // Splits the clip at the given timeline sample position into two clips
+    // (same underlying buffer, non-destructive) in a single atomic swap.
+    // No-op if the position isn't strictly inside the clip.
+    void splitClip(const QUuid& clipId, int64_t timelineSplitSample) {
+        auto current = m_clips.load();
+        auto updated = std::make_shared<ClipList>();
+        updated->reserve(current->size() + 1);
+
+        for (auto& c : *current) {
+            if (c->id != clipId) {
+                updated->push_back(c);
+                continue;
+            }
+            int64_t clipStart = c->sessionStartSample;
+            int64_t clipEnd = c->sessionStartSample + c->lengthSamples;
+            if (timelineSplitSample <= clipStart || timelineSplitSample >= clipEnd) {
+                updated->push_back(c);
+                continue;
+            }
+
+            int64_t firstLength = timelineSplitSample - clipStart;
+            int64_t secondLength = clipEnd - timelineSplitSample;
+
+            auto first = std::make_shared<Clip>(*c);
+            first->lengthSamples = firstLength;
+
+            auto second = std::make_shared<Clip>(*c);
+            second->id = QUuid::createUuid();
+            second->sessionStartSample = timelineSplitSample;
+            second->sourceOffsetSamples = c->sourceOffsetSamples + firstLength;
+            second->lengthSamples = secondLength;
+
+            updated->push_back(first);
+            updated->push_back(second);
+        }
+
+        m_clips.store(std::const_pointer_cast<const ClipList>(updated));
+    }
+
     void removeClip(const QUuid& clipId) {
         auto current = m_clips.load();
         auto updated = std::make_shared<ClipList>(*current);

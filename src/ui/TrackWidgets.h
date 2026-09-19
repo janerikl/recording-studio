@@ -7,12 +7,12 @@
 #include <memory>
 
 #include "model/Track.h"
-#include "ui/WaveformWidget.h"
+#include "ui/ClipLaneWidget.h"
 
 namespace rsd {
 
 // One row in the timeline: track header controls (name, mute/solo/arm,
-// select-for-record/import) plus that track's waveform lane.
+// select-for-record/import) plus that track's editable clip lane.
 class TrackRowWidget : public QWidget {
     Q_OBJECT
 
@@ -21,10 +21,12 @@ public:
 
     std::shared_ptr<Track> track() const { return m_track; }
     QRadioButton* selectButton() const { return m_selectButton; }
-    void setWaveformBuffer(std::shared_ptr<AudioBuffer> buffer);
+    ClipLaneWidget* clipLane() const { return m_clipLane; }
+    void refreshWaveform() { m_clipLane->refresh(); }
 
 signals:
     void selected(std::shared_ptr<Track> track);
+    void clipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
 
 private:
     std::shared_ptr<Track> m_track;
@@ -32,7 +34,7 @@ private:
     QCheckBox* m_muteBox = nullptr;
     QCheckBox* m_soloBox = nullptr;
     QCheckBox* m_armBox = nullptr;
-    WaveformWidget* m_waveform = nullptr;
+    ClipLaneWidget* m_clipLane = nullptr;
 };
 
 } // namespace rsd

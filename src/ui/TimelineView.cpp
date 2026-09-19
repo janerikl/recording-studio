@@ -16,6 +16,7 @@ TimelineView::TimelineView(QWidget* parent) : QScrollArea(parent) {
 void TimelineView::addTrack(std::shared_ptr<Track> track) {
     auto* row = new TrackRowWidget(track, m_content);
     connect(row, &TrackRowWidget::selected, this, &TimelineView::trackSelected);
+    connect(row, &TrackRowWidget::clipSelectionChanged, this, &TimelineView::clipSelectionChanged);
 
     m_selectGroup->addButton(row->selectButton());
     // Insert before the trailing stretch.
@@ -37,10 +38,16 @@ void TimelineView::removeTrack(const QUuid& trackId) {
     m_rows.erase(it);
 }
 
-void TimelineView::refreshTrackWaveform(const QUuid& trackId, std::shared_ptr<AudioBuffer> buffer) {
+void TimelineView::refreshTrackWaveform(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;
-    it->second->setWaveformBuffer(std::move(buffer));
+    it->second->refreshWaveform();
+}
+
+void TimelineView::deleteSelectedClipOn(const QUuid& trackId) {
+    auto it = m_rows.find(trackId.toString());
+    if (it == m_rows.end()) return;
+    it->second->clipLane()->deleteSelected();
 }
 
 } // namespace rsd

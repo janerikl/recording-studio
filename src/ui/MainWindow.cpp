@@ -36,7 +36,9 @@ MainWindow::MainWindow(QWidget* parent)
     auto* exportButton = new QPushButton("Export...", buttonRow);
     auto* addTrackButton = new QPushButton("Add Track", buttonRow);
     auto* removeTrackButton = new QPushButton("Remove Track", buttonRow);
+    m_deleteClipButton = new QPushButton("Delete Selected Clip", buttonRow);
     m_stopButton->setEnabled(false);
+    m_deleteClipButton->setEnabled(false);
 
     connect(m_recordButton, &QPushButton::clicked, this, &MainWindow::onRecordClicked);
     connect(m_playButton, &QPushButton::clicked, this, &MainWindow::onPlayClicked);
@@ -45,6 +47,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::onExportClicked);
     connect(addTrackButton, &QPushButton::clicked, this, &MainWindow::onAddTrackClicked);
     connect(removeTrackButton, &QPushButton::clicked, this, &MainWindow::onRemoveTrackClicked);
+    connect(m_deleteClipButton, &QPushButton::clicked, this, &MainWindow::onDeleteClipClicked);
 
     buttonLayout->addWidget(m_recordButton);
     buttonLayout->addWidget(m_playButton);
@@ -53,6 +56,7 @@ MainWindow::MainWindow(QWidget* parent)
     buttonLayout->addWidget(exportButton);
     buttonLayout->addWidget(addTrackButton);
     buttonLayout->addWidget(removeTrackButton);
+    buttonLayout->addWidget(m_deleteClipButton);
     layout->addWidget(buttonRow);
 
     m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
@@ -60,6 +64,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_timeline = new TimelineView(central);
     connect(m_timeline, &TimelineView::trackSelected, this, &MainWindow::onTrackSelected);
+    connect(m_timeline, &TimelineView::clipSelectionChanged, this,
+            &MainWindow::onClipSelectionChanged);
     layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
@@ -101,6 +107,19 @@ void MainWindow::onRemoveTrackClicked() {
 
 void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
     m_activeTrack = std::move(track);
+}
+
+void MainWindow::onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection) {
+    m_trackWithClipSelection = hasSelection ? std::move(track) : nullptr;
+    m_deleteClipButton->setEnabled(hasSelection);
+}
+
+void MainWindow::onDeleteClipClicked() {
+    if (!m_trackWithClipSelection) return;
+    m_timeline->deleteSelectedClipOn(m_trackWithClipSelection->id);
+    m_deleteClipButton->setEnabled(false);
+    m_trackWithClipSelection.reset();
+    updateStatusLabel();
 }
 
 void MainWindow::onRecordClicked() {
@@ -245,7 +264,7 @@ std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track)
 
 void MainWindow::refreshWaveformFor(const std::shared_ptr<Track>& track) {
     if (!track) return;
-    m_timeline->refreshTrackWaveform(track->id, renderTrackToBuffer(*track));
+    m_timeline->refreshTrackWaveform(track->id);
 }
 
 void MainWindow::updateStatusLabel() {

@@ -21,10 +21,12 @@ public:
 
     void addTrack(std::shared_ptr<Track> track);
     void removeTrack(const QUuid& trackId);
-    void refreshTrackWaveform(const QUuid& trackId, std::shared_ptr<AudioBuffer> buffer);
+    void refreshTrackWaveform(const QUuid& trackId);
+    void deleteSelectedClipOn(const QUuid& trackId);
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);
+    void clipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
 
 private:
     QWidget* m_content = nullptr;

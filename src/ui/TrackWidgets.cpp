@@ -40,12 +40,10 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
 
     rowLayout->addWidget(header);
 
-    m_waveform = new WaveformWidget(this);
-    rowLayout->addWidget(m_waveform, 1);
-}
-
-void TrackRowWidget::setWaveformBuffer(std::shared_ptr<AudioBuffer> buffer) {
-    m_waveform->setBuffer(std::move(buffer));
+    m_clipLane = new ClipLaneWidget(m_track, this);
+    connect(m_clipLane, &ClipLaneWidget::selectionChanged, this,
+            [this](bool hasSelection) { emit clipSelectionChanged(m_track, hasSelection); });
+    rowLayout->addWidget(m_clipLane, 1);
 }
 
 } // namespace rsd

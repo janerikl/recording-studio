@@ -27,6 +27,8 @@ private slots:
     void onAddTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
+    void onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
+    void onDeleteClipClicked();
     void drainCaptureRing();
 
 private:
@@ -38,10 +40,12 @@ private:
     std::unique_ptr<Session> m_session;
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
+    std::shared_ptr<Track> m_trackWithClipSelection;
 
     QPushButton* m_recordButton = nullptr;
     QPushButton* m_playButton = nullptr;
     QPushButton* m_stopButton = nullptr;
+    QPushButton* m_deleteClipButton = nullptr;
     QLabel* m_statusLabel = nullptr;
     QTimer* m_ringDrainTimer = nullptr;
     TimelineView* m_timeline = nullptr;

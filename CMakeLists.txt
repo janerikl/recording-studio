@@ -20,6 +20,7 @@ add_executable(recording_studio
     src/waveform/WaveformCache.cpp
     src/ui/MainWindow.cpp
     src/ui/WaveformWidget.cpp
+    src/ui/ClipLaneWidget.cpp
     src/ui/TrackWidgets.cpp
     src/ui/TimelineView.cpp
 )
