@@ -122,6 +122,17 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_redoAction, &QAction::triggered, this, &MainWindow::onRedoClicked);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettingsClicked);
 
+    auto* loadRecentOnStartupAction = new QAction("Load Most Recent Session on Startup", this);
+    loadRecentOnStartupAction->setCheckable(true);
+    {
+        QSettings settings("RecordingStudio", "RecordingStudio");
+        loadRecentOnStartupAction->setChecked(settings.value("loadRecentOnStartup", false).toBool());
+    }
+    connect(loadRecentOnStartupAction, &QAction::toggled, this, [](bool checked) {
+        QSettings settings("RecordingStudio", "RecordingStudio");
+        settings.setValue("loadRecentOnStartup", checked);
+    });
+
     // --- Menus ---
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction(importAction);
@@ -129,9 +140,17 @@ MainWindow::MainWindow(QWidget* parent)
     fileMenu->addSeparator();
     fileMenu->addAction(saveSessionAction);
     fileMenu->addAction(loadSessionAction);
+    m_recentSessionsMenu = fileMenu->addMenu("Open Recent");
     fileMenu->addAction(closeSessionAction);
     fileMenu->addSeparator();
+    fileMenu->addAction(loadRecentOnStartupAction);
     fileMenu->addAction(settingsAction);
+
+    {
+        QSettings settings("RecordingStudio", "RecordingStudio");
+        m_recentSessionPaths = settings.value("recentSessions").toStringList();
+    }
+    rebuildRecentSessionsMenu();
 
     auto* editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(m_undoAction);
@@ -230,7 +249,13 @@ MainWindow::MainWindow(QWidget* parent)
         m_playFromStartAction->setEnabled(false);
     }
 
-    onAddTrackClicked(); // start with one track
+    bool autoLoaded = false;
+    if (loadRecentOnStartupAction->isChecked() && !m_recentSessionPaths.isEmpty()) {
+        autoLoaded = loadSessionFromPath(m_recentSessionPaths.first(), /*showSuccessMessage=*/false);
+    }
+    if (!autoLoaded) {
+        onAddTrackClicked(); // start with one blank track, the normal default
+    }
     refreshMasterAndScale();
 
     // Space toggles play/stop; Delete/Backspace removes the selected clip;
@@ -539,6 +564,7 @@ void MainWindow::onSaveSessionClicked() {
     }
 
     m_currentSessionPath = path;
+    addToRecentSessions(path);
     m_statusLabel->setText("Saved to: " + path);
 }
 
@@ -565,13 +591,23 @@ void MainWindow::onLoadSessionClicked() {
     QString path = QFileDialog::getOpenFileName(this, "Load Session", QString(),
                                                   "Recording Studio Project (*.rsdproj)");
     if (path.isEmpty()) return;
+    loadSessionFromPath(path);
+}
+
+bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessage) {
+    if (!QFileInfo::exists(path)) {
+        QMessageBox::warning(this, "Load Failed", "File no longer exists: " + path);
+        m_recentSessionPaths.removeAll(path);
+        rebuildRecentSessionsMenu();
+        return false;
+    }
 
     onStopClicked(); // stop any playback/recording before swapping session state
 
     QVector<LibraryEntry> libraryEntries;
     if (!SessionIO::loadSession(path, *m_session, libraryEntries)) {
         QMessageBox::warning(this, "Load Failed", "Could not load session from: " + path);
-        return;
+        return false;
     }
 
     m_undoStack.clear();
@@ -585,7 +621,9 @@ void MainWindow::onLoadSessionClicked() {
 
     m_currentSessionPath = path;
     rebuildTimelineFromSession();
-    QMessageBox::information(this, "Session Loaded", "Loaded: " + path);
+    addToRecentSessions(path);
+    if (showSuccessMessage) QMessageBox::information(this, "Session Loaded", "Loaded: " + path);
+    return true;
 }
 
 void MainWindow::onCloseSessionClicked() {
@@ -607,6 +645,33 @@ void MainWindow::onCloseSessionClicked() {
 
     rebuildTimelineFromSession();
     onAddTrackClicked(); // start fresh with one blank track, matching app startup
+}
+
+void MainWindow::addToRecentSessions(const QString& path) {
+    m_recentSessionPaths.removeAll(path);
+    m_recentSessionPaths.prepend(path);
+    while (m_recentSessionPaths.size() > kMaxRecentSessions) m_recentSessionPaths.removeLast();
+
+    QSettings settings("RecordingStudio", "RecordingStudio");
+    settings.setValue("recentSessions", m_recentSessionPaths);
+
+    rebuildRecentSessionsMenu();
+}
+
+void MainWindow::rebuildRecentSessionsMenu() {
+    m_recentSessionsMenu->clear();
+
+    if (m_recentSessionPaths.isEmpty()) {
+        auto* placeholder = m_recentSessionsMenu->addAction("No Recent Sessions");
+        placeholder->setEnabled(false);
+        return;
+    }
+
+    for (const QString& path : m_recentSessionPaths) {
+        auto* action = m_recentSessionsMenu->addAction(QFileInfo(path).fileName());
+        action->setToolTip(path);
+        connect(action, &QAction::triggered, this, [this, path]() { loadSessionFromPath(path); });
+    }
 }
 
 void MainWindow::rebuildTimelineFromSession() {

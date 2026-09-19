@@ -4,6 +4,8 @@
 #include <QIcon>
 #include <QMainWindow>
 #include <QLabel>
+#include <QMenu>
+#include <QStringList>
 #include <QTimer>
 #include <QToolBar>
 #include <memory>
@@ -93,6 +95,9 @@ private:
     void refreshMasterAndScale();
     void startPlayback();
     void rebuildTimelineFromSession();
+    bool loadSessionFromPath(const QString& path, bool showSuccessMessage = true);
+    void addToRecentSessions(const QString& path);
+    void rebuildRecentSessionsMenu();
     SessionSnapshot captureSnapshot() const;
     void restoreSnapshot(const SessionSnapshot& snapshot);
     void pushUndoSnapshot();
@@ -106,6 +111,9 @@ private:
     // Remembered from the last successful save/load, so Ctrl+S/Save resaves
     // silently to the same file instead of re-prompting every time.
     QString m_currentSessionPath;
+    QMenu* m_recentSessionsMenu = nullptr;
+    QStringList m_recentSessionPaths;
+    static constexpr int kMaxRecentSessions = 5;
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
     std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
