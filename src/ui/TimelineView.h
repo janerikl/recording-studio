@@ -31,6 +31,7 @@ signals:
     void trackSelected(std::shared_ptr<Track> track);
     void clipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void seekRequested(int64_t sample);
+    void editStarted();
 
 private:
     QWidget* m_content = nullptr;

@@ -18,6 +18,7 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     connect(row, &TrackRowWidget::selected, this, &TimelineView::trackSelected);
     connect(row, &TrackRowWidget::clipSelectionChanged, this, &TimelineView::clipSelectionChanged);
     connect(row->clipLane(), &ClipLaneWidget::seekRequested, this, &TimelineView::seekRequested);
+    connect(row->clipLane(), &ClipLaneWidget::editStarted, this, &TimelineView::editStarted);
 
     m_selectGroup->addButton(row->selectButton());
     // Insert before the trailing stretch.

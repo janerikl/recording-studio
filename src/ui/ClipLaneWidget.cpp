@@ -183,6 +183,7 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
         setCursor(Qt::ClosedHandCursor);
     }
 
+    emit editStarted(); // snapshot the pre-edit state for undo, before any mutation below
     update();
 }
 

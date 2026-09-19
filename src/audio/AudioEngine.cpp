@@ -1,5 +1,7 @@
 #include "AudioEngine.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 
@@ -52,6 +54,17 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
         self->m_captureRing.write(in, static_cast<size_t>(nFrames) * self->m_channels);
     }
 
+    // Measured regardless of transport state so a level meter can show
+    // input signal before the user even hits Record.
+    if (in) {
+        float peak = 0.0f;
+        size_t inSamples = static_cast<size_t>(nFrames) * self->m_channels;
+        for (size_t i = 0; i < inSamples; ++i) peak = std::max(peak, std::abs(in[i]));
+        self->m_inputPeak.store(peak, std::memory_order_relaxed);
+    } else {
+        self->m_inputPeak.store(0.0f, std::memory_order_relaxed);
+    }
+
     if (state == TransportState::Playing || state == TransportState::Recording) {
         int64_t pos = self->m_transport.positionSamples();
         if (self->m_session) {
@@ -76,6 +89,11 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
         }
         self->m_transport.advance(nFrames);
     }
+
+    float outPeak = 0.0f;
+    size_t outSamples = static_cast<size_t>(nFrames) * self->m_channels;
+    for (size_t i = 0; i < outSamples; ++i) outPeak = std::max(outPeak, std::abs(out[i]));
+    self->m_outputPeak.store(outPeak, std::memory_order_relaxed);
 
     return 0;
 }

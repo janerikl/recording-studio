@@ -33,6 +33,7 @@ public:
 signals:
     void selectionChanged(bool hasSelection);
     void seekRequested(int64_t sample);
+    void editStarted(); // emitted once, right before a move/trim/split mutates the track
 
 protected:
     void paintEvent(QPaintEvent* event) override;
