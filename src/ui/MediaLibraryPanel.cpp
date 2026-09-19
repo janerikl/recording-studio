@@ -15,6 +15,15 @@ MediaLibraryPanel::MediaLibraryPanel(QWidget* parent) : QListWidget(parent) {
     setDragDropMode(QAbstractItemView::DragOnly);
     setSelectionMode(QAbstractItemView::SingleSelection);
     setAcceptDrops(true); // for external file drops; outgoing drag uses DragOnly above
+    setStyleSheet("QListWidget::item { padding: 8px; }");
+}
+
+static QString formatDuration(int64_t samples, int sampleRate) {
+    if (sampleRate <= 0) return QString();
+    double totalSeconds = static_cast<double>(samples) / sampleRate;
+    int mins = static_cast<int>(totalSeconds) / 60;
+    double secs = totalSeconds - mins * 60;
+    return QString("%1:%2").arg(mins).arg(secs, 4, 'f', 1, QChar('0'));
 }
 
 bool MediaLibraryPanel::containsBuffer(const AudioBuffer* buffer) const {
@@ -27,7 +36,15 @@ bool MediaLibraryPanel::containsBuffer(const AudioBuffer* buffer) const {
 void MediaLibraryPanel::addEntry(const QString& name, std::shared_ptr<AudioBuffer> buffer) {
     m_buffers.push_back(buffer);
     m_names.push_back(name);
-    addItem(name);
+
+    QString duration = formatDuration(buffer->frameCount(), buffer->sampleRate);
+    auto* item = new QListWidgetItem(name + "\n" + duration);
+    item->setToolTip(QString("%1\nDuration: %2\nSample rate: %3 Hz\nChannels: %4")
+                          .arg(name)
+                          .arg(duration)
+                          .arg(buffer->sampleRate)
+                          .arg(buffer->channels));
+    addItem(item);
 }
 
 void MediaLibraryPanel::refresh(const Session& session) {
