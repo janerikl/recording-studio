@@ -9,6 +9,7 @@
 #include "audio/AudioEngine.h"
 #include "model/Session.h"
 #include "ui/TimelineView.h"
+#include "ui/TimeRulerWidget.h"
 
 namespace rsd {
 
@@ -21,6 +22,7 @@ public:
 private slots:
     void onRecordClicked();
     void onPlayClicked();
+    void onPlayFromStartClicked();
     void onStopClicked();
     void onImportClicked();
     void onExportClicked();
@@ -29,11 +31,15 @@ private slots:
     void onTrackSelected(std::shared_ptr<Track> track);
     void onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void onDeleteClipClicked();
+    void onSeekRequested(int64_t sample);
     void drainCaptureRing();
+    void updatePlayhead();
 
 private:
     void updateStatusLabel();
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
+    void refreshTimelineScale();
+    void startPlayback();
     std::shared_ptr<AudioBuffer> renderTrackToBuffer(const Track& track) const;
 
     std::unique_ptr<AudioEngine> m_engine;
@@ -44,11 +50,14 @@ private:
 
     QPushButton* m_recordButton = nullptr;
     QPushButton* m_playButton = nullptr;
+    QPushButton* m_playFromStartButton = nullptr;
     QPushButton* m_stopButton = nullptr;
     QPushButton* m_deleteClipButton = nullptr;
     QLabel* m_statusLabel = nullptr;
     QTimer* m_ringDrainTimer = nullptr;
+    QTimer* m_playheadTimer = nullptr;
     TimelineView* m_timeline = nullptr;
+    TimeRulerWidget* m_ruler = nullptr;
     int m_trackCounter = 0;
 };
 

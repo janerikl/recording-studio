@@ -31,6 +31,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_recordButton = new QPushButton("Record", buttonRow);
     m_playButton = new QPushButton("Play", buttonRow);
+    m_playFromStartButton = new QPushButton("Play from Start", buttonRow);
     m_stopButton = new QPushButton("Stop", buttonRow);
     auto* importButton = new QPushButton("Import...", buttonRow);
     auto* exportButton = new QPushButton("Export...", buttonRow);
@@ -42,6 +43,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(m_recordButton, &QPushButton::clicked, this, &MainWindow::onRecordClicked);
     connect(m_playButton, &QPushButton::clicked, this, &MainWindow::onPlayClicked);
+    connect(m_playFromStartButton, &QPushButton::clicked, this,
+            &MainWindow::onPlayFromStartClicked);
     connect(m_stopButton, &QPushButton::clicked, this, &MainWindow::onStopClicked);
     connect(importButton, &QPushButton::clicked, this, &MainWindow::onImportClicked);
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::onExportClicked);
@@ -51,6 +54,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     buttonLayout->addWidget(m_recordButton);
     buttonLayout->addWidget(m_playButton);
+    buttonLayout->addWidget(m_playFromStartButton);
     buttonLayout->addWidget(m_stopButton);
     buttonLayout->addWidget(importButton);
     buttonLayout->addWidget(exportButton);
@@ -62,10 +66,16 @@ MainWindow::MainWindow(QWidget* parent)
     m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
     layout->addWidget(m_statusLabel);
 
+    m_ruler = new TimeRulerWidget(central);
+    m_ruler->setSampleRate(m_session->sampleRate);
+    connect(m_ruler, &TimeRulerWidget::seekRequested, this, &MainWindow::onSeekRequested);
+    layout->addWidget(m_ruler);
+
     m_timeline = new TimelineView(central);
     connect(m_timeline, &TimelineView::trackSelected, this, &MainWindow::onTrackSelected);
     connect(m_timeline, &TimelineView::clipSelectionChanged, this,
             &MainWindow::onClipSelectionChanged);
+    connect(m_timeline, &TimelineView::seekRequested, this, &MainWindow::onSeekRequested);
     layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
@@ -74,13 +84,19 @@ MainWindow::MainWindow(QWidget* parent)
     m_ringDrainTimer->setInterval(30);
     connect(m_ringDrainTimer, &QTimer::timeout, this, &MainWindow::drainCaptureRing);
 
+    m_playheadTimer = new QTimer(this);
+    m_playheadTimer->setInterval(33); // ~30fps
+    connect(m_playheadTimer, &QTimer::timeout, this, &MainWindow::updatePlayhead);
+
     if (!m_engine->start()) {
         m_statusLabel->setText("Failed to start audio engine — check console");
         m_recordButton->setEnabled(false);
         m_playButton->setEnabled(false);
+        m_playFromStartButton->setEnabled(false);
     }
 
     onAddTrackClicked(); // start with one track
+    refreshTimelineScale();
 }
 
 void MainWindow::onAddTrackClicked() {
@@ -89,6 +105,7 @@ void MainWindow::onAddTrackClicked() {
     m_timeline->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
     updateStatusLabel();
+    refreshTimelineScale();
 }
 
 void MainWindow::onRemoveTrackClicked() {
@@ -103,6 +120,7 @@ void MainWindow::onRemoveTrackClicked() {
     m_session->tracks.erase(it);
     m_activeTrack = m_session->tracks.empty() ? nullptr : m_session->tracks.front();
     updateStatusLabel();
+    refreshTimelineScale();
 }
 
 void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
@@ -120,6 +138,7 @@ void MainWindow::onDeleteClipClicked() {
     m_deleteClipButton->setEnabled(false);
     m_trackWithClipSelection.reset();
     updateStatusLabel();
+    refreshTimelineScale();
 }
 
 void MainWindow::onRecordClicked() {
@@ -137,19 +156,33 @@ void MainWindow::onRecordClicked() {
 
     m_engine->transport().setState(TransportState::Recording);
     m_ringDrainTimer->start();
+    m_playheadTimer->start();
 
     m_recordButton->setEnabled(false);
     m_playButton->setEnabled(false);
+    m_playFromStartButton->setEnabled(false);
     m_stopButton->setEnabled(true);
     m_statusLabel->setText("Recording into " + m_activeTrack->name + "...");
 }
 
 void MainWindow::onPlayClicked() {
+    // Resumes from wherever the playhead currently is (e.g. after a seek on
+    // the ruler), unlike "Play from Start" which always rewinds to 0 first.
+    startPlayback();
+}
+
+void MainWindow::onPlayFromStartClicked() {
     m_engine->transport().setPositionSamples(0);
+    startPlayback();
+}
+
+void MainWindow::startPlayback() {
     m_engine->transport().setState(TransportState::Playing);
+    m_playheadTimer->start();
 
     m_recordButton->setEnabled(false);
     m_playButton->setEnabled(false);
+    m_playFromStartButton->setEnabled(false);
     m_stopButton->setEnabled(true);
     m_statusLabel->setText("Playing...");
 }
@@ -158,6 +191,7 @@ void MainWindow::onStopClicked() {
     const bool wasRecording = m_engine->transport().state() == TransportState::Recording;
     m_engine->transport().setState(TransportState::Stopped);
     m_ringDrainTimer->stop();
+    m_playheadTimer->stop();
 
     if (wasRecording && m_activeRecordingClip && m_activeTrack) {
         drainCaptureRing(); // flush any remaining samples
@@ -165,12 +199,26 @@ void MainWindow::onStopClicked() {
         m_activeTrack->addClip(m_activeRecordingClip);
         refreshWaveformFor(m_activeTrack);
         m_activeRecordingClip.reset();
+        refreshTimelineScale();
     }
 
     m_recordButton->setEnabled(true);
     m_playButton->setEnabled(true);
+    m_playFromStartButton->setEnabled(true);
     m_stopButton->setEnabled(false);
     updateStatusLabel();
+    updatePlayhead();
+}
+
+void MainWindow::onSeekRequested(int64_t sample) {
+    m_engine->transport().setPositionSamples(sample);
+    updatePlayhead();
+}
+
+void MainWindow::updatePlayhead() {
+    int64_t pos = m_engine->transport().positionSamples();
+    m_timeline->setPlayheadSample(pos);
+    m_ruler->setPlayheadSample(pos);
 }
 
 void MainWindow::drainCaptureRing() {
@@ -210,6 +258,7 @@ void MainWindow::onImportClicked() {
     m_activeTrack->addClip(clip);
     updateStatusLabel();
     refreshWaveformFor(m_activeTrack);
+    refreshTimelineScale();
 }
 
 void MainWindow::onExportClicked() {
@@ -265,6 +314,24 @@ std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track)
 void MainWindow::refreshWaveformFor(const std::shared_ptr<Track>& track) {
     if (!track) return;
     m_timeline->refreshTrackWaveform(track->id);
+}
+
+void MainWindow::refreshTimelineScale() {
+    int64_t maxEnd = 0;
+    for (auto& track : m_session->tracks) {
+        auto clips = track->clipsSnapshot();
+        for (auto& clip : *clips) {
+            maxEnd = std::max(maxEnd, clip->sessionStartSample + clip->lengthSamples);
+        }
+    }
+    // Same fixed floor + headroom policy as ClipLaneWidget used to compute
+    // locally — now computed once here so every lane and the ruler agree.
+    int64_t floor = static_cast<int64_t>(m_session->sampleRate) * 30;
+    int64_t headroom = static_cast<int64_t>(m_session->sampleRate) * 10;
+    int64_t total = std::max(floor, maxEnd + headroom);
+
+    m_timeline->setSharedTimelineLength(total);
+    m_ruler->setTimelineLength(total);
 }
 
 void MainWindow::updateStatusLabel() {

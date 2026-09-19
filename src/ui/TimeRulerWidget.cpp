@@ -1,0 +1,86 @@
+#include "TimeRulerWidget.h"
+
+#include <QMouseEvent>
+#include <QPainter>
+#include <QString>
+#include <algorithm>
+#include <cmath>
+#include <iterator>
+
+namespace rsd {
+
+TimeRulerWidget::TimeRulerWidget(QWidget* parent) : QWidget(parent) {
+    setFixedHeight(28);
+    QPalette pal = palette();
+    pal.setColor(QPalette::Window, QColor(24, 24, 24));
+    setAutoFillBackground(true);
+    setPalette(pal);
+}
+
+int TimeRulerWidget::sampleToX(int64_t sample) const {
+    if (m_timelineLength <= 0) return m_leftMargin;
+    return m_leftMargin +
+           static_cast<int>(static_cast<double>(sample) / m_timelineLength * laneWidth());
+}
+
+int64_t TimeRulerWidget::xToSample(int x) const {
+    int lw = laneWidth();
+    if (lw <= 0) return 0;
+    double frac = static_cast<double>(x - m_leftMargin) / lw;
+    frac = std::clamp(frac, 0.0, 1.0);
+    return static_cast<int64_t>(frac * m_timelineLength);
+}
+
+void TimeRulerWidget::paintEvent(QPaintEvent*) {
+    QPainter painter(this);
+    painter.fillRect(rect(), QColor(24, 24, 24));
+
+    double totalSeconds = static_cast<double>(m_timelineLength) / std::max(1, m_sampleRate);
+    if (totalSeconds <= 0) return;
+
+    // Choose a "nice" tick spacing (in seconds) aiming for ~80px between ticks.
+    int lw = laneWidth();
+    double targetPxPerTick = 80.0;
+    double secondsPerPixel = totalSeconds / std::max(1, lw);
+    double rawTickSeconds = targetPxPerTick * secondsPerPixel;
+
+    static const double niceSteps[] = {0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300};
+    double tickSeconds = niceSteps[std::size(niceSteps) - 1];
+    for (double step : niceSteps) {
+        if (step >= rawTickSeconds) { tickSeconds = step; break; }
+    }
+
+    painter.setPen(QColor(150, 150, 150));
+    for (double t = 0; t <= totalSeconds; t += tickSeconds) {
+        int64_t sample = static_cast<int64_t>(t * m_sampleRate);
+        int x = sampleToX(sample);
+        painter.drawLine(x, height() - 8, x, height());
+
+        int totalSecs = static_cast<int>(t);
+        int mins = totalSecs / 60;
+        int secs = totalSecs % 60;
+        QString label = QString("%1:%2").arg(mins).arg(secs, 2, 10, QChar('0'));
+        painter.drawText(x + 2, height() - 10, label);
+    }
+
+    painter.setPen(QPen(QColor(230, 80, 80), 2));
+    int px = sampleToX(m_playheadSample);
+    painter.drawLine(px, 0, px, height());
+}
+
+void TimeRulerWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->pos().x() < m_leftMargin) return;
+    m_scrubbing = true;
+    emit seekRequested(xToSample(event->pos().x()));
+}
+
+void TimeRulerWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (!m_scrubbing) return;
+    emit seekRequested(xToSample(event->pos().x()));
+}
+
+void TimeRulerWidget::mouseReleaseEvent(QMouseEvent*) {
+    m_scrubbing = false;
+}
+
+} // namespace rsd

@@ -1,7 +1,9 @@
 #include "ClipLaneWidget.h"
 
+#include <QDebug>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPen>
 #include <algorithm>
 #include <cstdlib>
 
@@ -30,19 +32,43 @@ int64_t ClipLaneWidget::timelineLengthSamples() const {
     auto clips = m_track->clipsSnapshot();
     int64_t maxEnd = 0;
     for (auto& c : *clips) maxEnd = std::max(maxEnd, c->sessionStartSample + c->lengthSamples);
-    // A little headroom so clips at the very end aren't flush against the widget edge.
-    int64_t minLength = m_track->clipsSnapshot()->empty() ? 44100 * 5 : maxEnd;
-    return std::max(maxEnd, minLength);
+    // Generous fixed headroom beyond the content, and a floor, so there's
+    // always comfortable room to drag a clip around without the timeline's
+    // scale visibly changing underneath the user as a side effect.
+    constexpr int64_t kFloor = 44100 * 30;
+    constexpr int64_t kHeadroom = 44100 * 10;
+    return std::max(kFloor, maxEnd + kHeadroom);
+}
+
+int64_t ClipLaneWidget::effectiveTimelineLength() const {
+    // While actively dragging, keep using the scale captured at drag-start
+    // for BOTH hit-testing and painting — otherwise the scale shifts as the
+    // clip's own extents change mid-drag, which visually cancels out the
+    // very edit the user is making (e.g. moving a clip right also grows the
+    // total length, so the clip appears to stay in the same place).
+    if (m_dragMode != DragMode::None) return m_dragTotalSamples;
+    if (m_sharedTimelineLength > 0) return m_sharedTimelineLength;
+    return timelineLengthSamples();
+}
+
+void ClipLaneWidget::setSharedTimelineLength(int64_t samples) {
+    m_sharedTimelineLength = samples;
+    if (m_dragMode == DragMode::None) update();
+}
+
+void ClipLaneWidget::setPlayheadSample(int64_t sample) {
+    m_playheadSample = sample;
+    update();
 }
 
 int64_t ClipLaneWidget::xToSample(int x) const {
-    int64_t total = timelineLengthSamples();
+    int64_t total = effectiveTimelineLength();
     if (width() <= 0) return 0;
     return static_cast<int64_t>(static_cast<double>(x) / width() * total);
 }
 
 int ClipLaneWidget::sampleToX(int64_t sample) const {
-    int64_t total = timelineLengthSamples();
+    int64_t total = effectiveTimelineLength();
     if (total <= 0) return 0;
     return static_cast<int>(static_cast<double>(sample) / total * width());
 }
@@ -111,6 +137,12 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
         painter.setPen(QColor(200, 200, 200));
         painter.drawText(x0 + 4, 16, clip->name);
     }
+
+    if (m_playheadSample >= 0) {
+        int px = sampleToX(m_playheadSample);
+        painter.setPen(QPen(QColor(230, 80, 80), 2));
+        painter.drawLine(px, 0, px, height());
+    }
 }
 
 void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
@@ -119,6 +151,8 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
 
     if (!clip) {
         clearSelection();
+        m_scrubbingPlayhead = true;
+        emit seekRequested(sample);
         return;
     }
 
@@ -133,22 +167,55 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
     m_dragOrigStart = clip->sessionStartSample;
     m_dragOrigOffset = clip->sourceOffsetSamples;
     m_dragOrigLength = clip->lengthSamples;
+    // Lock the timeline scale for the whole gesture — recomputing it from the
+    // live (already-edited) clip state on every move causes the scale to
+    // shift mid-drag, snowballing tiny mouse movements into huge trims.
+    m_dragTotalSamples = timelineLengthSamples();
 
     if (std::abs(event->pos().x() - x0) <= kEdgeThresholdPx) {
         m_dragMode = DragMode::TrimStart;
+        setCursor(Qt::SizeHorCursor);
     } else if (std::abs(event->pos().x() - x1) <= kEdgeThresholdPx) {
         m_dragMode = DragMode::TrimEnd;
+        setCursor(Qt::SizeHorCursor);
     } else {
         m_dragMode = DragMode::Move;
+        setCursor(Qt::ClosedHandCursor);
     }
 
     update();
 }
 
-void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
-    if (m_dragMode == DragMode::None) return;
+void ClipLaneWidget::updateHoverCursor(const QPoint& pos) {
+    int64_t sample = xToSample(pos.x());
+    auto clip = findClipAt(sample);
+    if (!clip) {
+        unsetCursor();
+        return;
+    }
 
-    int64_t total = timelineLengthSamples();
+    int x0 = sampleToX(clip->sessionStartSample);
+    int x1 = sampleToX(clip->sessionStartSample + clip->lengthSamples);
+
+    if (std::abs(pos.x() - x0) <= kEdgeThresholdPx || std::abs(pos.x() - x1) <= kEdgeThresholdPx) {
+        setCursor(Qt::SizeHorCursor); // near an edge: trim
+    } else {
+        setCursor(Qt::OpenHandCursor); // over the body: move
+    }
+}
+
+void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (m_scrubbingPlayhead) {
+        emit seekRequested(xToSample(event->pos().x()));
+        return;
+    }
+
+    if (m_dragMode == DragMode::None) {
+        updateHoverCursor(event->pos());
+        return;
+    }
+
+    int64_t total = m_dragTotalSamples;
     if (total <= 0 || width() <= 0) return;
     int64_t deltaSamples =
         static_cast<int64_t>((event->pos().x() - m_dragStartX) / static_cast<double>(width()) * total);
@@ -163,7 +230,12 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
     auto edited = std::make_shared<Clip>(*original);
 
     if (m_dragMode == DragMode::Move) {
-        int64_t newStart = std::max<int64_t>(0, m_dragOrigStart + deltaSamples);
+        // Clamp within [0, total - length] so the clip can never be dragged
+        // past the scale that was frozen for this gesture — otherwise
+        // releasing the mouse would force a rescale (the timeline "widening")
+        // right as the clip settles.
+        int64_t maxStart = std::max<int64_t>(0, m_dragTotalSamples - m_dragOrigLength);
+        int64_t newStart = std::clamp<int64_t>(m_dragOrigStart + deltaSamples, 0, maxStart);
         edited->sessionStartSample = newStart;
     } else if (m_dragMode == DragMode::TrimStart) {
         int64_t maxTrim = m_dragOrigLength - 1; // keep at least 1 sample
@@ -183,8 +255,10 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
     update();
 }
 
-void ClipLaneWidget::mouseReleaseEvent(QMouseEvent*) {
+void ClipLaneWidget::mouseReleaseEvent(QMouseEvent* event) {
     m_dragMode = DragMode::None;
+    m_scrubbingPlayhead = false;
+    updateHoverCursor(event->pos());
 }
 
 void ClipLaneWidget::mouseDoubleClickEvent(QMouseEvent* event) {

@@ -17,6 +17,7 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     auto* row = new TrackRowWidget(track, m_content);
     connect(row, &TrackRowWidget::selected, this, &TimelineView::trackSelected);
     connect(row, &TrackRowWidget::clipSelectionChanged, this, &TimelineView::clipSelectionChanged);
+    connect(row->clipLane(), &ClipLaneWidget::seekRequested, this, &TimelineView::seekRequested);
 
     m_selectGroup->addButton(row->selectButton());
     // Insert before the trailing stretch.
@@ -26,6 +27,9 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     if (m_rows.size() == 1) {
         row->selectButton()->setChecked(true);
     }
+
+    row->clipLane()->setSharedTimelineLength(m_lastTimelineLength);
+    row->clipLane()->setPlayheadSample(m_lastPlayheadSample);
 }
 
 void TimelineView::removeTrack(const QUuid& trackId) {
@@ -48,6 +52,16 @@ void TimelineView::deleteSelectedClipOn(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;
     it->second->clipLane()->deleteSelected();
+}
+
+void TimelineView::setSharedTimelineLength(int64_t samples) {
+    m_lastTimelineLength = samples;
+    for (auto& [id, row] : m_rows) row->clipLane()->setSharedTimelineLength(samples);
+}
+
+void TimelineView::setPlayheadSample(int64_t sample) {
+    m_lastPlayheadSample = sample;
+    for (auto& [id, row] : m_rows) row->clipLane()->setPlayheadSample(sample);
 }
 
 } // namespace rsd

@@ -24,8 +24,15 @@ public:
     void deleteSelected();
     void clearSelection();
 
+    // All track lanes (and the ruler) must agree on the same sample<->pixel
+    // scale, otherwise the playhead/ruler and each lane's clips would drift
+    // out of alignment with each other.
+    void setSharedTimelineLength(int64_t samples);
+    void setPlayheadSample(int64_t sample);
+
 signals:
     void selectionChanged(bool hasSelection);
+    void seekRequested(int64_t sample);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -41,7 +48,9 @@ private:
     int64_t xToSample(int x) const;
     int sampleToX(int64_t sample) const;
     int64_t timelineLengthSamples() const;
+    int64_t effectiveTimelineLength() const;
     std::shared_ptr<Clip> findClipAt(int64_t sample) const;
+    void updateHoverCursor(const QPoint& pos);
 
     std::shared_ptr<Track> m_track;
     QUuid m_selectedClipId;
@@ -52,8 +61,13 @@ private:
     int64_t m_dragOrigStart = 0;
     int64_t m_dragOrigOffset = 0;
     int64_t m_dragOrigLength = 0;
+    int64_t m_dragTotalSamples = 0; // timeline scale locked at drag start
 
-    static constexpr int kEdgeThresholdPx = 6;
+    int64_t m_sharedTimelineLength = 0; // 0 = not set, fall back to local computation
+    int64_t m_playheadSample = -1;      // -1 = hidden
+    bool m_scrubbingPlayhead = false;
+
+    static constexpr int kEdgeThresholdPx = 10;
 };
 
 } // namespace rsd
