@@ -25,6 +25,7 @@ public:
     QRadioButton* selectButton() const { return m_selectButton; }
     ClipLaneWidget* clipLane() const { return m_clipLane; }
     void refreshWaveform() { m_clipLane->refresh(); }
+    void setDropHighlight(bool on); // visual feedback while a cross-track drag hovers this row
 
 signals:
     void selected(std::shared_ptr<Track> track);

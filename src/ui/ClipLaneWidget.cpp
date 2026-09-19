@@ -271,9 +271,16 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
 
     m_track->replaceClip(m_dragClipId, edited);
     update();
+
+    if (m_dragMode == DragMode::Move) {
+        emit clipDraggedToGlobalPos(m_dragClipId, event->globalPosition().toPoint());
+    }
 }
 
 void ClipLaneWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (m_dragMode == DragMode::Move) {
+        emit clipDropped(m_dragClipId, event->globalPosition().toPoint());
+    }
     m_dragMode = DragMode::None;
     m_scrubbingPlayhead = false;
     updateHoverCursor(event->pos());

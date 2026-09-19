@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QPoint>
 #include <QUuid>
 #include <QWidget>
 #include <memory>
@@ -34,6 +35,13 @@ signals:
     void selectionChanged(bool hasSelection);
     void seekRequested(int64_t sample);
     void editStarted(); // emitted once, right before a move/trim/split mutates the track
+
+    // Cross-track drag support: only emitted while DragMode::Move is active.
+    // TimelineView (the only object with visibility into every row's screen
+    // geometry) listens to these to highlight a hovered target row and, on
+    // drop, reassign the clip to a different track if it landed on one.
+    void clipDraggedToGlobalPos(QUuid clipId, QPoint globalPos);
+    void clipDropped(QUuid clipId, QPoint globalPos);
 
 protected:
     void paintEvent(QPaintEvent* event) override;

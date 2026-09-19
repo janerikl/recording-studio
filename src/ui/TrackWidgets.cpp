@@ -7,6 +7,7 @@ namespace rsd {
 
 TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
+    setAttribute(Qt::WA_StyledBackground, true); // so setDropHighlight's stylesheet actually paints
     auto* rowLayout = new QHBoxLayout(this);
 
     auto* header = new QWidget(this);
@@ -81,6 +82,10 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     connect(m_clipLane, &ClipLaneWidget::selectionChanged, this,
             [this](bool hasSelection) { emit clipSelectionChanged(m_track, hasSelection); });
     rowLayout->addWidget(m_clipLane, 1);
+}
+
+void TrackRowWidget::setDropHighlight(bool on) {
+    setStyleSheet(on ? "background: rgba(120, 180, 255, 40);" : "");
 }
 
 } // namespace rsd

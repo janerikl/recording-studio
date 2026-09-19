@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QButtonGroup>
+#include <QPoint>
+#include <QRect>
 #include <QScrollArea>
 #include <QUuid>
 #include <QVBoxLayout>
@@ -26,20 +28,30 @@ public:
     void deleteSelectedClipOn(const QUuid& trackId);
     void setSharedTimelineLength(int64_t samples);
     void setPlayheadSample(int64_t sample);
+    void clearSelectionOn(const QUuid& trackId);
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);
     void clipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void seekRequested(int64_t sample);
     void editStarted();
+    // Emitted when a clip dropped on a DIFFERENT track's lane than the one it
+    // started on; MainWindow performs the actual track reassignment.
+    void clipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
 
 private:
+    TrackRowWidget* rowForClipLane(QObject* clipLaneSender) const;
+    TrackRowWidget* rowAtGlobalPos(const QPoint& globalPos) const;
+    void onClipDraggedToGlobalPos(QUuid clipId, QPoint globalPos);
+    void onClipDropped(QUuid clipId, QPoint globalPos);
+
     QWidget* m_content = nullptr;
     QVBoxLayout* m_layout = nullptr;
     QButtonGroup* m_selectGroup = nullptr;
     std::unordered_map<QString, TrackRowWidget*> m_rows; // keyed by QUuid::toString()
     int64_t m_lastTimelineLength = 0;
     int64_t m_lastPlayheadSample = 0;
+    TrackRowWidget* m_highlightedRow = nullptr;
 };
 
 } // namespace rsd

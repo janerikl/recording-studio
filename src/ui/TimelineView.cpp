@@ -19,6 +19,9 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     connect(row, &TrackRowWidget::clipSelectionChanged, this, &TimelineView::clipSelectionChanged);
     connect(row->clipLane(), &ClipLaneWidget::seekRequested, this, &TimelineView::seekRequested);
     connect(row->clipLane(), &ClipLaneWidget::editStarted, this, &TimelineView::editStarted);
+    connect(row->clipLane(), &ClipLaneWidget::clipDraggedToGlobalPos, this,
+            &TimelineView::onClipDraggedToGlobalPos);
+    connect(row->clipLane(), &ClipLaneWidget::clipDropped, this, &TimelineView::onClipDropped);
 
     m_selectGroup->addButton(row->selectButton());
     // Insert before the trailing stretch.
@@ -72,6 +75,49 @@ void TimelineView::setSharedTimelineLength(int64_t samples) {
 void TimelineView::setPlayheadSample(int64_t sample) {
     m_lastPlayheadSample = sample;
     for (auto& [id, row] : m_rows) row->clipLane()->setPlayheadSample(sample);
+}
+
+void TimelineView::clearSelectionOn(const QUuid& trackId) {
+    auto it = m_rows.find(trackId.toString());
+    if (it == m_rows.end()) return;
+    it->second->clipLane()->clearSelection();
+}
+
+TrackRowWidget* TimelineView::rowForClipLane(QObject* clipLaneSender) const {
+    for (auto& [id, row] : m_rows) {
+        if (row->clipLane() == clipLaneSender) return row;
+    }
+    return nullptr;
+}
+
+TrackRowWidget* TimelineView::rowAtGlobalPos(const QPoint& globalPos) const {
+    for (auto& [id, row] : m_rows) {
+        QRect rowRect(row->mapToGlobal(QPoint(0, 0)), row->size());
+        if (rowRect.contains(globalPos)) return row;
+    }
+    return nullptr;
+}
+
+void TimelineView::onClipDraggedToGlobalPos(QUuid /*clipId*/, QPoint globalPos) {
+    auto* target = rowAtGlobalPos(globalPos);
+    if (target == m_highlightedRow) return;
+
+    if (m_highlightedRow) m_highlightedRow->setDropHighlight(false);
+    m_highlightedRow = target;
+    if (m_highlightedRow) m_highlightedRow->setDropHighlight(true);
+}
+
+void TimelineView::onClipDropped(QUuid clipId, QPoint globalPos) {
+    if (m_highlightedRow) {
+        m_highlightedRow->setDropHighlight(false);
+        m_highlightedRow = nullptr;
+    }
+
+    auto* sourceRow = rowForClipLane(sender());
+    auto* targetRow = rowAtGlobalPos(globalPos);
+    if (!sourceRow || !targetRow || sourceRow == targetRow) return;
+
+    emit clipMovedToTrack(clipId, sourceRow->track()->id, targetRow->track()->id);
 }
 
 } // namespace rsd

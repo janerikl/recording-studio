@@ -165,6 +165,7 @@ MainWindow::MainWindow(QWidget* parent)
             &MainWindow::onClipSelectionChanged);
     connect(m_timeline, &TimelineView::seekRequested, this, &MainWindow::onSeekRequested);
     connect(m_timeline, &TimelineView::editStarted, this, &MainWindow::onClipEditStarted);
+    connect(m_timeline, &TimelineView::clipMovedToTrack, this, &MainWindow::onClipMovedToTrack);
     layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
@@ -500,6 +501,37 @@ void MainWindow::rebuildTimelineFromSession() {
 
 void MainWindow::onClipEditStarted() {
     pushUndoSnapshot();
+}
+
+void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId) {
+    // The undo snapshot for this whole gesture was already captured in
+    // onClipEditStarted (fired at mousePressEvent, before either the local
+    // horizontal move or this track-reassignment step). No extra undo work
+    // needed here — captureSnapshot()/restoreSnapshot() serialize clips per
+    // track by id, so undo correctly restores the clip to its original track.
+    auto findTrack = [&](const QUuid& id) -> std::shared_ptr<Track> {
+        for (auto& t : m_session->tracks) {
+            if (t->id == id) return t;
+        }
+        return nullptr;
+    };
+    auto sourceTrack = findTrack(sourceTrackId);
+    auto destTrack = findTrack(destTrackId);
+    if (!sourceTrack || !destTrack) return;
+
+    std::shared_ptr<Clip> movedClip;
+    for (auto& c : *sourceTrack->clipsSnapshot()) {
+        if (c->id == clipId) { movedClip = c; break; }
+    }
+    if (!movedClip) return;
+
+    destTrack->addClip(std::make_shared<Clip>(*movedClip));
+    sourceTrack->removeClip(clipId);
+    m_timeline->clearSelectionOn(sourceTrackId);
+
+    refreshWaveformFor(sourceTrack);
+    refreshWaveformFor(destTrack);
+    refreshMasterAndScale();
 }
 
 SessionSnapshot MainWindow::captureSnapshot() const {

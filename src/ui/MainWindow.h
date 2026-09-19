@@ -67,6 +67,7 @@ private slots:
     void onDeleteClipClicked();
     void onSeekRequested(int64_t sample);
     void onClipEditStarted();
+    void onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
     void onUndoClicked();
     void onRedoClicked();
     void drainCaptureRing();
