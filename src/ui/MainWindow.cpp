@@ -32,37 +32,58 @@ MainWindow::MainWindow(QWidget* parent)
     m_engine->setSession(m_session.get());
 
     // --- Actions (shared between menus and the toolbar where noted) ---
-    m_recordAction = new QAction(recordIcon(), "Record", this);
+    // Prefer the user's system icon theme (freedesktop names) since it looks
+    // native and consistent with the rest of the desktop; fall back to Qt's
+    // generic built-ins only if a theme icon by that name isn't installed.
+    m_recordAction = new QAction(QIcon::fromTheme("media-record-symbolic", recordIcon()), "Record", this);
     m_recordAction->setToolTip("Record (R)");
-    m_playAction = new QAction(style()->standardIcon(QStyle::SP_MediaPlay), "Play", this);
+    m_playAction = new QAction(
+        QIcon::fromTheme("media-playback-start-symbolic", style()->standardIcon(QStyle::SP_MediaPlay)),
+        "Play", this);
     m_playAction->setToolTip("Play — resumes from the playhead (Space)");
-    m_playFromStartAction =
-        new QAction(style()->standardIcon(QStyle::SP_MediaSkipBackward), "Play from Start", this);
+    m_playFromStartAction = new QAction(
+        QIcon::fromTheme("media-seek-backward-symbolic",
+                          style()->standardIcon(QStyle::SP_MediaSkipBackward)),
+        "Play from Start", this);
     m_playFromStartAction->setToolTip("Play from Start — always rewinds to 0 first");
-    m_stopAction = new QAction(style()->standardIcon(QStyle::SP_MediaStop), "Stop", this);
+    m_stopAction = new QAction(
+        QIcon::fromTheme("media-playback-stop-symbolic", style()->standardIcon(QStyle::SP_MediaStop)),
+        "Stop", this);
     m_stopAction->setToolTip("Stop (Space)");
     m_stopAction->setEnabled(false);
 
-    m_addTrackAction =
-        new QAction(style()->standardIcon(QStyle::SP_FileDialogNewFolder), "Add Track", this);
+    m_addTrackAction = new QAction(
+        QIcon::fromTheme("list-add-symbolic", style()->standardIcon(QStyle::SP_FileDialogNewFolder)),
+        "Add Track", this);
     m_addTrackAction->setToolTip("Add Track");
-    m_removeTrackAction = new QAction(style()->standardIcon(QStyle::SP_TrashIcon), "Remove Track", this);
+    m_removeTrackAction = new QAction(
+        QIcon::fromTheme("list-remove-symbolic", style()->standardIcon(QStyle::SP_TrashIcon)),
+        "Remove Track", this);
     m_removeTrackAction->setToolTip("Remove the Active track");
 
-    auto* importAction = new QAction("Import...", this);
-    auto* exportAction = new QAction("Export Active Track...", this);
-    auto* saveSessionAction = new QAction("Save Session...", this);
-    auto* loadSessionAction = new QAction("Load Session...", this);
-    auto* settingsAction = new QAction("Settings...", this);
+    auto* importAction =
+        new QAction(QIcon::fromTheme("document-open-symbolic"), "Import...", this);
+    auto* exportAction =
+        new QAction(QIcon::fromTheme("document-save-as-symbolic"), "Export Active Track...", this);
+    auto* saveSessionAction =
+        new QAction(QIcon::fromTheme("document-save-symbolic"), "Save Session...", this);
+    auto* loadSessionAction =
+        new QAction(QIcon::fromTheme("document-open-symbolic"), "Load Session...", this);
+    auto* settingsAction =
+        new QAction(QIcon::fromTheme("preferences-system-symbolic"), "Settings...", this);
 
-    m_undoAction = new QAction(style()->standardIcon(QStyle::SP_ArrowBack), "Undo", this);
+    m_undoAction = new QAction(
+        QIcon::fromTheme("edit-undo-symbolic", style()->standardIcon(QStyle::SP_ArrowBack)), "Undo", this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
-    m_redoAction = new QAction(style()->standardIcon(QStyle::SP_ArrowForward), "Redo", this);
+    m_redoAction = new QAction(
+        QIcon::fromTheme("edit-redo-symbolic", style()->standardIcon(QStyle::SP_ArrowForward)), "Redo",
+        this);
     m_redoAction->setShortcut(QKeySequence::Redo);
     m_redoAction->setEnabled(false);
-    m_deleteClipAction =
-        new QAction(style()->standardIcon(QStyle::SP_DialogDiscardButton), "Delete Selected Clip", this);
+    m_deleteClipAction = new QAction(
+        QIcon::fromTheme("edit-delete-symbolic", style()->standardIcon(QStyle::SP_DialogDiscardButton)),
+        "Delete Selected Clip", this);
     m_deleteClipAction->setShortcut(QKeySequence(Qt::Key_Delete));
     m_deleteClipAction->setEnabled(false);
 
