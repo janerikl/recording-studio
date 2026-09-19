@@ -58,6 +58,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
         if (m_gainLSlider) m_gainLSlider->setValue(static_cast<int>(gl * 100));
         if (m_gainRSlider) m_gainRSlider->setValue(static_cast<int>(gr * 100));
     });
+    headerLayout->addWidget(new QLabel("Pan", header));
     headerLayout->addWidget(m_panDial);
 
     m_gainLSlider = new QSlider(Qt::Horizontal, header);
@@ -66,6 +67,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_gainLSlider->setToolTip("Gain L");
     connect(m_gainLSlider, &QSlider::valueChanged, this,
             [this](int v) { m_track->gainL.store(v / 100.0f, std::memory_order_relaxed); });
+    headerLayout->addWidget(new QLabel("Gain L", header));
     headerLayout->addWidget(m_gainLSlider);
 
     m_gainRSlider = new QSlider(Qt::Horizontal, header);
@@ -74,6 +76,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_gainRSlider->setToolTip("Gain R");
     connect(m_gainRSlider, &QSlider::valueChanged, this,
             [this](int v) { m_track->gainR.store(v / 100.0f, std::memory_order_relaxed); });
+    headerLayout->addWidget(new QLabel("Gain R", header));
     headerLayout->addWidget(m_gainRSlider);
 
     rowLayout->addWidget(header);

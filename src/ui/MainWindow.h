@@ -77,7 +77,7 @@ private slots:
 private:
     void updateStatusLabel();
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
-    void refreshTimelineScale();
+    int64_t refreshTimelineScale();
     void refreshMasterAndScale();
     void startPlayback();
     void rebuildTimelineFromSession();

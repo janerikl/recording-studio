@@ -1,6 +1,8 @@
 #include "WaveformWidget.h"
 
 #include <QPainter>
+#include <QPen>
+#include <algorithm>
 
 namespace rsd {
 
@@ -18,6 +20,17 @@ void WaveformWidget::setBuffer(std::shared_ptr<AudioBuffer> buffer) {
     update();
 }
 
+void WaveformWidget::setTimelineLength(int64_t samples) {
+    m_timelineLength = samples;
+    rebuildCache();
+    update();
+}
+
+void WaveformWidget::setPlayheadSample(int64_t sample) {
+    m_playheadSample = sample;
+    update();
+}
+
 void WaveformWidget::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
     rebuildCache();
@@ -26,9 +39,22 @@ void WaveformWidget::resizeEvent(QResizeEvent* event) {
 void WaveformWidget::rebuildCache() {
     if (!m_buffer || width() <= 0) {
         m_peaks.clear();
+        m_audioColumns = 0;
         return;
     }
-    m_peaks = WaveformCache::computePeaks(*m_buffer, width());
+
+    if (m_timelineLength > 0) {
+        // Only the portion of the widget proportional to how much of the
+        // shared timeline the buffer's own audio actually spans.
+        int64_t frames = m_buffer->frameCount();
+        m_audioColumns =
+            std::clamp(static_cast<int>(static_cast<double>(frames) / m_timelineLength * width()),
+                       0, width());
+    } else {
+        m_audioColumns = width();
+    }
+
+    m_peaks = WaveformCache::computePeaks(*m_buffer, std::max(0, m_audioColumns));
 }
 
 void WaveformWidget::paintEvent(QPaintEvent* /*event*/) {
@@ -54,6 +80,12 @@ void WaveformWidget::paintEvent(QPaintEvent* /*event*/) {
 
     painter.setPen(QColor(60, 60, 60));
     painter.drawLine(0, midY, width(), midY);
+
+    if (m_playheadSample >= 0 && m_timelineLength > 0) {
+        int px = static_cast<int>(static_cast<double>(m_playheadSample) / m_timelineLength * width());
+        painter.setPen(QPen(QColor(230, 80, 80), 2));
+        painter.drawLine(px, 0, px, height());
+    }
 }
 
 } // namespace rsd

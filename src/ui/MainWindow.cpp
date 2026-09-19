@@ -360,6 +360,7 @@ void MainWindow::updatePlayhead() {
     int64_t pos = m_engine->transport().positionSamples();
     m_timeline->setPlayheadSample(pos);
     m_ruler->setPlayheadSample(pos);
+    m_masterWaveform->setPlayheadSample(pos);
 }
 
 void MainWindow::updateMeters() {
@@ -706,11 +707,18 @@ void MainWindow::refreshWaveformFor(const std::shared_ptr<Track>& track) {
 }
 
 void MainWindow::refreshMasterAndScale() {
-    refreshTimelineScale();
+    int64_t total = refreshTimelineScale();
+    // Must match the scale just pushed to the ruler/lanes, or the master
+    // strip's audio-populated region won't line up with where the tracks'
+    // own clips actually sit (the bug this fixes: audio appeared to exist
+    // under the playhead in the master strip when the tracks were empty
+    // there, because the strip was auto-fitting its own shorter duration to
+    // the full widget width instead of sharing this scale).
+    m_masterWaveform->setTimelineLength(total);
     m_masterWaveform->setBuffer(renderSessionToBuffer());
 }
 
-void MainWindow::refreshTimelineScale() {
+int64_t MainWindow::refreshTimelineScale() {
     int64_t maxEnd = 0;
     for (auto& track : m_session->tracks) {
         auto clips = track->clipsSnapshot();
@@ -726,6 +734,7 @@ void MainWindow::refreshTimelineScale() {
 
     m_timeline->setSharedTimelineLength(total);
     m_ruler->setTimelineLength(total);
+    return total;
 }
 
 void MainWindow::updateStatusLabel() {
