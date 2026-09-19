@@ -18,6 +18,8 @@
 #include "ui/WaveformWidget.h"
 #include "ui/MediaLibraryPanel.h"
 
+class QCloseEvent;
+
 namespace rsd {
 
 // Lightweight snapshot of editable session state (not audio sample data,
@@ -53,6 +55,7 @@ public:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void closeEvent(QCloseEvent* event) override;
 
 private slots:
     void onRecordClicked();

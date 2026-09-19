@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <QCloseEvent>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -9,6 +10,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QSettings>
 #include <QShortcut>
 #include <QStringList>
 #include <QStyle>
@@ -250,6 +252,22 @@ MainWindow::MainWindow(QWidget* parent)
     connect(recordShortcut, &QShortcut::activated, this, [this]() {
         if (m_engine->transport().state() == TransportState::Stopped) onRecordClicked();
     });
+
+    // Restore window size/position and dock layout from last run, if any.
+    QSettings settings("RecordingStudio", "RecordingStudio");
+    if (settings.contains("mainWindow/geometry")) {
+        restoreGeometry(settings.value("mainWindow/geometry").toByteArray());
+    }
+    if (settings.contains("mainWindow/state")) {
+        restoreState(settings.value("mainWindow/state").toByteArray());
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    QSettings settings("RecordingStudio", "RecordingStudio");
+    settings.setValue("mainWindow/geometry", saveGeometry());
+    settings.setValue("mainWindow/state", saveState());
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::onAddTrackClicked() {
