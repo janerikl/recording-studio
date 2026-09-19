@@ -2,6 +2,7 @@
 
 #include <QListWidget>
 #include <QMimeData>
+#include <QSet>
 #include <QVector>
 #include <memory>
 
@@ -49,6 +50,10 @@ private:
 
     QVector<std::shared_ptr<AudioBuffer>> m_buffers;
     QVector<QString> m_names;
+    // Canonical paths of files already loaded via external drop, so dropping
+    // the same file again just selects the existing entry instead of adding
+    // a duplicate.
+    QSet<QString> m_loadedPaths;
 };
 
 } // namespace rsd

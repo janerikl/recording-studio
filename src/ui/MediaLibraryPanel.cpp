@@ -72,12 +72,17 @@ void MediaLibraryPanel::dropEvent(QDropEvent* event) {
     for (const QUrl& url : event->mimeData()->urls()) {
         if (!url.isLocalFile()) continue;
         QString path = url.toLocalFile();
+        QString canonical = QFileInfo(path).canonicalFilePath();
+        if (canonical.isEmpty()) canonical = path; // file vanished between drop and stat; fall back
+
+        if (m_loadedPaths.contains(canonical)) continue; // already in the library
 
         auto buffer = AudioFileIO::loadFile(path);
         if (!buffer) {
             emit fileLoadFailed(path);
             continue;
         }
+        m_loadedPaths.insert(canonical);
         addEntry(QFileInfo(path).fileName(), buffer);
     }
     event->acceptProposedAction();
