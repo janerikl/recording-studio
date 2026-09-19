@@ -3,10 +3,12 @@
 #include <QDebug>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QHelpEvent>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
+#include <QToolTip>
 #include <algorithm>
 #include <cstdlib>
 
@@ -156,8 +158,12 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
             }
         }
 
+        int sr = clip->buffer ? clip->buffer->sampleRate : 0;
+        QString durationText = sr > 0 ? formatDuration(clip->lengthSamples, sr) : QString();
+        QString label = durationText.isEmpty() ? clip->name : clip->name + "  " + durationText;
+
         painter.setPen(QColor(200, 200, 200));
-        painter.drawText(x0 + 4, 16, clip->name);
+        painter.drawText(x0 + 4, 16, label);
     }
 
     if (m_playheadSample >= 0) {
@@ -330,6 +336,42 @@ void ClipLaneWidget::dropEvent(QDropEvent* event) {
     int64_t sample = xToSample(event->position().toPoint().x());
     emit mediaDropped(libraryIndex, sample);
     event->acceptProposedAction();
+}
+
+QString ClipLaneWidget::formatDuration(int64_t samples, int sampleRate) {
+    if (sampleRate <= 0) return QString();
+    double totalSeconds = static_cast<double>(samples) / sampleRate;
+    int mins = static_cast<int>(totalSeconds) / 60;
+    double secs = totalSeconds - mins * 60;
+    return QString("%1:%2").arg(mins).arg(secs, 4, 'f', 1, QChar('0'));
+}
+
+bool ClipLaneWidget::event(QEvent* ev) {
+    if (ev->type() == QEvent::ToolTip) {
+        auto* helpEvent = static_cast<QHelpEvent*>(ev);
+        int64_t sample = xToSample(helpEvent->pos().x());
+        auto clip = findClipAt(sample);
+
+        if (clip && clip->buffer) {
+            QString text = QString("%1\n"
+                                    "Duration: %2\n"
+                                    "Trim start: %3\n"
+                                    "Sample rate: %4 Hz\n"
+                                    "Channels: %5\n"
+                                    "Source length: %6")
+                                .arg(clip->name)
+                                .arg(formatDuration(clip->lengthSamples, clip->buffer->sampleRate))
+                                .arg(formatDuration(clip->sourceOffsetSamples, clip->buffer->sampleRate))
+                                .arg(clip->buffer->sampleRate)
+                                .arg(clip->buffer->channels)
+                                .arg(formatDuration(clip->buffer->frameCount(), clip->buffer->sampleRate));
+            QToolTip::showText(helpEvent->globalPos(), text, this);
+        } else {
+            QToolTip::hideText();
+        }
+        return true;
+    }
+    return QWidget::event(ev);
 }
 
 } // namespace rsd

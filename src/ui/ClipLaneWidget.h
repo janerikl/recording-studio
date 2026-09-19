@@ -60,6 +60,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    bool event(QEvent* event) override; // handles QEvent::ToolTip for per-clip hover info
 
 private:
     enum class DragMode { None, Move, TrimStart, TrimEnd };
@@ -70,6 +71,7 @@ private:
     int64_t effectiveTimelineLength() const;
     std::shared_ptr<Clip> findClipAt(int64_t sample) const;
     void updateHoverCursor(const QPoint& pos);
+    static QString formatDuration(int64_t samples, int sampleRate);
 
     std::shared_ptr<Track> m_track;
     QUuid m_selectedClipId;
