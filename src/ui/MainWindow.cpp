@@ -192,6 +192,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* mediaDock = new QDockWidget("Media Library", this);
     m_mediaLibrary = new MediaLibraryPanel(mediaDock);
+    connect(m_mediaLibrary, &MediaLibraryPanel::fileLoadFailed, this, [this](const QString& path) {
+        QMessageBox::warning(this, "Import Failed", "Could not load: " + path);
+    });
     mediaDock->setWidget(m_mediaLibrary);
     addDockWidget(Qt::RightDockWidgetArea, mediaDock);
 
