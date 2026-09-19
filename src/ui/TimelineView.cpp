@@ -22,6 +22,7 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     connect(row->clipLane(), &ClipLaneWidget::clipDraggedToGlobalPos, this,
             &TimelineView::onClipDraggedToGlobalPos);
     connect(row->clipLane(), &ClipLaneWidget::clipDropped, this, &TimelineView::onClipDropped);
+    connect(row->clipLane(), &ClipLaneWidget::mediaDropped, this, &TimelineView::onMediaDropped);
 
     m_selectGroup->addButton(row->selectButton());
     // Insert before the trailing stretch.
@@ -118,6 +119,12 @@ void TimelineView::onClipDropped(QUuid clipId, QPoint globalPos) {
     if (!sourceRow || !targetRow || sourceRow == targetRow) return;
 
     emit clipMovedToTrack(clipId, sourceRow->track()->id, targetRow->track()->id);
+}
+
+void TimelineView::onMediaDropped(int libraryIndex, int64_t sessionStartSample) {
+    auto* row = rowForClipLane(sender());
+    if (!row) return;
+    emit mediaDroppedOnTrack(row->track()->id, libraryIndex, sessionStartSample);
 }
 
 } // namespace rsd

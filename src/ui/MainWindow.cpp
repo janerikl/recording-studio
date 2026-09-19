@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -183,9 +184,16 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_timeline, &TimelineView::seekRequested, this, &MainWindow::onSeekRequested);
     connect(m_timeline, &TimelineView::editStarted, this, &MainWindow::onClipEditStarted);
     connect(m_timeline, &TimelineView::clipMovedToTrack, this, &MainWindow::onClipMovedToTrack);
+    connect(m_timeline, &TimelineView::mediaDroppedOnTrack, this,
+            &MainWindow::onMediaDroppedOnTrack);
     layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
+
+    auto* mediaDock = new QDockWidget("Media Library", this);
+    m_mediaLibrary = new MediaLibraryPanel(mediaDock);
+    mediaDock->setWidget(m_mediaLibrary);
+    addDockWidget(Qt::RightDockWidgetArea, mediaDock);
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -590,6 +598,30 @@ void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid des
     refreshMasterAndScale();
 }
 
+void MainWindow::onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample) {
+    std::shared_ptr<Track> targetTrack;
+    for (auto& t : m_session->tracks) {
+        if (t->id == trackId) { targetTrack = t; break; }
+    }
+    if (!targetTrack) return;
+
+    auto buffer = m_mediaLibrary->bufferAt(libraryIndex);
+    if (!buffer) return;
+
+    pushUndoSnapshot();
+
+    auto clip = std::make_shared<Clip>();
+    clip->buffer = buffer;
+    clip->name = m_mediaLibrary->nameAt(libraryIndex);
+    clip->sessionStartSample = std::max<int64_t>(0, sessionStartSample);
+    clip->sourceOffsetSamples = 0;
+    clip->lengthSamples = buffer->frameCount();
+
+    targetTrack->addClip(clip);
+    refreshWaveformFor(targetTrack);
+    refreshMasterAndScale();
+}
+
 SessionSnapshot MainWindow::captureSnapshot() const {
     SessionSnapshot snapshot;
     for (auto& track : m_session->tracks) {
@@ -771,6 +803,7 @@ void MainWindow::refreshMasterAndScale() {
     // the full widget width instead of sharing this scale).
     m_masterWaveform->setTimelineLength(total);
     m_masterWaveform->setBuffer(renderSessionToBuffer());
+    m_mediaLibrary->refresh(*m_session);
 }
 
 int64_t MainWindow::refreshTimelineScale() {

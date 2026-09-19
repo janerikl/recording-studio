@@ -27,6 +27,7 @@ add_executable(recording_studio
     src/ui/TimeRulerWidget.cpp
     src/ui/LevelMeterWidget.cpp
     src/ui/SettingsDialog.cpp
+    src/ui/MediaLibraryPanel.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)

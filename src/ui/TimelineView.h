@@ -38,12 +38,15 @@ signals:
     // Emitted when a clip dropped on a DIFFERENT track's lane than the one it
     // started on; MainWindow performs the actual track reassignment.
     void clipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
+    // A media library item was dropped onto a track's lane.
+    void mediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
 
 private:
     TrackRowWidget* rowForClipLane(QObject* clipLaneSender) const;
     TrackRowWidget* rowAtGlobalPos(const QPoint& globalPos) const;
     void onClipDraggedToGlobalPos(QUuid clipId, QPoint globalPos);
     void onClipDropped(QUuid clipId, QPoint globalPos);
+    void onMediaDropped(int libraryIndex, int64_t sessionStartSample);
 
     QWidget* m_content = nullptr;
     QVBoxLayout* m_layout = nullptr;

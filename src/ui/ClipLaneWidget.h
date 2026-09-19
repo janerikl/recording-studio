@@ -5,6 +5,9 @@
 #include <QWidget>
 #include <memory>
 
+class QDragEnterEvent;
+class QDropEvent;
+
 #include "model/Track.h"
 
 namespace rsd {
@@ -43,6 +46,11 @@ signals:
     void clipDraggedToGlobalPos(QUuid clipId, QPoint globalPos);
     void clipDropped(QUuid clipId, QPoint globalPos);
 
+    // Media library drag-and-drop: a library item was dropped at the given
+    // timeline sample position on this lane. MainWindow resolves the library
+    // index to an AudioBuffer and creates the new Clip.
+    void mediaDropped(int libraryIndex, int64_t sessionStartSample);
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -50,6 +58,8 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     enum class DragMode { None, Move, TrimStart, TrimEnd };

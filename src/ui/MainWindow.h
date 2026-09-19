@@ -16,6 +16,7 @@
 #include "ui/TimeRulerWidget.h"
 #include "ui/SettingsDialog.h"
 #include "ui/WaveformWidget.h"
+#include "ui/MediaLibraryPanel.h"
 
 namespace rsd {
 
@@ -71,6 +72,7 @@ private slots:
     void onSeekRequested(int64_t sample);
     void onClipEditStarted();
     void onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
+    void onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
     void onUndoClicked();
     void onRedoClicked();
     void drainCaptureRing();
@@ -130,6 +132,7 @@ private:
     TimelineView* m_timeline = nullptr;
     TimeRulerWidget* m_ruler = nullptr;
     WaveformWidget* m_masterWaveform = nullptr;
+    MediaLibraryPanel* m_mediaLibrary = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;

@@ -1,12 +1,16 @@
 #include "ClipLaneWidget.h"
 
 #include <QDebug>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
 #include <algorithm>
 #include <cstdlib>
 
+#include "ui/MediaLibraryPanel.h"
 #include "waveform/WaveformCache.h"
 
 namespace rsd {
@@ -15,6 +19,7 @@ ClipLaneWidget::ClipLaneWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
     setMinimumHeight(120);
     setMouseTracking(true);
+    setAcceptDrops(true);
     QPalette pal = palette();
     pal.setColor(QPalette::Window, QColor(30, 30, 30));
     setAutoFillBackground(true);
@@ -309,6 +314,22 @@ void ClipLaneWidget::clearSelection() {
     m_selectedClipId = QUuid();
     emit selectionChanged(false);
     update();
+}
+
+void ClipLaneWidget::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType)) event->acceptProposedAction();
+}
+
+void ClipLaneWidget::dropEvent(QDropEvent* event) {
+    if (!event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType)) return;
+
+    bool ok = false;
+    int libraryIndex = event->mimeData()->data(MediaLibraryPanel::kMimeType).toInt(&ok);
+    if (!ok) return;
+
+    int64_t sample = xToSample(event->position().toPoint().x());
+    emit mediaDropped(libraryIndex, sample);
+    event->acceptProposedAction();
 }
 
 } // namespace rsd
