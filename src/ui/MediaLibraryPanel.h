@@ -28,6 +28,9 @@ public:
     // (including externally-dropped, still-unused ones) are left alone.
     void refresh(const Session& session);
 
+    // Discards every entry, e.g. when closing the session.
+    void resetLibrary();
+
     std::shared_ptr<AudioBuffer> bufferAt(int index) const;
     QString nameAt(int index) const;
 

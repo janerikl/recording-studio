@@ -80,6 +80,8 @@ MainWindow::MainWindow(QWidget* parent)
         new QAction(QIcon::fromTheme("document-save-symbolic"), "Save Session...", this);
     auto* loadSessionAction =
         new QAction(QIcon::fromTheme("document-open-symbolic"), "Load Session...", this);
+    auto* closeSessionAction =
+        new QAction(QIcon::fromTheme("window-close-symbolic"), "Close Session", this);
     auto* settingsAction =
         new QAction(QIcon::fromTheme("preferences-system-symbolic"), "Settings...", this);
 
@@ -112,6 +114,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_deleteClipAction, &QAction::triggered, this, &MainWindow::onDeleteClipClicked);
     connect(saveSessionAction, &QAction::triggered, this, &MainWindow::onSaveSessionClicked);
     connect(loadSessionAction, &QAction::triggered, this, &MainWindow::onLoadSessionClicked);
+    connect(closeSessionAction, &QAction::triggered, this, &MainWindow::onCloseSessionClicked);
     connect(m_undoAction, &QAction::triggered, this, &MainWindow::onUndoClicked);
     connect(m_redoAction, &QAction::triggered, this, &MainWindow::onRedoClicked);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettingsClicked);
@@ -123,6 +126,7 @@ MainWindow::MainWindow(QWidget* parent)
     fileMenu->addSeparator();
     fileMenu->addAction(saveSessionAction);
     fileMenu->addAction(loadSessionAction);
+    fileMenu->addAction(closeSessionAction);
     fileMenu->addSeparator();
     fileMenu->addAction(settingsAction);
 
@@ -545,6 +549,26 @@ void MainWindow::onLoadSessionClicked() {
 
     rebuildTimelineFromSession();
     QMessageBox::information(this, "Session Loaded", "Loaded: " + path);
+}
+
+void MainWindow::onCloseSessionClicked() {
+    auto reply = QMessageBox::question(
+        this, "Close Session",
+        "Close the current session and start fresh? Unsaved changes will be lost.",
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (reply != QMessageBox::Yes) return;
+
+    onStopClicked(); // stop any playback/recording before discarding session state
+
+    m_session->tracks.clear();
+    m_undoStack.clear();
+    m_redoStack.clear();
+    updateUndoRedoButtons();
+    m_trackCounter = 0;
+    m_mediaLibrary->resetLibrary();
+
+    rebuildTimelineFromSession();
+    onAddTrackClicked(); // start fresh with one blank track, matching app startup
 }
 
 void MainWindow::rebuildTimelineFromSession() {

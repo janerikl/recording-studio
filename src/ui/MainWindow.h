@@ -63,6 +63,7 @@ private slots:
     void onExportClicked();
     void onSaveSessionClicked();
     void onLoadSessionClicked();
+    void onCloseSessionClicked();
     void onSettingsClicked();
     void onAddTrackClicked();
     void onRemoveTrackClicked();

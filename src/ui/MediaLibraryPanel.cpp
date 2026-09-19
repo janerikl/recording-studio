@@ -47,6 +47,13 @@ void MediaLibraryPanel::addEntry(const QString& name, std::shared_ptr<AudioBuffe
     addItem(item);
 }
 
+void MediaLibraryPanel::resetLibrary() {
+    clear();
+    m_buffers.clear();
+    m_names.clear();
+    m_loadedPaths.clear();
+}
+
 void MediaLibraryPanel::refresh(const Session& session) {
     for (auto& track : session.tracks) {
         for (auto& clip : *track->clipsSnapshot()) {
