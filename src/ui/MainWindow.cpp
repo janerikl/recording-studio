@@ -80,6 +80,7 @@ MainWindow::MainWindow(QWidget* parent)
         new QAction(QIcon::fromTheme("document-save-as-symbolic"), "Export Active Track...", this);
     auto* saveSessionAction =
         new QAction(QIcon::fromTheme("document-save-symbolic"), "Save Session...", this);
+    saveSessionAction->setShortcut(QKeySequence::Save); // Ctrl+S
     auto* loadSessionAction =
         new QAction(QIcon::fromTheme("document-open-symbolic"), "Load Session...", this);
     auto* closeSessionAction =
@@ -517,10 +518,15 @@ void MainWindow::onExportClicked() {
 }
 
 void MainWindow::onSaveSessionClicked() {
-    QString path = QFileDialog::getSaveFileName(this, "Save Session", QString(),
-                                                  "Recording Studio Project (*.rsdproj)");
-    if (path.isEmpty()) return;
-    if (!path.endsWith(".rsdproj")) path += ".rsdproj";
+    // Silently resave to the known path (Ctrl+S / repeat saves); only prompt
+    // the first time or after Close Session cleared it.
+    QString path = m_currentSessionPath;
+    if (path.isEmpty()) {
+        path = QFileDialog::getSaveFileName(this, "Save Session", QString(),
+                                             "Recording Studio Project (*.rsdproj)");
+        if (path.isEmpty()) return;
+        if (!path.endsWith(".rsdproj")) path += ".rsdproj";
+    }
 
     QVector<LibraryEntry> libraryEntries;
     for (int i = 0; i < m_mediaLibrary->count(); ++i) {
@@ -532,7 +538,8 @@ void MainWindow::onSaveSessionClicked() {
         return;
     }
 
-    QMessageBox::information(this, "Session Saved", "Saved to: " + path);
+    m_currentSessionPath = path;
+    m_statusLabel->setText("Saved to: " + path);
 }
 
 void MainWindow::onSettingsClicked() {
@@ -576,6 +583,7 @@ void MainWindow::onLoadSessionClicked() {
         m_mediaLibrary->addEntry(entry.first, entry.second);
     }
 
+    m_currentSessionPath = path;
     rebuildTimelineFromSession();
     QMessageBox::information(this, "Session Loaded", "Loaded: " + path);
 }
@@ -595,6 +603,7 @@ void MainWindow::onCloseSessionClicked() {
     updateUndoRedoButtons();
     m_trackCounter = 0;
     m_mediaLibrary->resetLibrary();
+    m_currentSessionPath.clear();
 
     rebuildTimelineFromSession();
     onAddTrackClicked(); // start fresh with one blank track, matching app startup

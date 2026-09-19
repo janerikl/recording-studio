@@ -103,6 +103,9 @@ private:
 
     std::unique_ptr<AudioEngine> m_engine;
     std::unique_ptr<Session> m_session;
+    // Remembered from the last successful save/load, so Ctrl+S/Save resaves
+    // silently to the same file instead of re-prompting every time.
+    QString m_currentSessionPath;
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
     std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
