@@ -16,6 +16,7 @@ pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 add_executable(recording_studio
     src/main.cpp
     src/audio/AudioEngine.cpp
+    src/io/AudioFileIO.cpp
     src/ui/MainWindow.cpp
 )
 
