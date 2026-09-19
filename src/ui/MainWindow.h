@@ -50,6 +50,9 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private slots:
     void onRecordClicked();
     void onPlayClicked();

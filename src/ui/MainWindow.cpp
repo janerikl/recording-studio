@@ -12,6 +12,7 @@
 #include <QStringList>
 #include <QStyle>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWidget>
 #include <algorithm>
 
@@ -198,6 +199,11 @@ MainWindow::MainWindow(QWidget* parent)
     m_meterTimer->setInterval(33);
     connect(m_meterTimer, &QTimer::timeout, this, &MainWindow::updateMeters);
     m_meterTimer->start(); // always running, so input signal is visible before Record
+
+    // Ctrl+wheel zoom over the ruler, master strip, or track lanes.
+    m_ruler->installEventFilter(this);
+    m_masterWaveform->installEventFilter(this);
+    m_timeline->viewport()->installEventFilter(this);
 
     if (!m_engine->start()) {
         m_statusLabel->setText("Failed to start audio engine — check console");
@@ -400,6 +406,21 @@ void MainWindow::onZoomResetClicked() {
     m_zoomFactor = 1.0f;
     refreshMasterAndScale();
     updatePlayhead();
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::Wheel) {
+        auto* wheelEvent = static_cast<QWheelEvent*>(event);
+        if (wheelEvent->modifiers() & Qt::ControlModifier) {
+            if (wheelEvent->angleDelta().y() > 0) {
+                onZoomInClicked();
+            } else if (wheelEvent->angleDelta().y() < 0) {
+                onZoomOutClicked();
+            }
+            return true; // consumed: don't also scroll the timeline
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::drainCaptureRing() {
