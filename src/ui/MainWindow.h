@@ -1,9 +1,11 @@
 #pragma once
 
+#include <QAction>
+#include <QIcon>
 #include <QMainWindow>
-#include <QPushButton>
 #include <QLabel>
 #include <QTimer>
+#include <QToolBar>
 #include <memory>
 #include <vector>
 
@@ -79,6 +81,7 @@ private:
     void restoreSnapshot(const SessionSnapshot& snapshot);
     void pushUndoSnapshot();
     void updateUndoRedoButtons();
+    static QIcon recordIcon();
     std::shared_ptr<AudioBuffer> renderTrackToBuffer(const Track& track) const;
 
     std::unique_ptr<AudioEngine> m_engine;
@@ -88,13 +91,15 @@ private:
     std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
     std::shared_ptr<Track> m_trackWithClipSelection;
 
-    QPushButton* m_recordButton = nullptr;
-    QPushButton* m_playButton = nullptr;
-    QPushButton* m_playFromStartButton = nullptr;
-    QPushButton* m_stopButton = nullptr;
-    QPushButton* m_deleteClipButton = nullptr;
-    QPushButton* m_undoButton = nullptr;
-    QPushButton* m_redoButton = nullptr;
+    QAction* m_recordAction = nullptr;
+    QAction* m_playAction = nullptr;
+    QAction* m_playFromStartAction = nullptr;
+    QAction* m_stopAction = nullptr;
+    QAction* m_deleteClipAction = nullptr;
+    QAction* m_undoAction = nullptr;
+    QAction* m_redoAction = nullptr;
+    QAction* m_addTrackAction = nullptr;
+    QAction* m_removeTrackAction = nullptr;
     std::vector<SessionSnapshot> m_undoStack;
     std::vector<SessionSnapshot> m_redoStack;
     static constexpr size_t kMaxUndoDepth = 50;

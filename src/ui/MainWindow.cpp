@@ -3,9 +3,14 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QShortcut>
 #include <QStringList>
+#include <QStyle>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <algorithm>
@@ -26,62 +31,89 @@ MainWindow::MainWindow(QWidget* parent)
     m_session->channels = static_cast<int>(m_engine->channels());
     m_engine->setSession(m_session.get());
 
+    // --- Actions (shared between menus and the toolbar where noted) ---
+    m_recordAction = new QAction(recordIcon(), "Record", this);
+    m_recordAction->setToolTip("Record (R)");
+    m_playAction = new QAction(style()->standardIcon(QStyle::SP_MediaPlay), "Play", this);
+    m_playAction->setToolTip("Play — resumes from the playhead (Space)");
+    m_playFromStartAction =
+        new QAction(style()->standardIcon(QStyle::SP_MediaSkipBackward), "Play from Start", this);
+    m_playFromStartAction->setToolTip("Play from Start — always rewinds to 0 first");
+    m_stopAction = new QAction(style()->standardIcon(QStyle::SP_MediaStop), "Stop", this);
+    m_stopAction->setToolTip("Stop (Space)");
+    m_stopAction->setEnabled(false);
+
+    m_addTrackAction =
+        new QAction(style()->standardIcon(QStyle::SP_FileDialogNewFolder), "Add Track", this);
+    m_addTrackAction->setToolTip("Add Track");
+    m_removeTrackAction = new QAction(style()->standardIcon(QStyle::SP_TrashIcon), "Remove Track", this);
+    m_removeTrackAction->setToolTip("Remove the Active track");
+
+    auto* importAction = new QAction("Import...", this);
+    auto* exportAction = new QAction("Export Active Track...", this);
+    auto* saveSessionAction = new QAction("Save Session...", this);
+    auto* loadSessionAction = new QAction("Load Session...", this);
+    auto* settingsAction = new QAction("Settings...", this);
+
+    m_undoAction = new QAction(style()->standardIcon(QStyle::SP_ArrowBack), "Undo", this);
+    m_undoAction->setShortcut(QKeySequence::Undo);
+    m_undoAction->setEnabled(false);
+    m_redoAction = new QAction(style()->standardIcon(QStyle::SP_ArrowForward), "Redo", this);
+    m_redoAction->setShortcut(QKeySequence::Redo);
+    m_redoAction->setEnabled(false);
+    m_deleteClipAction =
+        new QAction(style()->standardIcon(QStyle::SP_DialogDiscardButton), "Delete Selected Clip", this);
+    m_deleteClipAction->setShortcut(QKeySequence(Qt::Key_Delete));
+    m_deleteClipAction->setEnabled(false);
+
+    connect(m_recordAction, &QAction::triggered, this, &MainWindow::onRecordClicked);
+    connect(m_playAction, &QAction::triggered, this, &MainWindow::onPlayClicked);
+    connect(m_playFromStartAction, &QAction::triggered, this, &MainWindow::onPlayFromStartClicked);
+    connect(m_stopAction, &QAction::triggered, this, &MainWindow::onStopClicked);
+    connect(importAction, &QAction::triggered, this, &MainWindow::onImportClicked);
+    connect(exportAction, &QAction::triggered, this, &MainWindow::onExportClicked);
+    connect(m_addTrackAction, &QAction::triggered, this, &MainWindow::onAddTrackClicked);
+    connect(m_removeTrackAction, &QAction::triggered, this, &MainWindow::onRemoveTrackClicked);
+    connect(m_deleteClipAction, &QAction::triggered, this, &MainWindow::onDeleteClipClicked);
+    connect(saveSessionAction, &QAction::triggered, this, &MainWindow::onSaveSessionClicked);
+    connect(loadSessionAction, &QAction::triggered, this, &MainWindow::onLoadSessionClicked);
+    connect(m_undoAction, &QAction::triggered, this, &MainWindow::onUndoClicked);
+    connect(m_redoAction, &QAction::triggered, this, &MainWindow::onRedoClicked);
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettingsClicked);
+
+    // --- Menus ---
+    auto* fileMenu = menuBar()->addMenu("&File");
+    fileMenu->addAction(importAction);
+    fileMenu->addAction(exportAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(saveSessionAction);
+    fileMenu->addAction(loadSessionAction);
+    fileMenu->addSeparator();
+    fileMenu->addAction(settingsAction);
+
+    auto* editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction(m_undoAction);
+    editMenu->addAction(m_redoAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_deleteClipAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_addTrackAction);
+    editMenu->addAction(m_removeTrackAction);
+
+    // --- Toolbar: frequently-used actions as icons, text hidden (tooltip shows on hover) ---
+    auto* toolbar = addToolBar("Main");
+    toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    toolbar->setMovable(false);
+    toolbar->addAction(m_recordAction);
+    toolbar->addAction(m_playAction);
+    toolbar->addAction(m_playFromStartAction);
+    toolbar->addAction(m_stopAction);
+    toolbar->addSeparator();
+    toolbar->addAction(m_addTrackAction);
+    toolbar->addAction(m_removeTrackAction);
+
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
-
-    auto* buttonRow = new QWidget(central);
-    auto* buttonLayout = new QHBoxLayout(buttonRow);
-
-    m_recordButton = new QPushButton("Record", buttonRow);
-    m_playButton = new QPushButton("Play", buttonRow);
-    m_playFromStartButton = new QPushButton("Play from Start", buttonRow);
-    m_stopButton = new QPushButton("Stop", buttonRow);
-    auto* importButton = new QPushButton("Import...", buttonRow);
-    auto* exportButton = new QPushButton("Export...", buttonRow);
-    auto* addTrackButton = new QPushButton("Add Track", buttonRow);
-    auto* removeTrackButton = new QPushButton("Remove Track", buttonRow);
-    m_deleteClipButton = new QPushButton("Delete Selected Clip", buttonRow);
-    auto* saveSessionButton = new QPushButton("Save Session...", buttonRow);
-    auto* loadSessionButton = new QPushButton("Load Session...", buttonRow);
-    m_undoButton = new QPushButton("Undo", buttonRow);
-    m_redoButton = new QPushButton("Redo", buttonRow);
-    auto* settingsButton = new QPushButton("Settings...", buttonRow);
-    m_stopButton->setEnabled(false);
-    m_deleteClipButton->setEnabled(false);
-    m_undoButton->setEnabled(false);
-    m_redoButton->setEnabled(false);
-
-    connect(m_recordButton, &QPushButton::clicked, this, &MainWindow::onRecordClicked);
-    connect(m_playButton, &QPushButton::clicked, this, &MainWindow::onPlayClicked);
-    connect(m_playFromStartButton, &QPushButton::clicked, this,
-            &MainWindow::onPlayFromStartClicked);
-    connect(m_stopButton, &QPushButton::clicked, this, &MainWindow::onStopClicked);
-    connect(importButton, &QPushButton::clicked, this, &MainWindow::onImportClicked);
-    connect(exportButton, &QPushButton::clicked, this, &MainWindow::onExportClicked);
-    connect(addTrackButton, &QPushButton::clicked, this, &MainWindow::onAddTrackClicked);
-    connect(removeTrackButton, &QPushButton::clicked, this, &MainWindow::onRemoveTrackClicked);
-    connect(m_deleteClipButton, &QPushButton::clicked, this, &MainWindow::onDeleteClipClicked);
-    connect(saveSessionButton, &QPushButton::clicked, this, &MainWindow::onSaveSessionClicked);
-    connect(loadSessionButton, &QPushButton::clicked, this, &MainWindow::onLoadSessionClicked);
-    connect(m_undoButton, &QPushButton::clicked, this, &MainWindow::onUndoClicked);
-    connect(m_redoButton, &QPushButton::clicked, this, &MainWindow::onRedoClicked);
-    connect(settingsButton, &QPushButton::clicked, this, &MainWindow::onSettingsClicked);
-
-    buttonLayout->addWidget(m_recordButton);
-    buttonLayout->addWidget(m_playButton);
-    buttonLayout->addWidget(m_playFromStartButton);
-    buttonLayout->addWidget(m_stopButton);
-    buttonLayout->addWidget(importButton);
-    buttonLayout->addWidget(exportButton);
-    buttonLayout->addWidget(addTrackButton);
-    buttonLayout->addWidget(removeTrackButton);
-    buttonLayout->addWidget(m_deleteClipButton);
-    buttonLayout->addWidget(saveSessionButton);
-    buttonLayout->addWidget(loadSessionButton);
-    buttonLayout->addWidget(m_undoButton);
-    buttonLayout->addWidget(m_redoButton);
-    buttonLayout->addWidget(settingsButton);
-    layout->addWidget(buttonRow);
 
     m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
     layout->addWidget(m_statusLabel);
@@ -124,9 +156,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     if (!m_engine->start()) {
         m_statusLabel->setText("Failed to start audio engine — check console");
-        m_recordButton->setEnabled(false);
-        m_playButton->setEnabled(false);
-        m_playFromStartButton->setEnabled(false);
+        m_recordAction->setEnabled(false);
+        m_playAction->setEnabled(false);
+        m_playFromStartAction->setEnabled(false);
     }
 
     onAddTrackClicked(); // start with one track
@@ -143,8 +175,8 @@ MainWindow::MainWindow(QWidget* parent)
         }
     });
 
-    auto* deleteShortcut = new QShortcut(QKeySequence(Qt::Key_Delete), this);
-    connect(deleteShortcut, &QShortcut::activated, this, &MainWindow::onDeleteClipClicked);
+    // Delete/Undo/Redo shortcuts already live on their QActions above; only
+    // Backspace (an alias for delete-clip) and R need their own QShortcut.
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     connect(backspaceShortcut, &QShortcut::activated, this, &MainWindow::onDeleteClipClicked);
 
@@ -152,11 +184,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(recordShortcut, &QShortcut::activated, this, [this]() {
         if (m_engine->transport().state() == TransportState::Stopped) onRecordClicked();
     });
-
-    auto* undoShortcut = new QShortcut(QKeySequence::Undo, this);
-    connect(undoShortcut, &QShortcut::activated, this, &MainWindow::onUndoClicked);
-    auto* redoShortcut = new QShortcut(QKeySequence::Redo, this);
-    connect(redoShortcut, &QShortcut::activated, this, &MainWindow::onRedoClicked);
 }
 
 void MainWindow::onAddTrackClicked() {
@@ -191,14 +218,14 @@ void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
 
 void MainWindow::onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection) {
     m_trackWithClipSelection = hasSelection ? std::move(track) : nullptr;
-    m_deleteClipButton->setEnabled(hasSelection);
+    m_deleteClipAction->setEnabled(hasSelection);
 }
 
 void MainWindow::onDeleteClipClicked() {
     if (!m_trackWithClipSelection) return;
     pushUndoSnapshot();
     m_timeline->deleteSelectedClipOn(m_trackWithClipSelection->id);
-    m_deleteClipButton->setEnabled(false);
+    m_deleteClipAction->setEnabled(false);
     m_trackWithClipSelection.reset();
     updateStatusLabel();
     refreshTimelineScale();
@@ -230,10 +257,10 @@ void MainWindow::onRecordClicked() {
     m_ringDrainTimer->start();
     m_playheadTimer->start();
 
-    m_recordButton->setEnabled(false);
-    m_playButton->setEnabled(false);
-    m_playFromStartButton->setEnabled(false);
-    m_stopButton->setEnabled(true);
+    m_recordAction->setEnabled(false);
+    m_playAction->setEnabled(false);
+    m_playFromStartAction->setEnabled(false);
+    m_stopAction->setEnabled(true);
 
     QStringList names;
     for (auto& t : m_recordTargetTracks) names << t->name;
@@ -255,10 +282,10 @@ void MainWindow::startPlayback() {
     m_engine->transport().setState(TransportState::Playing);
     m_playheadTimer->start();
 
-    m_recordButton->setEnabled(false);
-    m_playButton->setEnabled(false);
-    m_playFromStartButton->setEnabled(false);
-    m_stopButton->setEnabled(true);
+    m_recordAction->setEnabled(false);
+    m_playAction->setEnabled(false);
+    m_playFromStartAction->setEnabled(false);
+    m_stopAction->setEnabled(true);
     m_statusLabel->setText("Playing...");
 }
 
@@ -287,10 +314,10 @@ void MainWindow::onStopClicked() {
         refreshTimelineScale();
     }
 
-    m_recordButton->setEnabled(true);
-    m_playButton->setEnabled(true);
-    m_playFromStartButton->setEnabled(true);
-    m_stopButton->setEnabled(false);
+    m_recordAction->setEnabled(true);
+    m_playAction->setEnabled(true);
+    m_playFromStartAction->setEnabled(true);
+    m_stopAction->setEnabled(false);
     updateStatusLabel();
     updatePlayhead();
 }
@@ -399,9 +426,9 @@ void MainWindow::onSettingsClicked() {
     m_ruler->setSampleRate(m_session->sampleRate);
     refreshTimelineScale();
 
-    m_recordButton->setEnabled(true);
-    m_playButton->setEnabled(true);
-    m_playFromStartButton->setEnabled(true);
+    m_recordAction->setEnabled(true);
+    m_playAction->setEnabled(true);
+    m_playFromStartAction->setEnabled(true);
 }
 
 void MainWindow::onLoadSessionClicked() {
@@ -428,7 +455,7 @@ void MainWindow::rebuildTimelineFromSession() {
     m_timeline->clear();
     m_activeTrack.reset();
     m_trackWithClipSelection.reset();
-    m_deleteClipButton->setEnabled(false);
+    m_deleteClipAction->setEnabled(false);
 
     m_trackCounter = 0;
     for (auto& track : m_session->tracks) {
@@ -529,8 +556,8 @@ void MainWindow::onRedoClicked() {
 }
 
 void MainWindow::updateUndoRedoButtons() {
-    m_undoButton->setEnabled(!m_undoStack.empty());
-    m_redoButton->setEnabled(!m_redoStack.empty());
+    m_undoAction->setEnabled(!m_undoStack.empty());
+    m_redoAction->setEnabled(!m_redoStack.empty());
 }
 
 std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track) const {
@@ -594,6 +621,19 @@ void MainWindow::updateStatusLabel() {
     }
     m_statusLabel->setText(
         QString("Stopped — %1 track(s), %2 clip(s)").arg(m_session->tracks.size()).arg(totalClips));
+}
+
+QIcon MainWindow::recordIcon() {
+    // Qt's standard icon set has no "record" glyph; draw the conventional
+    // filled red circle instead of bundling an external asset.
+    QPixmap pixmap(32, 32);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(QColor(220, 50, 50));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(6, 6, 20, 20);
+    return QIcon(pixmap);
 }
 
 } // namespace rsd
