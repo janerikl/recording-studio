@@ -47,8 +47,7 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
     m_nameLabel->setFixedHeight(nameMetrics.lineSpacing() * 2 + 2);
     layout->addWidget(m_nameLabel);
 
-    m_effectsButton = new QPushButton(
-        QString::fromStdString(formatEffectsButtonLabel(m_track->effectsSnapshot()->size())), this);
+    m_effectsButton = new QPushButton(this);
     m_effectsButton->setToolTip("Show effects for this track");
     connect(m_effectsButton, &QPushButton::clicked, this, [this]() {
         emit selected(m_track);
@@ -56,6 +55,7 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
         emit effectsPanelRequested(m_track, anchorRect);
     });
     layout->addWidget(m_effectsButton);
+    refreshEffectsButton();
 
     m_armBox = new QCheckBox("Arm", this);
     m_armBox->setChecked(m_track->recordArmed.load());
@@ -193,8 +193,13 @@ void MixerStripWidget::updateMeter() {
 }
 
 void MixerStripWidget::refreshEffectsButton() {
-    m_effectsButton->setText(
-        QString::fromStdString(formatEffectsButtonLabel(m_track->effectsSnapshot()->size())));
+    size_t effectCount = m_track->effectsSnapshot()->size();
+    m_effectsButton->setText(QString::fromStdString(formatEffectsButtonLabel(effectCount)));
+    // Tint the button itself (not the track's kind-color stripe, which
+    // already encodes track type) so a track with an active effect chain
+    // is visible at a glance, the way Ableton/Logic badge/highlight a
+    // track's device chain when it's non-empty.
+    m_effectsButton->setStyleSheet(effectCount > 0 ? "background-color: #3d6b99;" : "");
 }
 
 void MixerStripWidget::refreshSendBusOptions(const std::vector<std::shared_ptr<Track>>& busTracks) {
