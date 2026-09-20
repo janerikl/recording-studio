@@ -126,6 +126,11 @@ target_include_directories(bus_mix_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(bus_mix_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME BusMixMathTests COMMAND bus_mix_math_tests)
 
+add_executable(preview_playback_math_tests test_PreviewPlaybackMath.cpp)
+target_include_directories(preview_playback_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(preview_playback_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PreviewPlaybackMathTests COMMAND preview_playback_math_tests)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 

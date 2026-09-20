@@ -10,10 +10,26 @@
 #include "Effects.h"
 #include "Mixer.h"
 #include "PanLawMath.h"
+#include "PreviewPlaybackMath.h"
 
 namespace rsd {
 
 AudioEngine::AudioEngine() : m_rtAudio(std::make_unique<RtAudio>()) {}
+
+void AudioEngine::previewSample(std::shared_ptr<AudioBuffer> buffer) {
+    if (!buffer) return;
+    auto clip = std::make_shared<Clip>();
+    clip->buffer = std::move(buffer);
+    clip->sessionStartSample = 0;
+    clip->sourceOffsetSamples = 0;
+    clip->lengthSamples = clip->buffer->frameCount();
+    m_previewPosition.store(0, std::memory_order_relaxed);
+    m_previewClip.store(std::move(clip));
+}
+
+void AudioEngine::stopPreview() {
+    m_previewClip.store(nullptr);
+}
 
 AudioEngine::~AudioEngine() {
     stop();
@@ -223,6 +239,21 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
                     float g = (ch % 2 == 0) ? gainL : gainR;
                     masterAccum[i * self->m_channels + ch] += busBuf[i * self->m_channels + ch] * g;
                 }
+            }
+        }
+
+        // Loop browser audition: mixed straight into the master buffer,
+        // independent of transport state/session tracks, one throwaway
+        // Clip at a time. Cleared once it plays past its own length.
+        auto previewClip = self->m_previewClip.load();
+        if (previewClip) {
+            int64_t previewPos = self->m_previewPosition.load(std::memory_order_relaxed);
+            mixClipInto(masterAccum, nFrames, self->m_channels, previewPos, *previewClip, 1.0f, 1.0f);
+            previewPos += nFrames;
+            if (isPreviewFinished(previewPos, previewClip->lengthSamples)) {
+                self->m_previewClip.store(nullptr);
+            } else {
+                self->m_previewPosition.store(previewPos, std::memory_order_relaxed);
             }
         }
 

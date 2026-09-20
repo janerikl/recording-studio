@@ -70,6 +70,10 @@ signals:
     // timeline sample position on this lane. MainWindow resolves the library
     // index to an AudioBuffer and creates the new Clip.
     void mediaDropped(int libraryIndex, int64_t sessionStartSample);
+    // A plain file (not a MediaLibraryPanel entry) was dropped here —
+    // either dragged straight from a file manager, or from the loop
+    // browser panel.
+    void externalFileDropped(QString filePath, int64_t sessionStartSample);
 
     // Fired whenever the scroll offset changes (scrollbar drag or wheel), so
     // the owning row can keep its scrollbar widget's displayed value in sync.

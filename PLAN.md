@@ -27,7 +27,7 @@ without relying on chat history. Update status as items complete.
     pass yet, see below
 8. [x] Bus routing / sends (aux tracks, submixes) — v1: aux sends + master
     bus, including master-effects UI, see below
-9. [ ] Loop/sample library browser
+9. [x] Loop/sample library browser
 10. [ ] Export/bounce with format + stems options
 11. [x] Multi-source input: mic + system audio (loopback) recorded to separate tracks (Linux/PulseAudio)
 12. [ ] Mixer view: dockable strip at the bottom with a vertical fader, pan,
@@ -521,6 +521,60 @@ Verification plan (approved):
       Track, and master-effect add/remove/reorder; confirm save/reload
       preserves routing/master volume/master effects in a real project
       file (not just the unit test's in-memory round-trip).
+
+## Completed: Loop/sample library browser
+
+Goal (feature #9): browse a user-chosen folder of audio files (a sample
+pack collection), audition them by clicking, and drag them onto a track —
+independent of the existing session-scoped `MediaLibraryPanel` (which only
+lists buffers already in the session or dropped in from outside).
+
+Design (approved):
+- [x] Prerequisite fix: `ClipLaneWidget::dragEnterEvent`/`dropEvent`
+      currently only accept `MediaLibraryPanel::kMimeType` drops — a plain
+      file dragged from a file manager onto a track silently does nothing
+      today. Extended to also accept a standard file-URL drop, emitting a
+      new `externalFileDropped(QString path, int64_t sample)` signal,
+      wired through `TimelineView` to
+      `MainWindow::onExternalFileDroppedOnTrack` (mirrors the existing
+      `onMediaDroppedOnTrack` undo pattern). Fixes that gap and is also
+      exactly what the new browser needs — its drag source just sets
+      standard `QUrl` mime data and reuses this same path, no new MIME
+      type or plumbing of its own.
+- [x] New `LoopBrowserPanel` dock (mirrors `MediaLibraryPanel`'s
+      `QListWidget` style): "Choose Folder" button (path persisted via
+      `QSettings`, like recent sessions), recursive scan
+      (`QDirIterator`) for `.wav/.aiff/.aif/.flac/.ogg`, a filename
+      filter box, drag source sets `QUrl` mime data. Not session-
+      serialized (it's a filesystem browser, not session state) — only
+      the last-used folder path persists.
+- [x] Click-to-audition: clicking a list item loads the file
+      (`AudioFileIO::loadFile`) and calls a new
+      `AudioEngine::previewSample(buffer)`; clicking again / a Stop
+      button calls `stopPreview()`.
+- [x] `AudioEngine` preview playback: new
+      `atomic<shared_ptr<const Clip>> m_previewClip` +
+      `atomic<int64_t> m_previewPosition`. `previewSample()` wraps the
+      buffer in a throwaway `Clip` (`sessionStartSample = 0`) and arms
+      it. Mixed into the master accumulation buffer in `rtCallback` via
+      the *existing* `mixClipInto` helper (no new mixing math), clearing
+      itself at end-of-sample via a small pure helper,
+      `audio/PreviewPlaybackMath.h::isPreviewFinished()` (tested first).
+
+Verification plan (approved):
+- [x] Automated (written first): `tests/test_PreviewPlaybackMath.cpp` (5
+      cases) for the finished/advance edge cases. Full suite (23/23
+      binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full timeout
+      under a real X display, no crash/error output) with the new dock
+      wired in.
+- [ ] Full manual (needs real interaction, not done from this session):
+      audition is actually audible and stops correctly (including
+      stopping when a second file is clicked mid-preview); dragged clip
+      plays back correctly positioned; folder path persists across an
+      app restart; dragging a plain file from an OS file manager straight
+      onto a track (the prerequisite fix) also works, not just from the
+      new browser panel.
 
 ## Notes
 

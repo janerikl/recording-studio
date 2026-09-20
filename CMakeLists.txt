@@ -38,6 +38,7 @@ add_executable(recording_studio
     src/ui/PianoRollGridWidget.cpp
     src/ui/PianoRollPanel.cpp
     src/ui/AutomationLaneWidget.cpp
+    src/ui/LoopBrowserPanel.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)

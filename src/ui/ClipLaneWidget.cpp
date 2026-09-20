@@ -530,19 +530,35 @@ void ClipLaneWidget::clearSelection() {
 }
 
 void ClipLaneWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType)) event->acceptProposedAction();
+    // Two sources: an existing MediaLibraryPanel entry (by index), or a
+    // plain file drop — either straight from a file manager, or from the
+    // loop browser (which sets standard QUrl mime data, indistinguishable
+    // from an OS drag, so it needs no special-cased MIME type of its own).
+    if (event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType) || event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    }
 }
 
 void ClipLaneWidget::dropEvent(QDropEvent* event) {
-    if (!event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType)) return;
-
-    bool ok = false;
-    int libraryIndex = event->mimeData()->data(MediaLibraryPanel::kMimeType).toInt(&ok);
-    if (!ok) return;
-
     int64_t sample = xToSample(event->position().toPoint().x());
-    emit mediaDropped(libraryIndex, sample);
-    event->acceptProposedAction();
+
+    if (event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType)) {
+        bool ok = false;
+        int libraryIndex = event->mimeData()->data(MediaLibraryPanel::kMimeType).toInt(&ok);
+        if (!ok) return;
+        emit mediaDropped(libraryIndex, sample);
+        event->acceptProposedAction();
+        return;
+    }
+
+    if (event->mimeData()->hasUrls()) {
+        for (const QUrl& url : event->mimeData()->urls()) {
+            if (!url.isLocalFile()) continue;
+            emit externalFileDropped(url.toLocalFile(), sample);
+            break; // one clip per drop, even if several files were dragged together
+        }
+        event->acceptProposedAction();
+    }
 }
 
 QString ClipLaneWidget::formatDuration(int64_t samples, int sampleRate) {

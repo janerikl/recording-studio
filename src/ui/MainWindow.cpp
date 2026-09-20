@@ -288,6 +288,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_timeline->setCommandStack(&m_commandStack);
     connect(m_timeline, &TimelineView::mediaDroppedOnTrack, this,
             &MainWindow::onMediaDroppedOnTrack);
+    connect(m_timeline, &TimelineView::externalFileDroppedOnTrack, this,
+            &MainWindow::onExternalFileDroppedOnTrack);
     connect(m_timeline, &TimelineView::effectsPanelRequested, this,
             &MainWindow::onEffectsPanelRequested);
     connect(m_timeline, &TimelineView::takeSelected, this, &MainWindow::onTakeSelected);
@@ -332,6 +334,14 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::RightDockWidgetArea, m_pianoRollDock);
     tabifyDockWidget(mediaDock, m_pianoRollDock);
 
+    auto* loopBrowserDock = new QDockWidget("Loop Browser", this);
+    m_loopBrowser = new LoopBrowserPanel(loopBrowserDock);
+    connect(m_loopBrowser, &LoopBrowserPanel::previewRequested, this,
+            &MainWindow::onLoopPreviewRequested);
+    loopBrowserDock->setWidget(m_loopBrowser);
+    addDockWidget(Qt::RightDockWidgetArea, loopBrowserDock);
+    tabifyDockWidget(mediaDock, loopBrowserDock);
+
     // Each dock's built-in toggleViewAction stays in sync automatically
     // (checked/unchecked) whether it's hidden from here or via the dock's
     // own close button, so no extra state tracking is needed.
@@ -340,6 +350,7 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(m_effectsDock->toggleViewAction());
     viewMenu->addAction(m_instrumentDock->toggleViewAction());
     viewMenu->addAction(m_pianoRollDock->toggleViewAction());
+    viewMenu->addAction(loopBrowserDock->toggleViewAction());
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -1131,6 +1142,51 @@ void MainWindow::onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t 
     refreshWaveformFor(targetTrack);
     refreshMasterAndScale();
     updateUndoRedoButtons();
+}
+
+void MainWindow::onExternalFileDroppedOnTrack(QUuid trackId, QString filePath,
+                                               int64_t sessionStartSample) {
+    std::shared_ptr<Track> targetTrack;
+    for (auto& t : m_session->tracks) {
+        if (t->id == trackId) { targetTrack = t; break; }
+    }
+    if (!targetTrack) return;
+
+    auto buffer = AudioFileIO::loadFile(filePath);
+    if (!buffer) {
+        QMessageBox::warning(this, "Import Failed", "Could not load: " + filePath);
+        return;
+    }
+    QString name = QFileInfo(filePath).fileName();
+    m_mediaLibrary->addEntry(name, buffer);
+
+    auto clip = std::make_shared<Clip>();
+    clip->buffer = buffer;
+    clip->name = name;
+    clip->sessionStartSample = std::max<int64_t>(0, sessionStartSample);
+    clip->sourceOffsetSamples = 0;
+    clip->lengthSamples = buffer->frameCount();
+
+    auto before = targetTrack->clipsSnapshot();
+    targetTrack->addClip(clip);
+    m_commandStack.push(std::make_unique<TrackClipsCommand>(
+        targetTrack, before, targetTrack->clipsSnapshot(), "Drop Sample"));
+    refreshWaveformFor(targetTrack);
+    refreshMasterAndScale();
+    updateUndoRedoButtons();
+}
+
+void MainWindow::onLoopPreviewRequested(QString filePath) {
+    if (filePath.isEmpty()) {
+        m_engine->stopPreview();
+        return;
+    }
+    auto buffer = AudioFileIO::loadFile(filePath);
+    if (!buffer) {
+        QMessageBox::warning(this, "Preview Failed", "Could not load: " + filePath);
+        return;
+    }
+    m_engine->previewSample(buffer);
 }
 
 void MainWindow::onUndoClicked() {

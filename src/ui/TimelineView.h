@@ -47,6 +47,7 @@ signals:
     void clipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
     // A media library item was dropped onto a track's lane.
     void mediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
+    void externalFileDroppedOnTrack(QUuid trackId, QString filePath, int64_t sessionStartSample);
     // The inline "FX" button on a track row was clicked.
     void effectsPanelRequested(std::shared_ptr<Track> track);
     // A take lane was clicked: promote it to the active comp for its region.
@@ -58,6 +59,7 @@ private:
     void onClipDraggedToGlobalPos(QUuid clipId, QPoint globalPos);
     void onClipDropped(QUuid clipId, QPoint globalPos);
     void onMediaDropped(int libraryIndex, int64_t sessionStartSample);
+    void onExternalFileDropped(QString filePath, int64_t sessionStartSample);
 
     QWidget* m_content = nullptr;
     QVBoxLayout* m_layout = nullptr;

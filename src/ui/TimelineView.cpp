@@ -29,6 +29,8 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
             &TimelineView::onClipDraggedToGlobalPos);
     connect(row->clipLane(), &ClipLaneWidget::clipDropped, this, &TimelineView::onClipDropped);
     connect(row->clipLane(), &ClipLaneWidget::mediaDropped, this, &TimelineView::onMediaDropped);
+    connect(row->clipLane(), &ClipLaneWidget::externalFileDropped, this,
+            &TimelineView::onExternalFileDropped);
     connect(row, &TrackRowWidget::effectsPanelRequested, this, &TimelineView::effectsPanelRequested);
     connect(row, &TrackRowWidget::takeSelected, this, &TimelineView::takeSelected);
     connect(row, &TrackRowWidget::syncScrollToAllRequested, this, [this, row](int64_t samples) {
@@ -168,6 +170,12 @@ void TimelineView::onMediaDropped(int libraryIndex, int64_t sessionStartSample) 
     auto* row = rowForClipLane(sender());
     if (!row) return;
     emit mediaDroppedOnTrack(row->track()->id, libraryIndex, sessionStartSample);
+}
+
+void TimelineView::onExternalFileDropped(QString filePath, int64_t sessionStartSample) {
+    auto* row = rowForClipLane(sender());
+    if (!row) return;
+    emit externalFileDroppedOnTrack(row->track()->id, filePath, sessionStartSample);
 }
 
 } // namespace rsd

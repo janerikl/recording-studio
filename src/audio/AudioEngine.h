@@ -11,6 +11,7 @@
 #include "PunchRecorder.h"
 #include "RingBuffer.h"
 #include "TransportClock.h"
+#include "model/Clip.h"
 #include "model/Session.h"
 
 namespace rsd {
@@ -74,6 +75,13 @@ public:
     // finalizePunchRecording() after stopping to get the undoable result.
     PunchRecorder& punchRecorder() { return m_punchRecorder; }
 
+    // Loop browser click-to-audition: plays a buffer once, mixed straight
+    // into the master output, independent of transport state/session
+    // tracks. Starting a new preview replaces any currently playing one
+    // (single active preview). GUI thread only.
+    void previewSample(std::shared_ptr<AudioBuffer> buffer);
+    void stopPreview();
+
     unsigned int sampleRate() const { return m_sampleRate; }
     unsigned int channels() const { return m_channels; }
 
@@ -131,6 +139,13 @@ private:
     // callbacks. Only grows/inserts when a new bus track is added (a
     // structural, GUI-thread-driven event), not on every block.
     std::map<QUuid, std::vector<float>> m_busScratch;
+
+    // Loop browser audition: an unattached, throwaway Clip (never on any
+    // track) wrapping the clicked buffer, played from m_previewPosition
+    // and mixed in every callback regardless of transport state. nullptr
+    // means no preview active.
+    std::atomic<std::shared_ptr<const Clip>> m_previewClip{nullptr};
+    std::atomic<int64_t> m_previewPosition{0};
 
     std::atomic<float> m_inputPeakL{0.0f};
     std::atomic<float> m_inputPeakR{0.0f};

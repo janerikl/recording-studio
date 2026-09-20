@@ -28,6 +28,7 @@
 #include "ui/EffectsRackPanel.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/PianoRollPanel.h"
+#include "ui/LoopBrowserPanel.h"
 
 #include <unordered_map>
 
@@ -70,6 +71,8 @@ private slots:
     void onSeekRequested(int64_t sample);
     void onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
     void onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
+    void onExternalFileDroppedOnTrack(QUuid trackId, QString filePath, int64_t sessionStartSample);
+    void onLoopPreviewRequested(QString filePath);
     void onUndoClicked();
     void onRedoClicked();
     void drainCaptureRing();
@@ -172,6 +175,7 @@ private:
     InstrumentPanel* m_instrumentPanel = nullptr;
     QDockWidget* m_instrumentDock = nullptr;
     PianoRollPanel* m_pianoRollPanel = nullptr;
+    LoopBrowserPanel* m_loopBrowser = nullptr;
     QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
