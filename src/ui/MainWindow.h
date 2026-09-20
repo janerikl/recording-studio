@@ -143,8 +143,6 @@ private:
     QAction* m_addTrackAction = nullptr;
     QAction* m_addInstrumentTrackAction = nullptr;
     QAction* m_addBusTrackAction = nullptr;
-    class QSlider* m_masterVolumeSlider = nullptr;
-    class QPushButton* m_masterFxButton = nullptr;
     QAction* m_removeTrackAction = nullptr;
     QAction* m_zoomInAction = nullptr;
     QAction* m_zoomOutAction = nullptr;

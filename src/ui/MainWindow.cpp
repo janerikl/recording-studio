@@ -205,21 +205,6 @@ MainWindow::MainWindow(QWidget* parent)
     toolbar->addAction(m_addBusTrackAction);
     toolbar->addAction(m_removeTrackAction);
     toolbar->addSeparator();
-    toolbar->addWidget(new QLabel("Master", this));
-    m_masterVolumeSlider = new QSlider(Qt::Horizontal, this);
-    m_masterVolumeSlider->setRange(0, 200);
-    m_masterVolumeSlider->setValue(100);
-    m_masterVolumeSlider->setFixedWidth(90);
-    m_masterVolumeSlider->setToolTip("Master Volume");
-    connect(m_masterVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
-        m_session->masterBus.volume.store(static_cast<float>(value) / 100.0f);
-    });
-    toolbar->addWidget(m_masterVolumeSlider);
-    m_masterFxButton = new QPushButton("Master FX", this);
-    m_masterFxButton->setToolTip("Show effects for the master bus");
-    connect(m_masterFxButton, &QPushButton::clicked, this, &MainWindow::onMasterEffectsPanelRequested);
-    toolbar->addWidget(m_masterFxButton);
-    toolbar->addSeparator();
     toolbar->addAction(m_zoomInAction);
     toolbar->addAction(m_zoomOutAction);
     toolbar->addAction(m_zoomResetAction);
@@ -1135,9 +1120,6 @@ void MainWindow::rebuildTimelineFromSession() {
     refreshMasterAndScale();
     updatePlayhead();
     m_effectsRack->setTrack(m_activeTrack);
-
-    QSignalBlocker blocker(m_masterVolumeSlider);
-    m_masterVolumeSlider->setValue(static_cast<int>(m_session->masterBus.volume.load() * 100.0f));
 }
 
 void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId) {
