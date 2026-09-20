@@ -34,7 +34,7 @@ add_executable(recording_studio
     src/ui/LevelMeterWidget.cpp
     src/ui/SettingsDialog.cpp
     src/ui/MediaLibraryPanel.cpp
-    src/ui/EffectsRackPanel.cpp
+    src/ui/EffectsPopoverWidget.cpp
     src/ui/PianoKeyboardWidget.cpp
     src/ui/InstrumentPanel.cpp
     src/ui/PianoRollGridWidget.cpp

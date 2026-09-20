@@ -12,6 +12,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScreen>
 #include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -31,6 +32,7 @@
 #include "io/AudioFileIO.h"
 #include "io/SessionIO.h"
 #include "model/CompMath.h"
+#include "ui/PopoverPositioning.h"
 #include "ui/TimelineScaleMath.h"
 
 namespace rsd {
@@ -286,17 +288,13 @@ MainWindow::MainWindow(QWidget* parent)
     mediaDock->setWidget(m_mediaLibrary);
     addDockWidget(Qt::RightDockWidgetArea, mediaDock);
 
-    m_effectsDock = new QDockWidget("Effects Rack", this);
-    m_effectsRack = new EffectsRackPanel(m_effectsDock);
-    m_effectsRack->setCommandStack(&m_commandStack);
-    m_effectsRack->setSampleRate(m_session->sampleRate);
-    connect(m_effectsRack, &EffectsRackPanel::effectCountChanged, this,
+    m_effectsPopover = new EffectsPopoverWidget(this);
+    m_effectsPopover->setCommandStack(&m_commandStack);
+    m_effectsPopover->setSampleRate(m_session->sampleRate);
+    connect(m_effectsPopover, &EffectsPopoverWidget::effectCountChanged, this,
             [this](std::shared_ptr<Track> track) {
                 if (track) m_mixer->refreshTrackEffectsButton(track->id);
             });
-    m_effectsDock->setWidget(m_effectsRack);
-    addDockWidget(Qt::RightDockWidgetArea, m_effectsDock);
-    tabifyDockWidget(mediaDock, m_effectsDock);
 
     m_instrumentDock = new QDockWidget("Instrument", this);
     m_instrumentPanel = new InstrumentPanel(m_instrumentDock);
@@ -339,7 +337,6 @@ MainWindow::MainWindow(QWidget* parent)
     // own close button, so no extra state tracking is needed.
     auto* viewMenu = menuBar()->addMenu("&View");
     viewMenu->addAction(mediaDock->toggleViewAction());
-    viewMenu->addAction(m_effectsDock->toggleViewAction());
     viewMenu->addAction(m_instrumentDock->toggleViewAction());
     viewMenu->addAction(m_pianoRollDock->toggleViewAction());
     viewMenu->addAction(loopBrowserDock->toggleViewAction());
@@ -478,7 +475,6 @@ void MainWindow::onRemoveTrackClicked() {
 
 void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
     m_activeTrack = std::move(track);
-    m_effectsRack->setTrack(m_activeTrack);
     m_instrumentPanel->setTrack(m_activeTrack);
     m_pianoRollPanel->setTrack(m_activeTrack);
 }
@@ -512,16 +508,20 @@ void MainWindow::onInstrumentNoteOff(int pitch) {
     m_pendingRecordedNotes.push_back(std::move(note));
 }
 
-void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track>) {
-    // Track selection already happened via the row's own "Active" radio
-    // button (TrackRowWidget checks it before emitting this signal); just
-    // bring the (possibly tabbed-behind) effects dock to the front.
-    m_effectsDock->raise();
+void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect) {
+    m_effectsPopover->setTrack(track);
+    QSize hint = m_effectsPopover->sizeHint();
+    QPoint pos = computePopoverPosition(globalAnchorRect, hint, screen()->availableGeometry());
+    m_effectsPopover->move(pos);
+    m_effectsPopover->show();
 }
 
-void MainWindow::onMasterEffectsPanelRequested() {
-    m_effectsRack->setMasterBus(&m_session->masterBus);
-    m_effectsDock->raise();
+void MainWindow::onMasterEffectsPanelRequested(QRect globalAnchorRect) {
+    m_effectsPopover->setMasterBus(&m_session->masterBus);
+    QSize hint = m_effectsPopover->sizeHint();
+    QPoint pos = computePopoverPosition(globalAnchorRect, hint, screen()->availableGeometry());
+    m_effectsPopover->move(pos);
+    m_effectsPopover->show();
 }
 
 void MainWindow::onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take) {
@@ -1033,7 +1033,7 @@ bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessag
 
     m_commandStack.clear();
     updateUndoRedoButtons();
-    m_effectsRack->setSampleRate(m_session->sampleRate);
+    m_effectsPopover->setSampleRate(m_session->sampleRate);
 
     m_mediaLibrary->resetLibrary();
     for (auto& entry : libraryEntries) {
@@ -1119,7 +1119,6 @@ void MainWindow::rebuildTimelineFromSession() {
     updateStatusLabel();
     refreshMasterAndScale();
     updatePlayhead();
-    m_effectsRack->setTrack(m_activeTrack);
 }
 
 void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId) {

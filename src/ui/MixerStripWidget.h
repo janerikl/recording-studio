@@ -5,6 +5,7 @@
 #include <QDial>
 #include <QLabel>
 #include <QPushButton>
+#include <QRect>
 #include <QSlider>
 #include <QWidget>
 #include <memory>
@@ -47,7 +48,9 @@ public:
 
 signals:
     void selected(std::shared_ptr<Track> track);
-    void effectsPanelRequested(std::shared_ptr<Track> track);
+    // globalAnchorRect is the FX button's geometry in global screen
+    // coordinates, for positioning the effects popover next to it.
+    void effectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect);
 
 private:
     std::shared_ptr<Track> m_track;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QRect>
 #include <QUuid>
 #include <QWidget>
 #include <map>
@@ -42,8 +43,8 @@ public:
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);
-    void effectsPanelRequested(std::shared_ptr<Track> track);
-    void masterEffectsPanelRequested();
+    void effectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect);
+    void masterEffectsPanelRequested(QRect globalAnchorRect);
 
 private:
     QHBoxLayout* m_stripsLayout = nullptr;

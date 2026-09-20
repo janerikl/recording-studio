@@ -44,8 +44,10 @@ MixerPanel::MixerPanel(QWidget* parent) : QWidget(parent) {
 
     m_masterFxButton = new QPushButton("FX", masterStrip);
     m_masterFxButton->setToolTip("Show effects for the master bus");
-    connect(m_masterFxButton, &QPushButton::clicked, this,
-            [this]() { emit masterEffectsPanelRequested(); });
+    connect(m_masterFxButton, &QPushButton::clicked, this, [this]() {
+        QRect anchorRect(m_masterFxButton->mapToGlobal(QPoint(0, 0)), m_masterFxButton->size());
+        emit masterEffectsPanelRequested(anchorRect);
+    });
     masterLayout->addWidget(m_masterFxButton);
 
     m_masterVolumeSlider = new QSlider(Qt::Vertical, masterStrip);

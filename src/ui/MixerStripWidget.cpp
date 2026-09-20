@@ -52,7 +52,8 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
     m_effectsButton->setToolTip("Show effects for this track");
     connect(m_effectsButton, &QPushButton::clicked, this, [this]() {
         emit selected(m_track);
-        emit effectsPanelRequested(m_track);
+        QRect anchorRect(m_effectsButton->mapToGlobal(QPoint(0, 0)), m_effectsButton->size());
+        emit effectsPanelRequested(m_track, anchorRect);
     });
     layout->addWidget(m_effectsButton);
 

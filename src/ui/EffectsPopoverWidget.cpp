@@ -1,4 +1,4 @@
-#include "EffectsRackPanel.h"
+#include "EffectsPopoverWidget.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -27,9 +27,7 @@ QString effectTypeName(EffectType t) {
     return "Effect";
 }
 
-// One labeled slider bound to a float atomic parameter: live-updates the
-// parameter while dragging (so the audio thread hears it immediately), and
-// pushes a single undoable command capturing before/after on release.
+// Same undoable-on-release slider binding as EffectsRackPanel's.
 void addFloatControl(QVBoxLayout* layout, const QString& labelText, float minV, float maxV,
                       std::function<float()> getter, std::function<void(float)> setter,
                       CommandStack* stack, const QString& cmdText) {
@@ -63,11 +61,80 @@ void addFloatControl(QVBoxLayout* layout, const QString& labelText, float minV, 
     layout->addWidget(row);
 }
 
+// Adds this effect type's parameter sliders into `paramsLayout`.
+void addParamControls(QVBoxLayout* paramsLayout, const std::shared_ptr<Effect>& effect, CommandStack* stack) {
+    if (auto* eq = dynamic_cast<EqEffect*>(effect.get())) {
+        std::weak_ptr<EqEffect> w = std::static_pointer_cast<EqEffect>(effect);
+        addFloatControl(
+            paramsLayout, "Low Gain (dB)", -24.0f, 24.0f, [w]() { return w.lock() ? w.lock()->lowGainDb.load() : 0.0f; },
+            [w](float v) { if (auto e = w.lock()) e->lowGainDb.store(v); }, stack, "Set Low Gain");
+        addFloatControl(
+            paramsLayout, "Mid Gain (dB)", -24.0f, 24.0f, [w]() { return w.lock() ? w.lock()->midGainDb.load() : 0.0f; },
+            [w](float v) { if (auto e = w.lock()) e->midGainDb.store(v); }, stack, "Set Mid Gain");
+        addFloatControl(
+            paramsLayout, "Mid Freq (Hz)", 200.0f, 8000.0f,
+            [w]() { return w.lock() ? w.lock()->midFreqHz.load() : 1000.0f; },
+            [w](float v) { if (auto e = w.lock()) e->midFreqHz.store(v); }, stack, "Set Mid Freq");
+        addFloatControl(
+            paramsLayout, "High Gain (dB)", -24.0f, 24.0f,
+            [w]() { return w.lock() ? w.lock()->highGainDb.load() : 0.0f; },
+            [w](float v) { if (auto e = w.lock()) e->highGainDb.store(v); }, stack, "Set High Gain");
+        (void)eq;
+    } else if (auto* comp = dynamic_cast<CompressorEffect*>(effect.get())) {
+        std::weak_ptr<CompressorEffect> w = std::static_pointer_cast<CompressorEffect>(effect);
+        addFloatControl(
+            paramsLayout, "Threshold (dB)", -60.0f, 0.0f,
+            [w]() { return w.lock() ? w.lock()->thresholdDb.load() : -18.0f; },
+            [w](float v) { if (auto e = w.lock()) e->thresholdDb.store(v); }, stack, "Set Threshold");
+        addFloatControl(
+            paramsLayout, "Ratio", 1.0f, 20.0f, [w]() { return w.lock() ? w.lock()->ratio.load() : 4.0f; },
+            [w](float v) { if (auto e = w.lock()) e->ratio.store(v); }, stack, "Set Ratio");
+        addFloatControl(
+            paramsLayout, "Attack (ms)", 0.1f, 200.0f,
+            [w]() { return w.lock() ? w.lock()->attackMs.load() : 10.0f; },
+            [w](float v) { if (auto e = w.lock()) e->attackMs.store(v); }, stack, "Set Attack");
+        addFloatControl(
+            paramsLayout, "Release (ms)", 10.0f, 1000.0f,
+            [w]() { return w.lock() ? w.lock()->releaseMs.load() : 100.0f; },
+            [w](float v) { if (auto e = w.lock()) e->releaseMs.store(v); }, stack, "Set Release");
+        (void)comp;
+    } else if (auto* delay = dynamic_cast<DelayEffect*>(effect.get())) {
+        std::weak_ptr<DelayEffect> w = std::static_pointer_cast<DelayEffect>(effect);
+        addFloatControl(
+            paramsLayout, "Delay (ms)", 1.0f, 1500.0f,
+            [w]() { return w.lock() ? w.lock()->delayMs.load() : 300.0f; },
+            [w](float v) { if (auto e = w.lock()) e->delayMs.store(v); }, stack, "Set Delay Time");
+        addFloatControl(
+            paramsLayout, "Feedback", 0.0f, 0.95f,
+            [w]() { return w.lock() ? w.lock()->feedback.load() : 0.35f; },
+            [w](float v) { if (auto e = w.lock()) e->feedback.store(v); }, stack, "Set Delay Feedback");
+        addFloatControl(
+            paramsLayout, "Mix", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->mix.load() : 0.3f; },
+            [w](float v) { if (auto e = w.lock()) e->mix.store(v); }, stack, "Set Delay Mix");
+        (void)delay;
+    } else if (auto* reverb = dynamic_cast<ReverbEffect*>(effect.get())) {
+        std::weak_ptr<ReverbEffect> w = std::static_pointer_cast<ReverbEffect>(effect);
+        addFloatControl(
+            paramsLayout, "Room Size", 0.0f, 1.0f,
+            [w]() { return w.lock() ? w.lock()->roomSize.load() : 0.5f; },
+            [w](float v) { if (auto e = w.lock()) e->roomSize.store(v); }, stack, "Set Room Size");
+        addFloatControl(
+            paramsLayout, "Damping", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->damping.load() : 0.5f; },
+            [w](float v) { if (auto e = w.lock()) e->damping.store(v); }, stack, "Set Damping");
+        addFloatControl(
+            paramsLayout, "Mix", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->mix.load() : 0.25f; },
+            [w](float v) { if (auto e = w.lock()) e->mix.store(v); }, stack, "Set Reverb Mix");
+        (void)reverb;
+    }
+}
+
 } // namespace
 
-EffectsRackPanel::EffectsRackPanel(QWidget* parent) : QWidget(parent) {
+EffectsPopoverWidget::EffectsPopoverWidget(QWidget* parent) : QWidget(parent, Qt::Popup) {
+    setAttribute(Qt::WA_DeleteOnClose, false);
+    setFixedWidth(280);
     setStyleSheet(
-        "EffectsRackPanel { background: #1e1e1e; }"
+        "EffectsPopoverWidget { background: #1e1e1e; border: 1px solid #4a4a4a; }"
         "QGroupBox { background: #2a2a2a; color: #e0e0e0; border: 1px solid #3c3c3c; "
         "border-radius: 4px; margin-top: 8px; font-weight: bold; }"
         "QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }"
@@ -91,18 +158,18 @@ EffectsRackPanel::EffectsRackPanel(QWidget* parent) : QWidget(parent) {
     m_addTypeCombo->addItem("Compressor", static_cast<int>(EffectType::Compressor));
     m_addTypeCombo->addItem("Delay", static_cast<int>(EffectType::Delay));
     m_addTypeCombo->addItem("Reverb", static_cast<int>(EffectType::Reverb));
-    auto* addButton = new QPushButton("Add Effect");
+    auto* addButton = new QPushButton("Add");
     connect(addButton, &QPushButton::clicked, this, [this]() {
         addEffectOfType(static_cast<EffectType>(m_addTypeCombo->currentData().toInt()));
     });
-    addRowLayout->addWidget(m_addTypeCombo);
+    addRowLayout->addWidget(m_addTypeCombo, 1);
     addRowLayout->addWidget(addButton);
-    addRowLayout->addStretch();
     outer->addWidget(addRow);
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setStyleSheet("QScrollArea { border: none; background: transparent; }");
+    scroll->setMaximumHeight(360);
     m_slotsContainer = new QWidget;
     m_slotsLayout = new QVBoxLayout(m_slotsContainer);
     m_slotsLayout->addStretch();
@@ -112,45 +179,41 @@ EffectsRackPanel::EffectsRackPanel(QWidget* parent) : QWidget(parent) {
     setTrack(nullptr);
 }
 
-void EffectsRackPanel::setTrack(std::shared_ptr<Track> track) {
+void EffectsPopoverWidget::setTrack(std::shared_ptr<Track> track) {
     m_track = std::move(track);
     m_masterBus = nullptr;
     rebuild();
 }
 
-void EffectsRackPanel::setMasterBus(MasterBus* masterBus) {
+void EffectsPopoverWidget::setMasterBus(MasterBus* masterBus) {
     m_track.reset();
     m_masterBus = masterBus;
     rebuild();
 }
 
-void EffectsRackPanel::refresh() {
-    rebuild();
-}
-
-std::shared_ptr<const EffectChain> EffectsRackPanel::currentChain() const {
+std::shared_ptr<const EffectChain> EffectsPopoverWidget::currentChain() const {
     if (m_track) return m_track->effectsSnapshot();
     if (m_masterBus) return m_masterBus->effectsSnapshot();
     return nullptr;
 }
 
-void EffectsRackPanel::addEffectToHost(std::shared_ptr<Effect> effect) {
+void EffectsPopoverWidget::addEffectToHost(std::shared_ptr<Effect> effect) {
     if (m_track) m_track->addEffect(std::move(effect));
     else if (m_masterBus) m_masterBus->addEffect(std::move(effect));
 }
 
-void EffectsRackPanel::removeEffectFromHost(const QUuid& effectId) {
+void EffectsPopoverWidget::removeEffectFromHost(const QUuid& effectId) {
     if (m_track) m_track->removeEffect(effectId);
     else if (m_masterBus) m_masterBus->removeEffect(effectId);
 }
 
-void EffectsRackPanel::moveEffectInHost(const QUuid& effectId, int newIndex) {
+void EffectsPopoverWidget::moveEffectInHost(const QUuid& effectId, int newIndex) {
     if (m_track) m_track->moveEffect(effectId, newIndex);
     else if (m_masterBus) m_masterBus->moveEffect(effectId, newIndex);
 }
 
-void EffectsRackPanel::pushChainCommand(std::shared_ptr<const EffectChain> before,
-                                         std::shared_ptr<const EffectChain> after, const QString& text) {
+void EffectsPopoverWidget::pushChainCommand(std::shared_ptr<const EffectChain> before,
+                                             std::shared_ptr<const EffectChain> after, const QString& text) {
     if (!m_commandStack) return;
     if (m_track) {
         m_commandStack->push(std::make_unique<EffectChainCommand>(m_track, before, after, text));
@@ -161,7 +224,7 @@ void EffectsRackPanel::pushChainCommand(std::shared_ptr<const EffectChain> befor
     }
 }
 
-void EffectsRackPanel::addEffectOfType(EffectType type) {
+void EffectsPopoverWidget::addEffectOfType(EffectType type) {
     if (!m_track && !m_masterBus) return;
 
     std::shared_ptr<Effect> effect;
@@ -181,7 +244,7 @@ void EffectsRackPanel::addEffectOfType(EffectType type) {
     if (m_track) emit effectCountChanged(m_track);
 }
 
-void EffectsRackPanel::rebuild() {
+void EffectsPopoverWidget::rebuild() {
     // Clear all slot widgets except the trailing stretch.
     while (m_slotsLayout->count() > 1) {
         QLayoutItem* item = m_slotsLayout->takeAt(0);
@@ -265,72 +328,25 @@ void EffectsRackPanel::rebuild() {
         headerLayout->addWidget(removeButton);
         boxLayout->addWidget(headerRow);
 
-        CommandStack* stack = m_commandStack;
+        // Params start collapsed to keep the popover compact; "Edit" reveals
+        // them in place.
+        auto* paramsContainer = new QWidget;
+        auto* paramsLayout = new QVBoxLayout(paramsContainer);
+        paramsLayout->setContentsMargins(0, 0, 0, 0);
+        addParamControls(paramsLayout, effect, m_commandStack);
+        paramsContainer->setVisible(false);
+        paramsContainer->setObjectName("paramsContainer");
 
-        if (auto* eq = dynamic_cast<EqEffect*>(effect.get())) {
-            auto weakEq = std::static_pointer_cast<EqEffect>(effect);
-            std::weak_ptr<EqEffect> w = weakEq;
-            addFloatControl(
-                boxLayout, "Low Gain (dB)", -24.0f, 24.0f, [w]() { return w.lock() ? w.lock()->lowGainDb.load() : 0.0f; },
-                [w](float v) { if (auto e = w.lock()) e->lowGainDb.store(v); }, stack, "Set Low Gain");
-            addFloatControl(
-                boxLayout, "Mid Gain (dB)", -24.0f, 24.0f, [w]() { return w.lock() ? w.lock()->midGainDb.load() : 0.0f; },
-                [w](float v) { if (auto e = w.lock()) e->midGainDb.store(v); }, stack, "Set Mid Gain");
-            addFloatControl(
-                boxLayout, "Mid Freq (Hz)", 200.0f, 8000.0f,
-                [w]() { return w.lock() ? w.lock()->midFreqHz.load() : 1000.0f; },
-                [w](float v) { if (auto e = w.lock()) e->midFreqHz.store(v); }, stack, "Set Mid Freq");
-            addFloatControl(
-                boxLayout, "High Gain (dB)", -24.0f, 24.0f,
-                [w]() { return w.lock() ? w.lock()->highGainDb.load() : 0.0f; },
-                [w](float v) { if (auto e = w.lock()) e->highGainDb.store(v); }, stack, "Set High Gain");
-            (void)eq;
-        } else if (auto* comp = dynamic_cast<CompressorEffect*>(effect.get())) {
-            std::weak_ptr<CompressorEffect> w = std::static_pointer_cast<CompressorEffect>(effect);
-            addFloatControl(
-                boxLayout, "Threshold (dB)", -60.0f, 0.0f,
-                [w]() { return w.lock() ? w.lock()->thresholdDb.load() : -18.0f; },
-                [w](float v) { if (auto e = w.lock()) e->thresholdDb.store(v); }, stack, "Set Threshold");
-            addFloatControl(
-                boxLayout, "Ratio", 1.0f, 20.0f, [w]() { return w.lock() ? w.lock()->ratio.load() : 4.0f; },
-                [w](float v) { if (auto e = w.lock()) e->ratio.store(v); }, stack, "Set Ratio");
-            addFloatControl(
-                boxLayout, "Attack (ms)", 0.1f, 200.0f,
-                [w]() { return w.lock() ? w.lock()->attackMs.load() : 10.0f; },
-                [w](float v) { if (auto e = w.lock()) e->attackMs.store(v); }, stack, "Set Attack");
-            addFloatControl(
-                boxLayout, "Release (ms)", 10.0f, 1000.0f,
-                [w]() { return w.lock() ? w.lock()->releaseMs.load() : 100.0f; },
-                [w](float v) { if (auto e = w.lock()) e->releaseMs.store(v); }, stack, "Set Release");
-            (void)comp;
-        } else if (auto* delay = dynamic_cast<DelayEffect*>(effect.get())) {
-            std::weak_ptr<DelayEffect> w = std::static_pointer_cast<DelayEffect>(effect);
-            addFloatControl(
-                boxLayout, "Delay (ms)", 1.0f, 1500.0f,
-                [w]() { return w.lock() ? w.lock()->delayMs.load() : 300.0f; },
-                [w](float v) { if (auto e = w.lock()) e->delayMs.store(v); }, stack, "Set Delay Time");
-            addFloatControl(
-                boxLayout, "Feedback", 0.0f, 0.95f,
-                [w]() { return w.lock() ? w.lock()->feedback.load() : 0.35f; },
-                [w](float v) { if (auto e = w.lock()) e->feedback.store(v); }, stack, "Set Delay Feedback");
-            addFloatControl(
-                boxLayout, "Mix", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->mix.load() : 0.3f; },
-                [w](float v) { if (auto e = w.lock()) e->mix.store(v); }, stack, "Set Delay Mix");
-            (void)delay;
-        } else if (auto* reverb = dynamic_cast<ReverbEffect*>(effect.get())) {
-            std::weak_ptr<ReverbEffect> w = std::static_pointer_cast<ReverbEffect>(effect);
-            addFloatControl(
-                boxLayout, "Room Size", 0.0f, 1.0f,
-                [w]() { return w.lock() ? w.lock()->roomSize.load() : 0.5f; },
-                [w](float v) { if (auto e = w.lock()) e->roomSize.store(v); }, stack, "Set Room Size");
-            addFloatControl(
-                boxLayout, "Damping", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->damping.load() : 0.5f; },
-                [w](float v) { if (auto e = w.lock()) e->damping.store(v); }, stack, "Set Damping");
-            addFloatControl(
-                boxLayout, "Mix", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->mix.load() : 0.25f; },
-                [w](float v) { if (auto e = w.lock()) e->mix.store(v); }, stack, "Set Reverb Mix");
-            (void)reverb;
-        }
+        auto* expandButton = new QPushButton("Edit");
+        expandButton->setCheckable(true);
+        connect(expandButton, &QPushButton::toggled, paramsContainer, [paramsContainer, expandButton](bool checked) {
+            paramsContainer->setVisible(checked);
+            expandButton->setText(checked ? "Hide" : "Edit");
+        });
+        // Insert before the stretch/remove so header keeps its layout order.
+        headerLayout->insertWidget(headerLayout->count() - 1, expandButton);
+
+        boxLayout->addWidget(paramsContainer);
 
         m_slotsLayout->insertWidget(static_cast<int>(i), box);
     }

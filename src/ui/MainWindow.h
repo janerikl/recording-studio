@@ -25,7 +25,7 @@
 #include "ui/SettingsDialog.h"
 #include "ui/WaveformWidget.h"
 #include "ui/MediaLibraryPanel.h"
-#include "ui/EffectsRackPanel.h"
+#include "ui/EffectsPopoverWidget.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/PianoRollPanel.h"
 #include "ui/LoopBrowserPanel.h"
@@ -64,8 +64,8 @@ private slots:
     void onAddBusTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
-    void onEffectsPanelRequested(std::shared_ptr<Track> track);
-    void onMasterEffectsPanelRequested();
+    void onEffectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect);
+    void onMasterEffectsPanelRequested(QRect globalAnchorRect);
     void onInstrumentNoteOn(int pitch, float velocity);
     void onInstrumentNoteOff(int pitch);
     void onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take);
@@ -170,8 +170,7 @@ private:
     QDoubleSpinBox* m_punchOutSpin = nullptr;
     WaveformWidget* m_masterWaveform = nullptr;
     MediaLibraryPanel* m_mediaLibrary = nullptr;
-    EffectsRackPanel* m_effectsRack = nullptr;
-    QDockWidget* m_effectsDock = nullptr;
+    EffectsPopoverWidget* m_effectsPopover = nullptr;
     InstrumentPanel* m_instrumentPanel = nullptr;
     QDockWidget* m_instrumentDock = nullptr;
     PianoRollPanel* m_pianoRollPanel = nullptr;
