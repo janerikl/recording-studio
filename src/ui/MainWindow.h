@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QIcon>
 #include <QMainWindow>
@@ -15,6 +16,7 @@
 
 #include "audio/AudioEngine.h"
 #include "audio/PunchRegion.h"
+#include "audio/SystemAudioLoopback.h"
 #include "command/CommandStack.h"
 #include "model/Session.h"
 #include "ui/LevelMeterWidget.h"
@@ -53,6 +55,7 @@ private slots:
     void onAddTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
+    void onEffectsPanelRequested(std::shared_ptr<Track> track);
     void onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void onDeleteClipClicked();
     void onSeekRequested(int64_t sample);
@@ -72,8 +75,8 @@ private slots:
 private:
     void updateStatusLabel();
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
-    int64_t refreshTimelineScale();
-    void refreshMasterAndScale();
+    int64_t refreshTimelineScale(bool recaptureZoomBaseline = false);
+    void refreshMasterAndScale(bool recaptureZoomBaseline = false);
     void startPlayback();
     void rebuildTimelineFromSession();
     bool loadSessionFromPath(const QString& path, bool showSuccessMessage = true);
@@ -85,6 +88,7 @@ private:
     std::shared_ptr<AudioBuffer> renderSessionToBuffer() const;
 
     std::unique_ptr<AudioEngine> m_engine;
+    SystemAudioLoopback m_systemAudioLoopback;
     std::unique_ptr<Session> m_session;
     // Remembered from the last successful save/load, so Ctrl+S/Save resaves
     // silently to the same file instead of re-prompting every time.
@@ -95,6 +99,12 @@ private:
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
     std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
+    // System-audio counterparts: a separate clip/target list fed by the
+    // engine's second (system-audio) capture ring, so a Mic-armed track and
+    // a SystemAudio-armed track record onto independent clips in the same
+    // pass. See RecordRouting.h for how armed tracks get split between them.
+    std::shared_ptr<Clip> m_activeSystemAudioRecordingClip;
+    std::vector<std::shared_ptr<Track>> m_systemAudioRecordTargetTracks;
     // True while the in-progress recording is punch/loop mode (single target
     // track, gated to the punch region, one undo entry on stop) rather than
     // the plain whole-transport recording path.
@@ -120,6 +130,11 @@ private:
     float m_zoomFactor = 1.0f;
     static constexpr float kMinZoom = 0.25f;
     static constexpr float kMaxZoom = 8.0f;
+    // Content-extent baseline pinned by refreshTimelineScale(); only grows
+    // when content genuinely exceeds it, so incidental clip edits (e.g.
+    // dragging a clip to another track) don't stretch/shrink a zoom level
+    // the user dialed in. See TimelineScaleMath.h.
+    int64_t m_zoomBaseSamples = 0;
     CommandStack m_commandStack;
     QLabel* m_statusLabel = nullptr;
     QTimer* m_ringDrainTimer = nullptr;
@@ -133,6 +148,7 @@ private:
     WaveformWidget* m_masterWaveform = nullptr;
     MediaLibraryPanel* m_mediaLibrary = nullptr;
     EffectsRackPanel* m_effectsRack = nullptr;
+    QDockWidget* m_effectsDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;

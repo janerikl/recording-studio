@@ -51,10 +51,40 @@ target_include_directories(punch_recording_tests PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(punch_recording_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME PunchRecordingTests COMMAND punch_recording_tests)
 
+add_executable(record_routing_tests test_RecordRouting.cpp)
+target_include_directories(record_routing_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(record_routing_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME RecordRoutingTests COMMAND record_routing_tests)
+
+add_executable(system_audio_loopback_tests test_SystemAudioLoopback.cpp)
+target_include_directories(system_audio_loopback_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(system_audio_loopback_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME SystemAudioLoopbackTests COMMAND system_audio_loopback_tests)
+
 add_executable(clip_edit_math_tests test_ClipEditMath.cpp)
 target_include_directories(clip_edit_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(clip_edit_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME ClipEditMathTests COMMAND clip_edit_math_tests)
+
+add_executable(waveform_display_math_tests test_WaveformDisplayMath.cpp)
+target_include_directories(waveform_display_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(waveform_display_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME WaveformDisplayMathTests COMMAND waveform_display_math_tests)
+
+add_executable(timeline_scale_math_tests test_TimelineScaleMath.cpp)
+target_include_directories(timeline_scale_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(timeline_scale_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME TimelineScaleMathTests COMMAND timeline_scale_math_tests)
+
+add_executable(track_effects_label_tests test_TrackEffectsLabel.cpp)
+target_include_directories(track_effects_label_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(track_effects_label_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME TrackEffectsLabelTests COMMAND track_effects_label_tests)
+
+add_executable(clip_lane_scroll_math_tests test_ClipLaneScrollMath.cpp)
+target_include_directories(clip_lane_scroll_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(clip_lane_scroll_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME ClipLaneScrollMathTests COMMAND clip_lane_scroll_math_tests)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)

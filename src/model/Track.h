@@ -12,6 +12,12 @@
 
 namespace rsd {
 
+// Which physical input a track records from when armed. SystemAudio is fed
+// by AudioEngine's second capture stream (a PulseAudio ".monitor" loopback
+// device), entirely separate from the Mic stream, so a Mic-armed track and a
+// SystemAudio-armed track can record concurrently onto separate clips.
+enum class AudioSource { Mic, SystemAudio };
+
 // Clip list is stored behind an atomic shared_ptr to a const vector so the
 // realtime audio callback can snapshot-read it without locking, while the
 // GUI thread performs edits via copy-on-write + atomic swap.
@@ -24,6 +30,7 @@ public:
     std::atomic<bool> muted{false};
     std::atomic<bool> soloed{false};
     std::atomic<bool> recordArmed{false};
+    std::atomic<AudioSource> inputSource{AudioSource::Mic};
     // Per-channel gain, not a single scalar: lets the mixer apply independent
     // left/right levels. A pan control is a UI convenience that derives both
     // of these via a linear pan law rather than being stored separately.

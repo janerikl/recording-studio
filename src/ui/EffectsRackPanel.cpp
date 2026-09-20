@@ -141,6 +141,7 @@ void EffectsRackPanel::addEffectOfType(EffectType type) {
             std::make_unique<EffectChainCommand>(m_track, before, after, "Add " + effectTypeName(type)));
     }
     rebuild();
+    emit effectCountChanged(m_track);
 }
 
 void EffectsRackPanel::rebuild() {
@@ -229,6 +230,7 @@ void EffectsRackPanel::rebuild() {
                     std::make_unique<EffectChainCommand>(m_track, before, after, "Remove Effect"));
             }
             rebuild();
+            emit effectCountChanged(m_track);
         });
         headerLayout->addWidget(removeButton);
         boxLayout->addWidget(headerRow);

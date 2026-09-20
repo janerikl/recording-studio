@@ -44,12 +44,21 @@ public:
     unsigned int preferredOutputDevice() const { return m_preferredOutputDevice; }
     unsigned int preferredInputDevice() const { return m_preferredInputDevice; }
 
+    // Second, independent input device (e.g. a PulseAudio ".monitor" source)
+    // captured via its own RtAudio stream/callback so it can record
+    // concurrently with the mic stream, onto its own ring buffer. Defaults
+    // to kNoInputDevice (disabled) since most sessions won't use it.
+    void setPreferredSystemAudioDevice(unsigned int id) { m_preferredSystemAudioDevice = id; }
+    unsigned int preferredSystemAudioDevice() const { return m_preferredSystemAudioDevice; }
+
     bool restart(); // stop() then start() with current preferred settings
 
     void setSession(Session* session) { m_session = session; }
 
     TransportClock& transport() { return m_transport; }
     RingBuffer<float>& captureRing() { return m_captureRing; }
+    RingBuffer<float>& systemAudioCaptureRing() { return m_systemAudioCaptureRing; }
+    bool systemAudioRunning() const { return m_systemAudioRunning; }
 
     // Track that recorded input should be routed to while state == Recording.
     void setRecordTargetTrack(std::shared_ptr<Track> track) { m_recordTarget = std::move(track); }
@@ -78,6 +87,11 @@ public:
 private:
     static int rtCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
                            double streamTime, RtAudioStreamStatus status, void* userData);
+    static int rtSystemAudioCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
+                                      double streamTime, RtAudioStreamStatus status, void* userData);
+
+    bool startSystemAudioStream();
+    void stopSystemAudioStream();
 
     std::unique_ptr<RtAudio> m_rtAudio;
     unsigned int m_sampleRate = 48000;
@@ -87,6 +101,14 @@ private:
     unsigned int m_preferredOutputDevice = kUseSystemDefault;
     unsigned int m_preferredInputDevice = kUseSystemDefault;
     unsigned int m_preferredSampleRate = 48000;
+
+    // Second RtAudio instance: an input-only stream for the system-audio
+    // (loopback) device, entirely separate from m_rtAudio so it can run
+    // concurrently with the mic stream without sharing a callback.
+    std::unique_ptr<RtAudio> m_rtAudioSys;
+    unsigned int m_preferredSystemAudioDevice = kNoInputDevice;
+    bool m_systemAudioRunning = false;
+    RingBuffer<float> m_systemAudioCaptureRing{48000 * 2 * 10};
 
     Session* m_session = nullptr;
     TransportClock m_transport;

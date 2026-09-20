@@ -19,10 +19,12 @@
 #include <QWidget>
 #include <algorithm>
 
+#include "audio/RecordRouting.h"
 #include "command/EditCommands.h"
 #include "command/PunchRecordingCommand.h"
 #include "io/AudioFileIO.h"
 #include "io/SessionIO.h"
+#include "ui/TimelineScaleMath.h"
 
 namespace rsd {
 
@@ -36,6 +38,12 @@ MainWindow::MainWindow(QWidget* parent)
     m_session->sampleRate = static_cast<int>(m_engine->sampleRate());
     m_session->channels = static_cast<int>(m_engine->channels());
     m_engine->setSession(m_session.get());
+
+    // Started early (before any Settings dialog can be opened) so the
+    // "Recording Studio System Audio" device has time to register with
+    // PipeWire and show up in the device list. No-op if pw-loopback isn't
+    // installed — Settings' System Audio dropdown just has nothing to pick.
+    m_systemAudioLoopback.start();
 
     // --- Actions (shared between menus and the toolbar where noted) ---
     // Prefer the user's system icon theme (freedesktop names) since it looks
@@ -241,6 +249,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_timeline->setCommandStack(&m_commandStack);
     connect(m_timeline, &TimelineView::mediaDroppedOnTrack, this,
             &MainWindow::onMediaDroppedOnTrack);
+    connect(m_timeline, &TimelineView::effectsPanelRequested, this,
+            &MainWindow::onEffectsPanelRequested);
     layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
@@ -253,13 +263,17 @@ MainWindow::MainWindow(QWidget* parent)
     mediaDock->setWidget(m_mediaLibrary);
     addDockWidget(Qt::RightDockWidgetArea, mediaDock);
 
-    auto* effectsDock = new QDockWidget("Effects Rack", this);
-    m_effectsRack = new EffectsRackPanel(effectsDock);
+    m_effectsDock = new QDockWidget("Effects Rack", this);
+    m_effectsRack = new EffectsRackPanel(m_effectsDock);
     m_effectsRack->setCommandStack(&m_commandStack);
     m_effectsRack->setSampleRate(m_session->sampleRate);
-    effectsDock->setWidget(m_effectsRack);
-    addDockWidget(Qt::RightDockWidgetArea, effectsDock);
-    tabifyDockWidget(mediaDock, effectsDock);
+    connect(m_effectsRack, &EffectsRackPanel::effectCountChanged, this,
+            [this](std::shared_ptr<Track> track) {
+                if (track) m_timeline->refreshTrackEffectsButton(track->id);
+            });
+    m_effectsDock->setWidget(m_effectsRack);
+    addDockWidget(Qt::RightDockWidgetArea, m_effectsDock);
+    tabifyDockWidget(mediaDock, m_effectsDock);
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -367,6 +381,13 @@ void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
     m_effectsRack->setTrack(m_activeTrack);
 }
 
+void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track>) {
+    // Track selection already happened via the row's own "Active" radio
+    // button (TrackRowWidget checks it before emitting this signal); just
+    // bring the (possibly tabbed-behind) effects dock to the front.
+    m_effectsDock->raise();
+}
+
 void MainWindow::onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection) {
     m_trackWithClipSelection = hasSelection ? std::move(track) : nullptr;
     m_deleteClipAction->setEnabled(hasSelection);
@@ -402,23 +423,44 @@ void MainWindow::onPunchFieldsChanged() {
 void MainWindow::onRecordClicked() {
     // Record-armed tracks are the target; if none are armed, fall back to
     // whichever track is Active so recording still works out of the box.
-    m_recordTargetTracks.clear();
+    std::vector<std::shared_ptr<Track>> armedTracks;
     for (auto& track : m_session->tracks) {
-        if (track->recordArmed.load()) m_recordTargetTracks.push_back(track);
+        if (track->recordArmed.load()) armedTracks.push_back(track);
     }
-    if (m_recordTargetTracks.empty() && m_activeTrack) {
-        m_recordTargetTracks.push_back(m_activeTrack);
+    if (armedTracks.empty() && m_activeTrack) {
+        armedTracks.push_back(m_activeTrack);
     }
-    if (m_recordTargetTracks.empty()) {
+    if (armedTracks.empty()) {
         QMessageBox::warning(this, "No Track", "Add a track first.");
         return;
     }
 
+    auto split = splitTracksBySource(armedTracks);
+    m_recordTargetTracks = split.micTracks;
+    m_systemAudioRecordTargetTracks = split.systemAudioTracks;
+
+    if (!m_systemAudioRecordTargetTracks.empty() && !m_engine->systemAudioRunning()) {
+        QMessageBox::warning(this, "System Audio Unavailable",
+                              "A track is armed with Source: System Audio, but no system audio "
+                              "device is configured/available (Settings > System Audio Device). "
+                              "That track won't record.");
+        m_systemAudioRecordTargetTracks.clear();
+    }
+
     PunchRegion punchRegion = m_ruler->punchRegion();
     if (m_loopRecordCheckBox->isChecked() && punchRegion.isValid()) {
+        // Punch/loop recording only supports the mic capture path (a single
+        // target track fed by AudioEngine's punch recorder); system-audio
+        // armed tracks are silently skipped for this mode.
+        if (m_recordTargetTracks.empty()) {
+            QMessageBox::warning(this, "No Mic Track",
+                                  "Loop recording needs a Mic-source track armed.");
+            return;
+        }
         m_punchRecordingActive = true;
         auto track = m_recordTargetTracks.front();
         m_recordTargetTracks = {track}; // punch/loop recording targets a single track
+        m_systemAudioRecordTargetTracks.clear();
 
         unsigned int channels = static_cast<unsigned int>(m_session->channels);
         int64_t preRollSamples =
@@ -444,12 +486,23 @@ void MainWindow::onRecordClicked() {
     }
 
     m_punchRecordingActive = false;
-    m_activeRecordingClip = std::make_shared<Clip>();
-    m_activeRecordingClip->buffer = std::make_shared<AudioBuffer>();
-    m_activeRecordingClip->buffer->channels = m_session->channels;
-    m_activeRecordingClip->buffer->sampleRate = m_session->sampleRate;
-    m_activeRecordingClip->name = "Recording";
-    m_activeRecordingClip->sessionStartSample = m_engine->transport().positionSamples();
+
+    auto makeRecordingClip = [this]() {
+        auto clip = std::make_shared<Clip>();
+        clip->buffer = std::make_shared<AudioBuffer>();
+        clip->buffer->channels = m_session->channels;
+        clip->buffer->sampleRate = m_session->sampleRate;
+        clip->name = "Recording";
+        clip->sessionStartSample = m_engine->transport().positionSamples();
+        return clip;
+    };
+
+    m_activeRecordingClip.reset();
+    m_activeSystemAudioRecordingClip.reset();
+    if (!m_recordTargetTracks.empty()) m_activeRecordingClip = makeRecordingClip();
+    if (!m_systemAudioRecordTargetTracks.empty()) {
+        m_activeSystemAudioRecordingClip = makeRecordingClip();
+    }
 
     m_engine->transport().setState(TransportState::Recording);
     m_ringDrainTimer->start();
@@ -462,6 +515,7 @@ void MainWindow::onRecordClicked() {
 
     QStringList names;
     for (auto& t : m_recordTargetTracks) names << t->name;
+    for (auto& t : m_systemAudioRecordTargetTracks) names << t->name;
     m_statusLabel->setText("Recording into " + names.join(", ") + "...");
 }
 
@@ -508,26 +562,39 @@ void MainWindow::onStopClicked() {
         m_recordTargetTracks.clear();
         refreshMasterAndScale();
         updateUndoRedoButtons();
-    } else if (wasRecording && m_activeRecordingClip && !m_recordTargetTracks.empty()) {
+    } else if (wasRecording &&
+               ((m_activeRecordingClip && !m_recordTargetTracks.empty()) ||
+                (m_activeSystemAudioRecordingClip && !m_systemAudioRecordTargetTracks.empty()))) {
         drainCaptureRing(); // flush any remaining samples
-        m_activeRecordingClip->lengthSamples = m_activeRecordingClip->buffer->frameCount();
 
         // Every armed track gets its own Clip (so each can be trimmed/moved
-        // independently later) but they all share the same recorded
-        // AudioBuffer — identical audio, no data duplicated in memory.
+        // independently later) but tracks sharing a source share that
+        // source's recorded AudioBuffer — identical audio, no data
+        // duplicated in memory. Mic and system-audio tracks get separate
+        // buffers since they came from separate capture streams.
         std::vector<std::unique_ptr<Command>> subCommands;
-        for (auto& track : m_recordTargetTracks) {
-            auto before = track->clipsSnapshot();
-            auto clip = std::make_shared<Clip>(*m_activeRecordingClip);
-            clip->id = QUuid::createUuid();
-            track->addClip(clip);
-            subCommands.push_back(
-                std::make_unique<TrackClipsCommand>(track, before, track->clipsSnapshot(), "Record"));
-            refreshWaveformFor(track);
-        }
+        auto addClipsFor = [&](std::shared_ptr<Clip>& sourceClip,
+                                std::vector<std::shared_ptr<Track>>& targets) {
+            if (!sourceClip || targets.empty()) return;
+            sourceClip->lengthSamples = sourceClip->buffer->frameCount();
+            for (auto& track : targets) {
+                auto before = track->clipsSnapshot();
+                auto clip = std::make_shared<Clip>(*sourceClip);
+                clip->id = QUuid::createUuid();
+                track->addClip(clip);
+                subCommands.push_back(std::make_unique<TrackClipsCommand>(
+                    track, before, track->clipsSnapshot(), "Record"));
+                refreshWaveformFor(track);
+            }
+        };
+        addClipsFor(m_activeRecordingClip, m_recordTargetTracks);
+        addClipsFor(m_activeSystemAudioRecordingClip, m_systemAudioRecordTargetTracks);
+
         m_commandStack.push(std::make_unique<CompositeCommand>(std::move(subCommands), "Record"));
         m_activeRecordingClip.reset();
+        m_activeSystemAudioRecordingClip.reset();
         m_recordTargetTracks.clear();
+        m_systemAudioRecordTargetTracks.clear();
         refreshMasterAndScale();
         updateUndoRedoButtons();
     }
@@ -559,19 +626,19 @@ void MainWindow::updateMeters() {
 
 void MainWindow::onZoomInClicked() {
     m_zoomFactor = std::min(kMaxZoom, m_zoomFactor * 1.5f);
-    refreshMasterAndScale();
+    refreshMasterAndScale(/*recaptureZoomBaseline=*/true);
     updatePlayhead();
 }
 
 void MainWindow::onZoomOutClicked() {
     m_zoomFactor = std::max(kMinZoom, m_zoomFactor / 1.5f);
-    refreshMasterAndScale();
+    refreshMasterAndScale(/*recaptureZoomBaseline=*/true);
     updatePlayhead();
 }
 
 void MainWindow::onZoomResetClicked() {
     m_zoomFactor = 1.0f;
-    refreshMasterAndScale();
+    refreshMasterAndScale(/*recaptureZoomBaseline=*/true);
     updatePlayhead();
 }
 
@@ -591,13 +658,21 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
 }
 
 void MainWindow::drainCaptureRing() {
-    if (!m_activeRecordingClip) return;
-
     float tmp[4096];
     size_t n;
-    while ((n = m_engine->captureRing().read(tmp, 4096)) > 0) {
-        auto& samples = m_activeRecordingClip->buffer->samples;
-        samples.insert(samples.end(), tmp, tmp + n);
+
+    if (m_activeRecordingClip) {
+        while ((n = m_engine->captureRing().read(tmp, 4096)) > 0) {
+            auto& samples = m_activeRecordingClip->buffer->samples;
+            samples.insert(samples.end(), tmp, tmp + n);
+        }
+    }
+
+    if (m_activeSystemAudioRecordingClip) {
+        while ((n = m_engine->systemAudioCaptureRing().read(tmp, 4096)) > 0) {
+            auto& samples = m_activeSystemAudioRecordingClip->buffer->samples;
+            samples.insert(samples.end(), tmp, tmp + n);
+        }
     }
 }
 
@@ -971,8 +1046,8 @@ void MainWindow::refreshWaveformFor(const std::shared_ptr<Track>& track) {
     m_timeline->refreshTrackWaveform(track->id);
 }
 
-void MainWindow::refreshMasterAndScale() {
-    int64_t total = refreshTimelineScale();
+void MainWindow::refreshMasterAndScale(bool recaptureZoomBaseline) {
+    int64_t total = refreshTimelineScale(recaptureZoomBaseline);
     // Must match the scale just pushed to the ruler/lanes, or the master
     // strip's audio-populated region won't line up with where the tracks'
     // own clips actually sit (the bug this fixes: audio appeared to exist
@@ -984,7 +1059,7 @@ void MainWindow::refreshMasterAndScale() {
     m_mediaLibrary->refresh(*m_session);
 }
 
-int64_t MainWindow::refreshTimelineScale() {
+int64_t MainWindow::refreshTimelineScale(bool recaptureZoomBaseline) {
     int64_t maxEnd = 0;
     for (auto& track : m_session->tracks) {
         auto clips = track->clipsSnapshot();
@@ -996,15 +1071,26 @@ int64_t MainWindow::refreshTimelineScale() {
     // locally — now computed once here so every lane and the ruler agree.
     int64_t floor = static_cast<int64_t>(m_session->sampleRate) * 30;
     int64_t headroom = static_cast<int64_t>(m_session->sampleRate) * 10;
-    int64_t base = std::max(floor, maxEnd + headroom);
     // m_zoomFactor > 1 shows fewer seconds across the same widget width (zoomed
     // in); content past the visible window is simply not drawn — there's no
     // horizontal scrolling, so zooming in trades overview for detail.
-    int64_t total = std::max<int64_t>(1, static_cast<int64_t>(base / m_zoomFactor));
+    //
+    // The content extent (maxEnd) is only used to *grow* m_zoomBaseSamples,
+    // never to recompute it from scratch on every refresh — otherwise an
+    // incidental clip edit (e.g. dragging a clip onto another track) would
+    // silently stretch/shrink whatever zoom level the user dialed in. See
+    // TimelineScaleMath.h.
+    auto scale = computeTimelineScale(maxEnd, floor, headroom, m_zoomFactor, m_zoomBaseSamples,
+                                       recaptureZoomBaseline);
+    m_zoomBaseSamples = scale.pinnedBaseSamples;
 
-    m_timeline->setSharedTimelineLength(total);
-    m_ruler->setTimelineLength(total);
-    return total;
+    m_timeline->setSharedTimelineLength(scale.totalSamples);
+    // Lets each track's own scrollbar know how far it's allowed to pan; the
+    // ruler and master strip intentionally stay fixed to [0, totalSamples)
+    // regardless of any track's scroll position (see TrackWidgets.cpp).
+    m_timeline->setContentExtentSamples(scale.pinnedBaseSamples);
+    m_ruler->setTimelineLength(scale.totalSamples);
+    return scale.totalSamples;
 }
 
 void MainWindow::updateStatusLabel() {

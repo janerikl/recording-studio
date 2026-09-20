@@ -8,6 +8,7 @@
 class QContextMenuEvent;
 class QDragEnterEvent;
 class QDropEvent;
+class QWheelEvent;
 
 #include "command/CommandStack.h"
 #include "model/Track.h"
@@ -41,6 +42,16 @@ public:
     void setSharedTimelineLength(int64_t samples);
     void setPlayheadSample(int64_t sample);
 
+    // Horizontal scroll support (only meaningful once zoomed in past what
+    // fits in the widget's width). Scrolling is per-track by default; the
+    // owning TrackRowWidget/TimelineView handle syncing multiple lanes
+    // together (Shift modifier) by calling setScrollOffsetSamples() on
+    // other lanes in response to this lane's signals.
+    void setContentExtentSamples(int64_t samples); // full, un-zoomed content length
+    void setScrollOffsetSamples(int64_t samples);
+    int64_t maxScrollOffsetSamples() const;
+    int64_t visibleLengthSamples() const { return effectiveTimelineLength(); }
+
 signals:
     void selectionChanged(bool hasSelection);
     void seekRequested(int64_t sample);
@@ -58,6 +69,17 @@ signals:
     // index to an AudioBuffer and creates the new Clip.
     void mediaDropped(int libraryIndex, int64_t sessionStartSample);
 
+    // Fired whenever the scroll offset changes (scrollbar drag or wheel), so
+    // the owning row can keep its scrollbar widget's displayed value in sync.
+    void scrollOffsetChanged(int64_t sampleOffset);
+    // Fired whenever the scrollable range changes (zoom, content growth/
+    // shrink), so the owning row can update its scrollbar's range/page step
+    // and enabled state.
+    void scrollRangeChanged();
+    // A wheel-scroll happened with Shift held: the owning row's
+    // TimelineView should apply this same absolute offset to every track.
+    void syncScrollToAllRequested(int64_t sampleOffset);
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -68,6 +90,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
     bool event(QEvent* event) override; // handles QEvent::ToolTip for per-clip hover info
 
 private:
@@ -77,6 +100,7 @@ private:
     int sampleToX(int64_t sample) const;
     int64_t timelineLengthSamples() const;
     int64_t effectiveTimelineLength() const;
+    int64_t effectiveScrollOffset() const;
     std::shared_ptr<Clip> findClipAt(int64_t sample) const;
     void updateHoverCursor(const QPoint& pos);
     static QString formatDuration(int64_t samples, int sampleRate);
@@ -99,6 +123,10 @@ private:
     int64_t m_sharedTimelineLength = 0; // 0 = not set, fall back to local computation
     int64_t m_playheadSample = -1;      // -1 = hidden
     bool m_scrubbingPlayhead = false;
+
+    int64_t m_contentExtentSamples = 0;  // full, un-zoomed content length
+    int64_t m_scrollOffsetSamples = 0;   // this lane's own horizontal scroll position
+    int64_t m_dragScrollOffsetSamples = 0; // scroll offset locked at drag start
 
     static constexpr int kEdgeThresholdPx = 10;
     // A fade handle only grabs the mouse within this many pixels of the top

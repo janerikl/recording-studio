@@ -35,6 +35,12 @@ public:
     void setTrack(std::shared_ptr<Track> track);
     void refresh();
 
+signals:
+    // An effect was added to or removed from the currently displayed
+    // track's chain (reordering/param edits don't change the count, so
+    // they don't need this).
+    void effectCountChanged(std::shared_ptr<Track> track);
+
 private:
     void rebuild();
     void addEffectOfType(EffectType type);

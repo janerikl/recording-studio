@@ -11,19 +11,27 @@
 #include <QPainter>
 #include <QPen>
 #include <QToolTip>
+#include <QWheelEvent>
 #include <algorithm>
 #include <cstdlib>
 
 #include "command/EditCommands.h"
 #include "ui/ClipEditMath.h"
+#include "ui/ClipLaneScrollMath.h"
 #include "ui/MediaLibraryPanel.h"
+#include "ui/TimelineScaleMath.h"
+#include "ui/WaveformDisplayMath.h"
 #include "waveform/WaveformCache.h"
 
 namespace rsd {
 
+namespace {
+constexpr int kLaneHeight = 60;
+} // namespace
+
 ClipLaneWidget::ClipLaneWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
-    setMinimumHeight(120);
+    setMinimumHeight(kLaneHeight);
     setMouseTracking(true);
     setAcceptDrops(true);
     QPalette pal = palette();
@@ -58,13 +66,46 @@ int64_t ClipLaneWidget::effectiveTimelineLength() const {
     // very edit the user is making (e.g. moving a clip right also grows the
     // total length, so the clip appears to stay in the same place).
     if (m_dragMode != DragMode::None) return m_dragTotalSamples;
-    if (m_sharedTimelineLength > 0) return m_sharedTimelineLength;
-    return timelineLengthSamples();
+    return resolveDragLockSamples(m_sharedTimelineLength, timelineLengthSamples());
+}
+
+int64_t ClipLaneWidget::effectiveScrollOffset() const {
+    if (m_dragMode != DragMode::None) return m_dragScrollOffsetSamples;
+    return clampScrollOffset(m_scrollOffsetSamples, m_contentExtentSamples, effectiveTimelineLength());
 }
 
 void ClipLaneWidget::setSharedTimelineLength(int64_t samples) {
     m_sharedTimelineLength = samples;
+    int64_t clamped = clampScrollOffset(m_scrollOffsetSamples, m_contentExtentSamples, effectiveTimelineLength());
+    if (clamped != m_scrollOffsetSamples) {
+        m_scrollOffsetSamples = clamped;
+        emit scrollOffsetChanged(m_scrollOffsetSamples);
+    }
+    emit scrollRangeChanged();
     if (m_dragMode == DragMode::None) update();
+}
+
+void ClipLaneWidget::setContentExtentSamples(int64_t samples) {
+    m_contentExtentSamples = samples;
+    int64_t clamped = clampScrollOffset(m_scrollOffsetSamples, m_contentExtentSamples, effectiveTimelineLength());
+    if (clamped != m_scrollOffsetSamples) {
+        m_scrollOffsetSamples = clamped;
+        emit scrollOffsetChanged(m_scrollOffsetSamples);
+    }
+    emit scrollRangeChanged();
+    if (m_dragMode == DragMode::None) update();
+}
+
+void ClipLaneWidget::setScrollOffsetSamples(int64_t samples) {
+    int64_t clamped = clampScrollOffset(samples, m_contentExtentSamples, effectiveTimelineLength());
+    if (clamped == m_scrollOffsetSamples) return;
+    m_scrollOffsetSamples = clamped;
+    if (m_dragMode == DragMode::None) update();
+    emit scrollOffsetChanged(m_scrollOffsetSamples);
+}
+
+int64_t ClipLaneWidget::maxScrollOffsetSamples() const {
+    return rsd::maxScrollOffsetSamples(m_contentExtentSamples, effectiveTimelineLength());
 }
 
 void ClipLaneWidget::setPlayheadSample(int64_t sample) {
@@ -75,13 +116,13 @@ void ClipLaneWidget::setPlayheadSample(int64_t sample) {
 int64_t ClipLaneWidget::xToSample(int x) const {
     int64_t total = effectiveTimelineLength();
     if (width() <= 0) return 0;
-    return static_cast<int64_t>(static_cast<double>(x) / width() * total);
+    return effectiveScrollOffset() + static_cast<int64_t>(static_cast<double>(x) / width() * total);
 }
 
 int ClipLaneWidget::sampleToX(int64_t sample) const {
     int64_t total = effectiveTimelineLength();
     if (total <= 0) return 0;
-    return static_cast<int>(static_cast<double>(sample) / total * width());
+    return static_cast<int>(static_cast<double>(sample - effectiveScrollOffset()) / total * width());
 }
 
 std::shared_ptr<Clip> ClipLaneWidget::findClipAt(int64_t sample) const {
@@ -137,11 +178,12 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
 
                 auto drawChannel = [&](int channel, int centerY, float halfH) {
                     auto peaks = WaveformCache::computePeaks(sub, w, channel);
+                    float displayScale = computeWaveformDisplayScale(peaks);
                     painter.setPen(QColor(90, 170, 230));
                     for (int i = 0; i < peaks.size(); ++i) {
                         auto [minV, maxV] = peaks[i];
-                        int yTop = centerY - static_cast<int>(maxV * halfH);
-                        int yBottom = centerY - static_cast<int>(minV * halfH);
+                        int yTop = centerY - static_cast<int>(maxV * displayScale * halfH);
+                        int yBottom = centerY - static_cast<int>(minV * displayScale * halfH);
                         painter.drawLine(x0 + i, yTop, x0 + i, yBottom);
                     }
                 };
@@ -222,7 +264,12 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
     // Lock the timeline scale for the whole gesture — recomputing it from the
     // live (already-edited) clip state on every move causes the scale to
     // shift mid-drag, snowballing tiny mouse movements into huge trims.
-    m_dragTotalSamples = timelineLengthSamples();
+    // Must match whatever scale is currently painting this lane (the shared
+    // cross-track/zoom-aware one, when present) — locking the local
+    // per-track estimate instead made the clip visibly jump/resize the
+    // instant the drag started, before the mouse even moved.
+    m_dragTotalSamples = resolveDragLockSamples(m_sharedTimelineLength, timelineLengthSamples());
+    m_dragScrollOffsetSamples = effectiveScrollOffset();
 
     bool nearTopBand = event->pos().y() <= 4 + kFadeHandleBandPx;
     if (nearTopBand && std::abs(event->pos().x() - x0) <= kEdgeThresholdPx) {
@@ -365,6 +412,26 @@ void ClipLaneWidget::mouseDoubleClickEvent(QMouseEvent* event) {
     m_selectedClipId = QUuid();
     emit selectionChanged(false);
     update();
+}
+
+void ClipLaneWidget::wheelEvent(QWheelEvent* event) {
+    // Only a native horizontal delta (trackpad two-finger swipe, or a mouse
+    // with a tilt wheel) pans the lane — plain vertical wheel is left alone
+    // so it still scrolls the TimelineView's outer QScrollArea normally.
+    int deltaPx = event->angleDelta().x();
+    if (deltaPx == 0 || width() <= 0 || maxScrollOffsetSamples() <= 0) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+
+    int64_t total = effectiveTimelineLength();
+    int64_t deltaSamples = static_cast<int64_t>(deltaPx / static_cast<double>(width()) * total);
+    setScrollOffsetSamples(m_scrollOffsetSamples - deltaSamples);
+
+    if (event->modifiers() & Qt::ShiftModifier) {
+        emit syncScrollToAllRequested(m_scrollOffsetSamples);
+    }
+    event->accept();
 }
 
 void ClipLaneWidget::contextMenuEvent(QContextMenuEvent* event) {

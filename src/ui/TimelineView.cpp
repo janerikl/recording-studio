@@ -29,6 +29,12 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
             &TimelineView::onClipDraggedToGlobalPos);
     connect(row->clipLane(), &ClipLaneWidget::clipDropped, this, &TimelineView::onClipDropped);
     connect(row->clipLane(), &ClipLaneWidget::mediaDropped, this, &TimelineView::onMediaDropped);
+    connect(row, &TrackRowWidget::effectsPanelRequested, this, &TimelineView::effectsPanelRequested);
+    connect(row, &TrackRowWidget::syncScrollToAllRequested, this, [this, row](int64_t samples) {
+        for (auto& [id, other] : m_rows) {
+            if (other != row) other->setLaneScrollOffset(samples);
+        }
+    });
 
     m_selectGroup->addButton(row->selectButton());
     // Insert before the trailing stretch.
@@ -40,6 +46,7 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     }
 
     row->clipLane()->setSharedTimelineLength(m_lastTimelineLength);
+    row->clipLane()->setContentExtentSamples(m_lastContentExtentSamples);
     row->clipLane()->setPlayheadSample(m_lastPlayheadSample);
 }
 
@@ -68,6 +75,12 @@ void TimelineView::refreshTrackWaveform(const QUuid& trackId) {
     it->second->refreshWaveform();
 }
 
+void TimelineView::refreshTrackEffectsButton(const QUuid& trackId) {
+    auto it = m_rows.find(trackId.toString());
+    if (it == m_rows.end()) return;
+    it->second->refreshEffectsButton();
+}
+
 void TimelineView::deleteSelectedClipOn(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;
@@ -77,6 +90,11 @@ void TimelineView::deleteSelectedClipOn(const QUuid& trackId) {
 void TimelineView::setSharedTimelineLength(int64_t samples) {
     m_lastTimelineLength = samples;
     for (auto& [id, row] : m_rows) row->clipLane()->setSharedTimelineLength(samples);
+}
+
+void TimelineView::setContentExtentSamples(int64_t samples) {
+    m_lastContentExtentSamples = samples;
+    for (auto& [id, row] : m_rows) row->clipLane()->setContentExtentSamples(samples);
 }
 
 void TimelineView::setPlayheadSample(int64_t sample) {

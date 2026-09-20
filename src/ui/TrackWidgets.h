@@ -1,8 +1,10 @@
 #pragma once
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDial>
 #include <QLabel>
+#include <QPushButton>
 #include <QRadioButton>
 #include <QSlider>
 #include <QWidget>
@@ -13,6 +15,8 @@
 #include "command/EditCommands.h"
 #include "model/Track.h"
 #include "ui/ClipLaneWidget.h"
+
+class QScrollBar;
 
 namespace rsd {
 
@@ -30,10 +34,23 @@ public:
     void refreshWaveform() { m_clipLane->refresh(); }
     void setDropHighlight(bool on); // visual feedback while a cross-track drag hovers this row
     void setCommandStack(CommandStack* stack);
+    // Re-reads the track's live effect chain and updates the "FX" button
+    // label. Call after any edit made through the effects rack panel.
+    void refreshEffectsButton();
+    // Sets this row's lane scroll position without re-broadcasting a sync
+    // request (used by TimelineView to apply another row's Shift-synced
+    // scroll to this one).
+    void setLaneScrollOffset(int64_t sampleOffset);
 
 signals:
     void selected(std::shared_ptr<Track> track);
     void clipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
+    // The inline FX button was clicked: select this track (as clicking the
+    // row already does) AND bring the effects rack panel to the front.
+    void effectsPanelRequested(std::shared_ptr<Track> track);
+    // This row's lane was scrolled with Shift held: TimelineView should
+    // apply the same absolute sample offset to every other row.
+    void syncScrollToAllRequested(int64_t sampleOffset);
 
 private:
     std::shared_ptr<Track> m_track;
@@ -41,10 +58,13 @@ private:
     QCheckBox* m_muteBox = nullptr;
     QCheckBox* m_soloBox = nullptr;
     QCheckBox* m_armBox = nullptr;
+    QComboBox* m_sourceCombo = nullptr;
+    QPushButton* m_effectsButton = nullptr;
     QDial* m_panDial = nullptr;
     QSlider* m_gainLSlider = nullptr;
     QSlider* m_gainRSlider = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
+    QScrollBar* m_laneScrollBar = nullptr;
     CommandStack* m_commandStack = nullptr;
     // Captured on press for the pan dial / gain sliders so a whole drag
     // gesture becomes one undo step instead of one per intermediate value.

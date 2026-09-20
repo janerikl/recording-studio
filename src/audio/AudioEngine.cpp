@@ -115,6 +115,72 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     return 0;
 }
 
+// Input-only callback: writes captured frames straight to the system-audio
+// ring buffer while transport is Recording. No mixing/output/punch support
+// here — this stream only feeds whichever tracks are armed with
+// AudioSource::SystemAudio (see RecordRouting.h / MainWindow's recording
+// flow), kept deliberately simple since it runs concurrently with the mic
+// stream's own callback.
+int AudioEngine::rtSystemAudioCallback(void* /*outputBuffer*/, void* inputBuffer, unsigned int nFrames,
+                                        double /*streamTime*/, RtAudioStreamStatus status,
+                                        void* userData) {
+    auto* self = static_cast<AudioEngine*>(userData);
+    const auto* in = static_cast<const float*>(inputBuffer);
+
+    if (status) {
+        std::cerr << "RtAudio system-audio stream over/underflow detected\n";
+    }
+
+    if (in && self->m_transport.state() == TransportState::Recording) {
+        self->m_systemAudioCaptureRing.write(in, static_cast<size_t>(nFrames) * self->m_channels);
+    }
+
+    return 0;
+}
+
+bool AudioEngine::startSystemAudioStream() {
+    if (m_systemAudioRunning) return true;
+    if (m_preferredSystemAudioDevice == kNoInputDevice) return false;
+
+    m_rtAudioSys = std::make_unique<RtAudio>();
+    if (m_rtAudioSys->getDeviceCount() < 1) return false;
+
+    RtAudio::StreamParameters inParams;
+    inParams.deviceId = m_preferredSystemAudioDevice;
+    inParams.nChannels = m_channels;
+
+    RtAudio::DeviceInfo devInfo = m_rtAudioSys->getDeviceInfo(inParams.deviceId);
+    if (!devInfo.probed || devInfo.inputChannels == 0) {
+        std::cerr << "System audio device is not a valid input device\n";
+        return false;
+    }
+
+    unsigned int bufferFrames = 512;
+    unsigned int sampleRate = m_preferredSampleRate;
+    try {
+        m_rtAudioSys->openStream(nullptr, &inParams, RTAUDIO_FLOAT32, sampleRate, &bufferFrames,
+                                  &AudioEngine::rtSystemAudioCallback, this);
+        m_rtAudioSys->startStream();
+    } catch (const std::exception& e) {
+        std::cerr << "RtAudio system-audio stream error: " << e.what() << "\n";
+        return false;
+    }
+
+    m_systemAudioRunning = true;
+    return true;
+}
+
+void AudioEngine::stopSystemAudioStream() {
+    if (!m_systemAudioRunning) return;
+    try {
+        if (m_rtAudioSys->isStreamRunning()) m_rtAudioSys->stopStream();
+        if (m_rtAudioSys->isStreamOpen()) m_rtAudioSys->closeStream();
+    } catch (const std::exception& e) {
+        std::cerr << "RtAudio system-audio stream stop error: " << e.what() << "\n";
+    }
+    m_systemAudioRunning = false;
+}
+
 bool AudioEngine::start() {
     if (m_running) return true;
 
@@ -159,10 +225,17 @@ bool AudioEngine::start() {
     }
 
     m_running = true;
+
+    if (m_preferredSystemAudioDevice != kNoInputDevice && !startSystemAudioStream()) {
+        std::cerr << "System audio device unavailable; that stream will be skipped.\n";
+    }
+
     return true;
 }
 
 void AudioEngine::stop() {
+    stopSystemAudioStream();
+
     if (!m_running) return;
     try {
         if (m_rtAudio->isStreamRunning()) m_rtAudio->stopStream();

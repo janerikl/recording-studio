@@ -64,9 +64,11 @@ struct TrackState {
     bool muted = false;
     bool soloed = false;
     bool recordArmed = false;
+    AudioSource inputSource = AudioSource::Mic;
 
     static TrackState capture(const Track& t) {
-        return {t.gainL.load(), t.gainR.load(), t.muted.load(), t.soloed.load(), t.recordArmed.load()};
+        return {t.gainL.load(),      t.gainR.load(),        t.muted.load(),
+                t.soloed.load(),     t.recordArmed.load(),  t.inputSource.load()};
     }
 };
 
@@ -87,6 +89,7 @@ private:
         m_track->muted.store(s.muted);
         m_track->soloed.store(s.soloed);
         m_track->recordArmed.store(s.recordArmed);
+        m_track->inputSource.store(s.inputSource);
     }
 
     std::shared_ptr<Track> m_track;

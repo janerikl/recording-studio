@@ -26,6 +26,7 @@ private:
     AudioEngine& m_engine;
     QComboBox* m_outputCombo = nullptr;
     QComboBox* m_inputCombo = nullptr;
+    QComboBox* m_systemAudioCombo = nullptr;
     QComboBox* m_sampleRateCombo = nullptr;
     unsigned int m_chosenSampleRate = 0;
 };

@@ -1,9 +1,23 @@
 #include "TrackWidgets.h"
 
+#include <QApplication>
+#include <QGridLayout>
 #include <QHBoxLayout>
+#include <QScrollBar>
 #include <QVBoxLayout>
+#include <algorithm>
+#include <climits>
+
+#include "ui/TrackEffectsLabel.h"
 
 namespace rsd {
+
+namespace {
+// Header is laid out as a compact 3-row grid so the whole row can be as
+// short as the waveform lane (kLaneHeight in ClipLaneWidget.cpp) instead of
+// the tall single-column stack this used to be.
+constexpr int kHeaderWidth = 300;
+} // namespace
 
 TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
@@ -11,17 +25,32 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     auto* rowLayout = new QHBoxLayout(this);
 
     auto* header = new QWidget(this);
-    auto* headerLayout = new QVBoxLayout(header);
-    header->setFixedWidth(200);
+    auto* headerLayout = new QGridLayout(header);
+    headerLayout->setContentsMargins(4, 2, 4, 2);
+    headerLayout->setSpacing(2);
+    header->setFixedWidth(kHeaderWidth);
 
     auto* nameLabel = new QLabel(m_track->name, header);
-    headerLayout->addWidget(nameLabel);
+    headerLayout->addWidget(nameLabel, 0, 0, 1, 2);
 
     m_selectButton = new QRadioButton("Active", header);
     connect(m_selectButton, &QRadioButton::toggled, this, [this](bool checked) {
         if (checked) emit selected(m_track);
     });
-    headerLayout->addWidget(m_selectButton);
+    headerLayout->addWidget(m_selectButton, 0, 2, 1, 2);
+
+    // Jumps straight to this track's effects: selects the row (so the side
+    // panel shows its chain) and asks the panel to be brought to the front,
+    // without needing to click the row first and then hunt for the dock.
+    m_effectsButton = new QPushButton(QString::fromStdString(
+                                           formatEffectsButtonLabel(m_track->effectsSnapshot()->size())),
+                                       header);
+    m_effectsButton->setToolTip("Show effects for this track");
+    connect(m_effectsButton, &QPushButton::clicked, this, [this]() {
+        m_selectButton->setChecked(true);
+        emit effectsPanelRequested(m_track);
+    });
+    headerLayout->addWidget(m_effectsButton, 0, 4);
 
     m_muteBox = new QCheckBox("Mute", header);
     connect(m_muteBox, &QCheckBox::toggled, this, [this](bool checked) {
@@ -32,7 +61,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
                 m_track, before, TrackState::capture(*m_track), "Mute Track"));
         }
     });
-    headerLayout->addWidget(m_muteBox);
+    headerLayout->addWidget(m_muteBox, 1, 0);
 
     m_soloBox = new QCheckBox("Solo", header);
     connect(m_soloBox, &QCheckBox::toggled, this, [this](bool checked) {
@@ -43,9 +72,9 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
                 m_track, before, TrackState::capture(*m_track), "Solo Track"));
         }
     });
-    headerLayout->addWidget(m_soloBox);
+    headerLayout->addWidget(m_soloBox, 1, 1);
 
-    m_armBox = new QCheckBox("Rec Arm", header);
+    m_armBox = new QCheckBox("Arm", header);
     connect(m_armBox, &QCheckBox::toggled, this, [this](bool checked) {
         TrackState before = TrackState::capture(*m_track);
         m_track->recordArmed.store(checked, std::memory_order_relaxed);
@@ -54,7 +83,23 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
                 m_track, before, TrackState::capture(*m_track), "Arm Track"));
         }
     });
-    headerLayout->addWidget(m_armBox);
+    headerLayout->addWidget(m_armBox, 1, 2);
+
+    m_sourceCombo = new QComboBox(header);
+    m_sourceCombo->addItem("Mic", QVariant::fromValue(static_cast<int>(AudioSource::Mic)));
+    m_sourceCombo->addItem("System Audio",
+                            QVariant::fromValue(static_cast<int>(AudioSource::SystemAudio)));
+    m_sourceCombo->setToolTip("Input source");
+    m_sourceCombo->setCurrentIndex(m_track->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
+    connect(m_sourceCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        TrackState before = TrackState::capture(*m_track);
+        m_track->inputSource.store(index == 1 ? AudioSource::SystemAudio : AudioSource::Mic);
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, before, TrackState::capture(*m_track), "Change Track Input Source"));
+        }
+    });
+    headerLayout->addWidget(m_sourceCombo, 1, 3);
 
     // Pan is a convenience gesture, not a stored value: moving it derives and
     // writes both gainL/gainR via a simple linear pan law. The two gain
@@ -65,7 +110,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_panDial->setRange(-100, 100);
     m_panDial->setValue(0);
     m_panDial->setToolTip("Pan");
-    m_panDial->setFixedSize(48, 48);
+    m_panDial->setFixedSize(28, 28);
     connect(m_panDial, &QDial::sliderPressed, this,
             [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
     connect(m_panDial, &QDial::valueChanged, this, [this](int v) {
@@ -84,13 +129,13 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
         }
         m_dragBeforeState.reset();
     });
-    headerLayout->addWidget(new QLabel("Pan", header));
-    headerLayout->addWidget(m_panDial);
+    headerLayout->addWidget(m_panDial, 2, 0);
 
     m_gainLSlider = new QSlider(Qt::Horizontal, header);
     m_gainLSlider->setRange(0, 200);
     m_gainLSlider->setValue(static_cast<int>(m_track->gainL.load() * 100));
     m_gainLSlider->setToolTip("Gain L");
+    m_gainLSlider->setFixedHeight(16);
     connect(m_gainLSlider, &QSlider::sliderPressed, this,
             [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
     connect(m_gainLSlider, &QSlider::valueChanged, this,
@@ -102,13 +147,13 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
         }
         m_dragBeforeState.reset();
     });
-    headerLayout->addWidget(new QLabel("Gain L", header));
-    headerLayout->addWidget(m_gainLSlider);
+    headerLayout->addWidget(m_gainLSlider, 2, 1, 1, 3);
 
     m_gainRSlider = new QSlider(Qt::Horizontal, header);
     m_gainRSlider->setRange(0, 200);
     m_gainRSlider->setValue(static_cast<int>(m_track->gainR.load() * 100));
     m_gainRSlider->setToolTip("Gain R");
+    m_gainRSlider->setFixedHeight(16);
     connect(m_gainRSlider, &QSlider::sliderPressed, this,
             [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
     connect(m_gainRSlider, &QSlider::valueChanged, this,
@@ -120,15 +165,53 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
         }
         m_dragBeforeState.reset();
     });
-    headerLayout->addWidget(new QLabel("Gain R", header));
-    headerLayout->addWidget(m_gainRSlider);
+    headerLayout->addWidget(m_gainRSlider, 3, 1, 1, 3);
 
     rowLayout->addWidget(header);
 
-    m_clipLane = new ClipLaneWidget(m_track, this);
+    // Lane + its own horizontal scrollbar, stacked vertically, so scrolling
+    // one track doesn't move the others (default; Shift syncs them — see
+    // syncScrollToAllRequested).
+    auto* laneContainer = new QWidget(this);
+    auto* laneLayout = new QVBoxLayout(laneContainer);
+    laneLayout->setContentsMargins(0, 0, 0, 0);
+    laneLayout->setSpacing(0);
+
+    m_clipLane = new ClipLaneWidget(m_track, laneContainer);
     connect(m_clipLane, &ClipLaneWidget::selectionChanged, this,
             [this](bool hasSelection) { emit clipSelectionChanged(m_track, hasSelection); });
-    rowLayout->addWidget(m_clipLane, 1);
+    laneLayout->addWidget(m_clipLane, 1);
+
+    m_laneScrollBar = new QScrollBar(Qt::Horizontal, laneContainer);
+    m_laneScrollBar->setFixedHeight(12);
+    m_laneScrollBar->setEnabled(false);
+    laneLayout->addWidget(m_laneScrollBar);
+
+    connect(m_laneScrollBar, &QScrollBar::valueChanged, this, [this](int v) {
+        m_clipLane->setScrollOffsetSamples(static_cast<int64_t>(v));
+        if (QApplication::keyboardModifiers() & Qt::ShiftModifier) {
+            emit syncScrollToAllRequested(static_cast<int64_t>(v));
+        }
+    });
+    connect(m_clipLane, &ClipLaneWidget::scrollOffsetChanged, this, [this](int64_t samples) {
+        int clamped = static_cast<int>(std::clamp<int64_t>(samples, 0, INT_MAX));
+        m_laneScrollBar->blockSignals(true);
+        m_laneScrollBar->setValue(clamped);
+        m_laneScrollBar->blockSignals(false);
+    });
+    connect(m_clipLane, &ClipLaneWidget::scrollRangeChanged, this, [this]() {
+        int64_t maxOffset = m_clipLane->maxScrollOffsetSamples();
+        int64_t visible = m_clipLane->visibleLengthSamples();
+        m_laneScrollBar->blockSignals(true);
+        m_laneScrollBar->setRange(0, static_cast<int>(std::clamp<int64_t>(maxOffset, 0, INT_MAX)));
+        m_laneScrollBar->setPageStep(static_cast<int>(std::clamp<int64_t>(visible, 0, INT_MAX)));
+        m_laneScrollBar->setEnabled(maxOffset > 0);
+        m_laneScrollBar->blockSignals(false);
+    });
+    connect(m_clipLane, &ClipLaneWidget::syncScrollToAllRequested, this,
+            [this](int64_t samples) { emit syncScrollToAllRequested(samples); });
+
+    rowLayout->addWidget(laneContainer, 1);
 }
 
 void TrackRowWidget::setDropHighlight(bool on) {
@@ -138,6 +221,15 @@ void TrackRowWidget::setDropHighlight(bool on) {
 void TrackRowWidget::setCommandStack(CommandStack* stack) {
     m_commandStack = stack;
     m_clipLane->setCommandStack(stack);
+}
+
+void TrackRowWidget::refreshEffectsButton() {
+    m_effectsButton->setText(
+        QString::fromStdString(formatEffectsButtonLabel(m_track->effectsSnapshot()->size())));
+}
+
+void TrackRowWidget::setLaneScrollOffset(int64_t sampleOffset) {
+    m_clipLane->setScrollOffsetSamples(sampleOffset);
 }
 
 } // namespace rsd
