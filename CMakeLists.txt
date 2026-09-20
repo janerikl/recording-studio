@@ -35,6 +35,8 @@ add_executable(recording_studio
     src/ui/EffectsRackPanel.cpp
     src/ui/PianoKeyboardWidget.cpp
     src/ui/InstrumentPanel.cpp
+    src/ui/PianoRollGridWidget.cpp
+    src/ui/PianoRollPanel.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)

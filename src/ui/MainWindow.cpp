@@ -293,6 +293,15 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::RightDockWidgetArea, m_instrumentDock);
     tabifyDockWidget(mediaDock, m_instrumentDock);
 
+    m_pianoRollDock = new QDockWidget("Piano Roll", this);
+    m_pianoRollPanel = new PianoRollPanel(m_pianoRollDock);
+    m_pianoRollPanel->setCommandStack(&m_commandStack);
+    m_pianoRollPanel->setBpm(m_session->bpm);
+    m_pianoRollPanel->setSampleRate(m_session->sampleRate);
+    m_pianoRollDock->setWidget(m_pianoRollPanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_pianoRollDock);
+    tabifyDockWidget(mediaDock, m_pianoRollDock);
+
     // Each dock's built-in toggleViewAction stays in sync automatically
     // (checked/unchecked) whether it's hidden from here or via the dock's
     // own close button, so no extra state tracking is needed.
@@ -300,6 +309,7 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(mediaDock->toggleViewAction());
     viewMenu->addAction(m_effectsDock->toggleViewAction());
     viewMenu->addAction(m_instrumentDock->toggleViewAction());
+    viewMenu->addAction(m_pianoRollDock->toggleViewAction());
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -419,6 +429,7 @@ void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
     m_activeTrack = std::move(track);
     m_effectsRack->setTrack(m_activeTrack);
     m_instrumentPanel->setTrack(m_activeTrack);
+    m_pianoRollPanel->setTrack(m_activeTrack);
 }
 
 void MainWindow::onInstrumentNoteOn(int pitch, float velocity) {
@@ -996,6 +1007,8 @@ void MainWindow::rebuildTimelineFromSession() {
     m_activeTrack.reset();
     m_trackWithClipSelection.reset();
     m_deleteClipAction->setEnabled(false);
+    m_pianoRollPanel->setBpm(m_session->bpm);
+    m_pianoRollPanel->setSampleRate(m_session->sampleRate);
 
     m_trackCounter = 0;
     for (auto& track : m_session->tracks) {

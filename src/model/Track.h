@@ -161,6 +161,37 @@ public:
         m_midiNotes.store(std::make_shared<const MidiNoteList>(std::move(notes)));
     }
 
+    // Same atomic-swap pattern as replaceClip/removeClip/addClip, for the
+    // piano-roll editor's live-drag feedback (mutate on every mouse move,
+    // command pushed with before/after snapshots only on release).
+    void replaceMidiNote(const QUuid& noteId, std::shared_ptr<MidiNote> newNote) {
+        auto current = m_midiNotes.load();
+        auto updated = std::make_shared<MidiNoteList>(*current);
+        for (auto& n : *updated) {
+            if (n->id == noteId) {
+                n = std::move(newNote);
+                break;
+            }
+        }
+        m_midiNotes.store(std::const_pointer_cast<const MidiNoteList>(updated));
+    }
+
+    void addMidiNote(std::shared_ptr<MidiNote> note) {
+        auto current = m_midiNotes.load();
+        auto updated = std::make_shared<MidiNoteList>(*current);
+        updated->push_back(std::move(note));
+        m_midiNotes.store(std::const_pointer_cast<const MidiNoteList>(updated));
+    }
+
+    void removeMidiNote(const QUuid& noteId) {
+        auto current = m_midiNotes.load();
+        auto updated = std::make_shared<MidiNoteList>(*current);
+        updated->erase(std::remove_if(updated->begin(), updated->end(),
+                                       [&](const auto& n) { return n->id == noteId; }),
+                        updated->end());
+        m_midiNotes.store(std::const_pointer_cast<const MidiNoteList>(updated));
+    }
+
     // Effect chain: same copy-on-write + atomic-swap pattern as the clip
     // list, since it's read lock-free by the audio thread every callback.
     // Structural edits (add/remove/reorder) go through these; per-effect

@@ -21,7 +21,8 @@ without relying on chat history. Update status as items complete.
 3. [x] Playlist comping (multiple takes per track, comp best parts) — v1: whole-take comping only, see below
 4. [x] Clip-level editing tools (trim/fade/gain handles directly on clips)
 5. [x] Virtual instruments (basic synth + sampler, MIDI-playable) — v1: synth only, on-screen keyboard only, see below
-6. [ ] MIDI piano-roll editor
+6. [x] MIDI piano-roll editor — v1: move/resize/draw/delete notes + velocity
+    lane, no full manual pass yet, see below
 7. [ ] Automation lanes (volume/pan/filter over time)
 8. [ ] Bus routing / sends (aux tracks, submixes)
 9. [ ] Loop/sample library browser
@@ -336,6 +337,49 @@ closes too) for Media Library, Effects Rack, and Instrument — so the synth
 panel (and the other docks) can be shown/hidden on demand instead of always
 taking up screen space. Verified live: menu shows all three checkable
 entries correctly.
+
+## In progress: MIDI piano-roll editor
+
+Goal (feature #6): editable piano-roll for MIDI notes recorded via the v1
+synth's on-screen keyboard. Currently `midiClips`/`MidiNote` are view-only
+(painted as small rectangles in `ClipLaneWidget`).
+
+Scope (approved): move, resize (length), delete, and draw new notes; a
+dockable panel (same pattern as `InstrumentPanel`/`EffectsRackPanel`)
+following the selected Instrument track; velocity included via a velocity
+lane; grid snapping based on a new project-level BPM field (no tempo
+concept existed before this).
+
+Design (approved):
+- [x] `Session`/`SessionIO` gains a `bpm` field (default 120, persisted).
+- [x] `ui/PianoRollEditMath.h` (pure, tested first): snap-to-grid math
+      (samples-per-beat from BPM ÷ snap denominator), pitch↔Y conversion
+      (extends `MidiNoteDisplayMath`), note hit-testing, drag-to-rect math
+      for move/resize/draw, velocity clamp/drag math.
+- [x] `PianoRollPanel` (new dock widget): shows notes for the selected
+      Instrument track, snap-size dropdown (Off/1/4/1/8/1/16/1/32), main
+      pitch/time grid + velocity lane strip below it.
+- [x] Grid widget (`PianoRollGridWidget`) reuses the `ClipLaneWidget` drag
+      pattern: `DragMode {None, Move, Resize, Velocity}` (draw is immediate
+      on empty-cell click, no drag needed), snapshot `midiClips` on
+      press/click, one `TrackMidiCommand(before, after)` pushed on release
+      (existing command type, no new one needed). Delete via Del/Backspace
+      on the selected note, same snapshot+command pattern.
+- [x] `Track` gains `replaceMidiNote`/`addMidiNote`/`removeMidiNote`
+      (same atomic copy-on-write pattern as the clip-list equivalents) so
+      the grid widget can mutate live during drags and on click-to-add/delete.
+
+Verification plan (approved):
+- [x] Automated: `tests/test_PianoRollEditMath.cpp` written before the math
+      implementation (22 cases: snap math at various BPM/denominators,
+      pitch/Y round-trip, hit-testing, drag math, velocity clamp). Full
+      suite (19/19 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran for full timeout
+      duration under a real X display, no crash/error output). Piano Roll
+      dock added to the View menu alongside the existing docks.
+- [ ] Full manual (needs real interaction, not done from this session):
+      draw/move/resize/delete notes, drag velocity, undo/redo, snap-size
+      changes, edited notes play back correctly.
 
 ## Notes
 

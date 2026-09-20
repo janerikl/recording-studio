@@ -27,6 +27,7 @@
 #include "ui/MediaLibraryPanel.h"
 #include "ui/EffectsRackPanel.h"
 #include "ui/InstrumentPanel.h"
+#include "ui/PianoRollPanel.h"
 
 #include <unordered_map>
 
@@ -166,6 +167,8 @@ private:
     QDockWidget* m_effectsDock = nullptr;
     InstrumentPanel* m_instrumentPanel = nullptr;
     QDockWidget* m_instrumentDock = nullptr;
+    PianoRollPanel* m_pianoRollPanel = nullptr;
+    QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;

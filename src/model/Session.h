@@ -13,6 +13,7 @@ class Session {
 public:
     int sampleRate = 48000;
     int channels = 2;
+    double bpm = 120.0;
     std::vector<std::shared_ptr<Track>> tracks;
     QString filePath;
     bool dirty = false;

@@ -106,6 +106,11 @@ target_include_directories(midi_note_display_math_tests PRIVATE ${CMAKE_SOURCE_D
 target_link_libraries(midi_note_display_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME MidiNoteDisplayMathTests COMMAND midi_note_display_math_tests)
 
+add_executable(piano_roll_edit_math_tests test_PianoRollEditMath.cpp)
+target_include_directories(piano_roll_edit_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(piano_roll_edit_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PianoRollEditMathTests COMMAND piano_roll_edit_math_tests)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 

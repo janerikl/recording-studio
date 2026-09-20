@@ -137,6 +137,7 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
     QJsonObject root;
     root["sampleRate"] = session.sampleRate;
     root["channels"] = session.channels;
+    root["bpm"] = session.bpm;
 
     QJsonArray tracksJson;
     for (auto& track : session.tracks) {
@@ -252,6 +253,7 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
 
     outSession.sampleRate = root["sampleRate"].toInt(outSession.sampleRate);
     outSession.channels = root["channels"].toInt(outSession.channels);
+    outSession.bpm = root["bpm"].toDouble(outSession.bpm);
     outSession.tracks.clear();
 
     // Share one AudioBuffer per unique audio file across all clips that
