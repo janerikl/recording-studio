@@ -95,6 +95,15 @@ public:
     float outputPeakL() const { return m_outputPeakL.load(std::memory_order_relaxed); }
     float outputPeakR() const { return m_outputPeakR.load(std::memory_order_relaxed); }
 
+    // Zeroes the output meter so it doesn't keep showing the last mixed
+    // block's level forever once the callback stops firing on Stop. Input
+    // is left alone — it's meant to keep reflecting live mic signal even
+    // while stopped (see the comment above).
+    void resetOutputMeter() {
+        m_outputPeakL.store(0.0f, std::memory_order_relaxed);
+        m_outputPeakR.store(0.0f, std::memory_order_relaxed);
+    }
+
 private:
     static int rtCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
                            double streamTime, RtAudioStreamStatus status, void* userData);

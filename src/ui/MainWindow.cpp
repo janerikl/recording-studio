@@ -798,6 +798,17 @@ void MainWindow::onStopClicked() {
     m_stopAction->setEnabled(false);
     updateStatusLabel();
     updatePlayhead();
+
+    // Once the audio callback stops firing, postFaderPeakL/R and the output
+    // meter would otherwise keep showing whatever level was last mixed
+    // before Stop, forever — nothing else ever overwrites them. Input is
+    // left alone; it's meant to keep tracking live mic signal while stopped.
+    for (auto& track : m_session->tracks) {
+        track->postFaderPeakL.store(0.0f, std::memory_order_relaxed);
+        track->postFaderPeakR.store(0.0f, std::memory_order_relaxed);
+    }
+    m_engine->resetOutputMeter();
+    updateMeters();
 }
 
 void MainWindow::onSeekRequested(int64_t sample) {
