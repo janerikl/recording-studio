@@ -19,7 +19,7 @@ without relying on chat history. Update status as items complete.
 1. [x] Effects rack per track (EQ, compressor, reverb, delay)
 2. [x] Punch-in / loop recording
 3. [x] Playlist comping (multiple takes per track, comp best parts) — v1: whole-take comping only, see below
-4. [ ] Clip-level editing tools (trim/fade/gain handles directly on clips)
+4. [x] Clip-level editing tools (trim/fade/gain handles directly on clips)
 5. [ ] Virtual instruments (basic synth + sampler, MIDI-playable)
 6. [ ] MIDI piano-roll editor
 7. [ ] Automation lanes (volume/pan/filter over time)
@@ -30,6 +30,38 @@ without relying on chat history. Update status as items complete.
 12. [ ] Mixer view: dockable strip at the bottom with a vertical fader, pan,
     mute/solo, and effect slots per track (Pro Tools/Ableton-style), toggled
     via a new View menu
+
+## Completed: Clip-level gain handle (trim/fade already existed)
+
+Goal (feature #4): trim/fade/gain handles directly on clips. Trim and fade
+already had drag handles in `ClipLaneWidget` before this session; the only
+gap was gain (right-click → dialog only). Added a draggable gain handle to
+match.
+
+- [x] `ui/ClipEditMath.h`: `clampClipGain`, `gainAfterVerticalDrag`,
+      `gainLineY` (pure, tested) — a horizontal line across the clip (0.0 at
+      the bottom edge, 2.0 at the top, unity at vertical center), dragged
+      up/down like Pro Tools/Audacity clip gain.
+- [x] `ClipLaneWidget`: new `DragMode::Gain`, hit-tested after trim/fade
+      edges; reuses the existing generic "push TrackClipsCommand on release
+      if changed" undo path already shared by move/trim/fade — no new
+      command type needed. Waveform amplitude now also scales with
+      `clip->gain` for live visual feedback while dragging (can visually
+      clip above unity, matching real DAWs).
+
+Verification plan (approved):
+- [x] Automated: 9 new cases in `tests/test_ClipEditMath.cpp` (clamp range,
+      drag-to-gain math both directions, zero-height guard, line-position
+      math at 0/1/2 gain and with a non-zero clip top offset). Full suite
+      (16/16) passes.
+- [x] Smoke-tested: app launches clean, gain line renders (gold, brightens
+      while dragging) on clips at the correct vertical position.
+- [ ] Full manual: drag the gain line up/down on a clip with a visible
+      waveform, confirm it changes audibly on playback and undo/redo
+      reverts it. (Pixel-precise click-drag wasn't reliably reproducible
+      from this session's screenshot tooling — logic is unit-tested and
+      wired through the same proven pattern as trim/fade, but worth a
+      manual pass.)
 
 ## Completed: Multi-source input (mic + system audio)
 

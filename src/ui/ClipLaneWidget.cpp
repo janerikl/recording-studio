@@ -178,7 +178,11 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
 
                 auto drawChannel = [&](int channel, int centerY, float halfH) {
                     auto peaks = WaveformCache::computePeaks(sub, w, channel);
-                    float displayScale = computeWaveformDisplayScale(peaks);
+                    // Gain scales the drawn waveform directly (can visually
+                    // clip against the lane bounds above unity, same as
+                    // Pro Tools/Audacity's clip-gain line) so the handle
+                    // gives immediate visual feedback while dragging.
+                    float displayScale = computeWaveformDisplayScale(peaks) * clip->gain;
                     painter.setPen(QColor(90, 170, 230));
                     for (int i = 0; i < peaks.size(); ++i) {
                         auto [minV, maxV] = peaks[i];
@@ -228,6 +232,14 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
             tri << QPoint(fadeStartX, 4) << QPoint(x1, 4) << QPoint(x1, height() - 4);
             painter.drawPolygon(tri);
         }
+
+        // Gain handle: a draggable horizontal line across the clip (4 =
+        // unity at the vertical center, matching the fade triangles'
+        // top/bottom insets).
+        int lineY = gainLineY(clip->gain, 4, height() - 8);
+        bool draggingGain = m_dragMode == DragMode::Gain && clip->id == m_dragClipId;
+        painter.setPen(QPen(draggingGain ? QColor(255, 210, 100) : QColor(220, 180, 80), 2));
+        painter.drawLine(x0, lineY, x1, lineY);
     }
 
     if (m_playheadSample >= 0) {
@@ -256,11 +268,13 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
 
     m_dragClipId = clip->id;
     m_dragStartX = event->pos().x();
+    m_dragStartY = event->pos().y();
     m_dragOrigStart = clip->sessionStartSample;
     m_dragOrigOffset = clip->sourceOffsetSamples;
     m_dragOrigLength = clip->lengthSamples;
     m_dragOrigFadeIn = clip->fadeInSamples;
     m_dragOrigFadeOut = clip->fadeOutSamples;
+    m_dragOrigGain = clip->gain;
     // Lock the timeline scale for the whole gesture — recomputing it from the
     // live (already-edited) clip state on every move causes the scale to
     // shift mid-drag, snowballing tiny mouse movements into huge trims.
@@ -284,6 +298,10 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
     } else if (std::abs(event->pos().x() - x1) <= kEdgeThresholdPx) {
         m_dragMode = DragMode::TrimEnd;
         setCursor(Qt::SizeHorCursor);
+    } else if (std::abs(event->pos().y() - gainLineY(clip->gain, 4, height() - 8)) <=
+               kGainHandleBandPx) {
+        m_dragMode = DragMode::Gain;
+        setCursor(Qt::SizeVerCursor);
     } else {
         m_dragMode = DragMode::Move;
         setCursor(Qt::ClosedHandCursor);
@@ -307,6 +325,8 @@ void ClipLaneWidget::updateHoverCursor(const QPoint& pos) {
 
     if (std::abs(pos.x() - x0) <= kEdgeThresholdPx || std::abs(pos.x() - x1) <= kEdgeThresholdPx) {
         setCursor(Qt::SizeHorCursor); // near an edge: trim
+    } else if (std::abs(pos.y() - gainLineY(clip->gain, 4, height() - 8)) <= kGainHandleBandPx) {
+        setCursor(Qt::SizeVerCursor); // near the gain line: drag to adjust gain
     } else {
         setCursor(Qt::OpenHandCursor); // over the body: move
     }
@@ -365,6 +385,9 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
         // Dragging the top-right handle leftward lengthens the fade-out.
         edited->fadeOutSamples =
             clampFadeSamples(m_dragOrigFadeOut - deltaSamples, m_dragOrigLength, m_dragOrigFadeIn);
+    } else if (m_dragMode == DragMode::Gain) {
+        int deltaY = event->pos().y() - m_dragStartY;
+        edited->gain = gainAfterVerticalDrag(m_dragOrigGain, deltaY, height());
     }
 
     m_track->replaceClip(m_dragClipId, edited);

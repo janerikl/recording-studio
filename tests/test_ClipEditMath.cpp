@@ -29,6 +29,47 @@ private slots:
     void oppositeFadeFillingWholeClipForcesZero() {
         QCOMPARE(clampFadeSamples(20, 100, 100), int64_t(0));
     }
+
+    void gainClampsToZeroToTwoRange() {
+        QCOMPARE(clampClipGain(-1.0f), 0.0f);
+        QCOMPARE(clampClipGain(3.0f), 2.0f);
+        QCOMPARE(clampClipGain(1.5f), 1.5f);
+    }
+
+    void draggingUpIncreasesGain() {
+        // Full-height drag upward (negative deltaY) swings by the full
+        // range (2.0), clamped at the ceiling.
+        QCOMPARE(gainAfterVerticalDrag(1.0f, -100, 100), 2.0f);
+    }
+
+    void draggingDownDecreasesGain() {
+        QCOMPARE(gainAfterVerticalDrag(1.0f, 100, 100), 0.0f);
+    }
+
+    void smallDragGivesProportionalChange() {
+        // Half the lane height dragged up = half the full 2.0 swing = +1.0.
+        QCOMPARE(gainAfterVerticalDrag(0.5f, -50, 100), 1.5f);
+    }
+
+    void zeroHeightLane_doesNotDivideByZero() {
+        QCOMPARE(gainAfterVerticalDrag(1.0f, -50, 0), 1.0f);
+    }
+
+    void gainLineYAtUnityIsVerticalCenter() {
+        QCOMPARE(gainLineY(1.0f, 0, 100), 50);
+    }
+
+    void gainLineYAtZeroIsBottom() {
+        QCOMPARE(gainLineY(0.0f, 0, 100), 100);
+    }
+
+    void gainLineYAtTwoIsTop() {
+        QCOMPARE(gainLineY(2.0f, 0, 100), 0);
+    }
+
+    void gainLineYRespectsClipTopOffset() {
+        QCOMPARE(gainLineY(1.0f, 20, 100), 70);
+    }
 };
 
 QTEST_APPLESS_MAIN(TestClipEditMath)

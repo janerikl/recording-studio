@@ -95,7 +95,7 @@ protected:
     bool event(QEvent* event) override; // handles QEvent::ToolTip for per-clip hover info
 
 private:
-    enum class DragMode { None, Move, TrimStart, TrimEnd, FadeIn, FadeOut };
+    enum class DragMode { None, Move, TrimStart, TrimEnd, FadeIn, FadeOut, Gain };
 
     int64_t xToSample(int x) const;
     int sampleToX(int64_t sample) const;
@@ -114,11 +114,13 @@ private:
     DragMode m_dragMode = DragMode::None;
     QUuid m_dragClipId;
     int m_dragStartX = 0;
+    int m_dragStartY = 0;
     int64_t m_dragOrigStart = 0;
     int64_t m_dragOrigOffset = 0;
     int64_t m_dragOrigLength = 0;
     int64_t m_dragOrigFadeIn = 0;
     int64_t m_dragOrigFadeOut = 0;
+    float m_dragOrigGain = 1.0f;
     int64_t m_dragTotalSamples = 0; // timeline scale locked at drag start
 
     int64_t m_sharedTimelineLength = 0; // 0 = not set, fall back to local computation
@@ -134,6 +136,9 @@ private:
     // of the clip, near an edge — below that band, the same edge is a trim
     // handle instead (checked in that order in mousePressEvent).
     static constexpr int kFadeHandleBandPx = 14;
+    // How close (vertically, in px) the mouse must be to the gain line to
+    // grab it instead of starting a move.
+    static constexpr int kGainHandleBandPx = 6;
 };
 
 } // namespace rsd
