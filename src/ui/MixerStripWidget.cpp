@@ -1,9 +1,11 @@
 #include "MixerStripWidget.h"
 
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
 #include "ui/TrackEffectsLabel.h"
+#include "ui/TrackKindColor.h"
 
 namespace rsd {
 
@@ -13,11 +15,36 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 4, 2, 4);
     layout->setSpacing(2);
-    layout->setAlignment(Qt::AlignHCenter);
+    // AlignTop matters here: a Bus strip has two fewer widgets (no send
+    // controls) than an Audio/Instrument strip, so its natural content
+    // height is shorter. Without pinning to the top, Qt vertically centers
+    // that shorter content within the strip's full height (stretched to
+    // match its tallest sibling by the mixer panel's QHBoxLayout), pushing
+    // every control down and breaking row alignment across strips.
+    layout->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+
+    // Fixed color accent per TrackKind (Audio/Instrument/Bus), matching the
+    // stripe on TrackRowWidget's header.
+    auto* kindStripe = new QFrame(this);
+    kindStripe->setFixedHeight(4);
+    kindStripe->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    kindStripe->setFrameShape(QFrame::NoFrame);
+    kindStripe->setAutoFillBackground(true);
+    QPalette stripePalette = kindStripe->palette();
+    stripePalette.setColor(QPalette::Window, trackKindColor(m_track->kind));
+    kindStripe->setPalette(stripePalette);
+    layout->addWidget(kindStripe);
 
     m_nameLabel = new QLabel(m_track->name, this);
-    m_nameLabel->setAlignment(Qt::AlignCenter);
+    m_nameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     m_nameLabel->setWordWrap(true);
+    // Fixed height for exactly two lines, regardless of whether this
+    // track's name actually wraps: otherwise a strip with a short
+    // single-line name (e.g. a Bus track) gets a shorter name label than
+    // one with a longer wrapped name, and every control below it
+    // (FX/Arm/source/pan/...) ends up at a different row across strips.
+    QFontMetrics nameMetrics(m_nameLabel->font());
+    m_nameLabel->setFixedHeight(nameMetrics.lineSpacing() * 2 + 2);
     layout->addWidget(m_nameLabel);
 
     m_effectsButton = new QPushButton(

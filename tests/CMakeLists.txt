@@ -1,4 +1,4 @@
-find_package(Qt6 COMPONENTS Core Test REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Test REQUIRED)
 
 # Model/command tests are pure Core (no Widgets/RtAudio/sndfile needed), so
 # they build fast and don't require a display to run.
@@ -151,6 +151,11 @@ add_executable(offline_renderer_tests
 target_include_directories(offline_renderer_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(offline_renderer_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME OfflineRendererTests COMMAND offline_renderer_tests)
+
+add_executable(track_kind_color_tests test_TrackKindColor.cpp)
+target_include_directories(track_kind_color_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(track_kind_color_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME TrackKindColorTests COMMAND track_kind_color_tests)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)

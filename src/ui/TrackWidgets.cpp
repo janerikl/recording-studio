@@ -1,12 +1,15 @@
 #include "TrackWidgets.h"
 
 #include <QApplication>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QScrollBar>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <climits>
+
+#include "ui/TrackKindColor.h"
 
 namespace rsd {
 
@@ -27,6 +30,17 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     // new per-track scrollbar), rows would balloon to fill the window.
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* rowLayout = new QHBoxLayout(this);
+
+    // Fixed color accent per TrackKind (Audio/Instrument/Bus), so a track's
+    // type is visible at a glance without opening its controls.
+    auto* kindStripe = new QFrame(this);
+    kindStripe->setFixedWidth(4);
+    kindStripe->setFrameShape(QFrame::NoFrame);
+    kindStripe->setAutoFillBackground(true);
+    QPalette stripePalette = kindStripe->palette();
+    stripePalette.setColor(QPalette::Window, trackKindColor(m_track->kind));
+    kindStripe->setPalette(stripePalette);
+    rowLayout->addWidget(kindStripe);
 
     auto* header = new QWidget(this);
     auto* headerLayout = new QGridLayout(header);
