@@ -738,7 +738,26 @@ Verification plan (approved):
       from either view; undo/redo of a mixer-strip edit works; adding/
       removing a track keeps both views in sync.
 
-## Notes
+## Completed: Removed duplicate mixer controls from the track row header
+
+Follow-up after Mixer view: Mute, Solo, Pan, Volume, and Send (dropdown +
+level) were now on both the track row header and the new mixer strip —
+two controls fighting over the same `TrackState`. Approved: removed from
+the track row header, kept only on the mixer strip. Arm and the
+Mic/System Audio input-source dropdown stay on the row (not on the mixer
+at all); FX/Takes/Auto also stay (Takes/Auto toggle lanes in the timeline
+itself, not just mirror a value; FX was kept per the approved choice).
+
+- [x] `TrackRowWidget`: removed `m_muteBox`/`m_soloBox`/`m_panDial`/
+      `m_volumeSlider`/`m_sendBusCombo`/`m_sendLevelSlider` and their
+      wiring; Arm + source dropdown reflowed into the row those used to
+      occupy. `refreshSendBusOptions()` removed from `TrackRowWidget`
+      (no send control left to refresh) and from `TimelineView` (its
+      only caller besides `MixerPanel`, which has its own independent
+      implementation).
+- Automated: none new (pure removal of duplicated UI, no logic change);
+  full suite (25/25 binaries) still passes. Smoke-tested: app builds and
+  launches cleanly.
 
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).

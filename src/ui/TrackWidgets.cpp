@@ -78,28 +78,10 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
             [this](bool checked) { m_automationLane->setVisible(checked); });
     headerLayout->addWidget(m_automationToggleButton, 0, 6);
 
-    m_muteBox = new QCheckBox("Mute", header);
-    connect(m_muteBox, &QCheckBox::toggled, this, [this](bool checked) {
-        TrackState before = TrackState::capture(*m_track);
-        m_track->muted.store(checked, std::memory_order_relaxed);
-        if (m_commandStack) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, before, TrackState::capture(*m_track), "Mute Track"));
-        }
-    });
-    headerLayout->addWidget(m_muteBox, 1, 0);
-
-    m_soloBox = new QCheckBox("Solo", header);
-    connect(m_soloBox, &QCheckBox::toggled, this, [this](bool checked) {
-        TrackState before = TrackState::capture(*m_track);
-        m_track->soloed.store(checked, std::memory_order_relaxed);
-        if (m_commandStack) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, before, TrackState::capture(*m_track), "Solo Track"));
-        }
-    });
-    headerLayout->addWidget(m_soloBox, 1, 1);
-
+    // Mute/Solo/Pan/Volume/Send now live only on the Mixer panel's strip
+    // for this track (see MixerStripWidget) — kept here would just be a
+    // duplicate control fighting the same TrackState. Arm and input
+    // source aren't on the mixer strip, so they stay on the row.
     m_armBox = new QCheckBox("Arm", header);
     connect(m_armBox, &QCheckBox::toggled, this, [this](bool checked) {
         TrackState before = TrackState::capture(*m_track);
@@ -109,7 +91,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
                 m_track, before, TrackState::capture(*m_track), "Arm Track"));
         }
     });
-    headerLayout->addWidget(m_armBox, 1, 2);
+    headerLayout->addWidget(m_armBox, 1, 0);
 
     m_sourceCombo = new QComboBox(header);
     m_sourceCombo->addItem("Mic", QVariant::fromValue(static_cast<int>(AudioSource::Mic)));
@@ -125,82 +107,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
                 m_track, before, TrackState::capture(*m_track), "Change Track Input Source"));
         }
     });
-    headerLayout->addWidget(m_sourceCombo, 1, 3);
-
-    // Pan and volume are both stored directly on Track now (source of truth
-    // for the mixer and for automation curves to target); no more deriving
-    // gainL/gainR from a pan-only gesture.
-    m_panDial = new QDial(header);
-    m_panDial->setRange(-100, 100);
-    m_panDial->setValue(static_cast<int>(m_track->pan.load() * 100));
-    m_panDial->setToolTip("Pan");
-    m_panDial->setFixedSize(28, 28);
-    connect(m_panDial, &QDial::sliderPressed, this,
-            [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
-    connect(m_panDial, &QDial::valueChanged, this,
-            [this](int v) { m_track->pan.store(v / 100.0f, std::memory_order_relaxed); });
-    connect(m_panDial, &QDial::sliderReleased, this, [this]() {
-        if (m_commandStack && m_dragBeforeState) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Pan Track"));
-        }
-        m_dragBeforeState.reset();
-    });
-    headerLayout->addWidget(m_panDial, 2, 0);
-
-    m_volumeSlider = new QSlider(Qt::Horizontal, header);
-    m_volumeSlider->setRange(0, 200);
-    m_volumeSlider->setValue(static_cast<int>(m_track->volume.load() * 100));
-    m_volumeSlider->setToolTip("Volume");
-    m_volumeSlider->setFixedHeight(16);
-    connect(m_volumeSlider, &QSlider::sliderPressed, this,
-            [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
-    connect(m_volumeSlider, &QSlider::valueChanged, this,
-            [this](int v) { m_track->volume.store(v / 100.0f, std::memory_order_relaxed); });
-    connect(m_volumeSlider, &QSlider::sliderReleased, this, [this]() {
-        if (m_commandStack && m_dragBeforeState) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Volume"));
-        }
-        m_dragBeforeState.reset();
-    });
-    headerLayout->addWidget(m_volumeSlider, 2, 1, 1, 3);
-
-    // Aux send: post-fader tap to a Bus track. Buses don't send to other
-    // buses, so a Bus track's own row skips this control entirely.
-    if (m_track->kind != TrackKind::Bus) {
-        m_sendBusCombo = new QComboBox(header);
-        m_sendBusCombo->addItem("No Send", QString());
-        m_sendBusCombo->setToolTip("Send to Bus");
-        connect(m_sendBusCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-            TrackState before = TrackState::capture(*m_track);
-            m_track->setSendBusId(QUuid(m_sendBusCombo->itemData(index).toString()));
-            if (m_commandStack) {
-                m_commandStack->push(std::make_unique<TrackStateCommand>(
-                    m_track, before, TrackState::capture(*m_track), "Change Track Send"));
-            }
-        });
-        headerLayout->addWidget(m_sendBusCombo, 3, 0, 1, 2);
-
-        m_sendLevelSlider = new QSlider(Qt::Horizontal, header);
-        m_sendLevelSlider->setRange(0, 100);
-        m_sendLevelSlider->setValue(static_cast<int>(m_track->sendLevel.load() * 100));
-        m_sendLevelSlider->setToolTip("Send Level");
-        m_sendLevelSlider->setFixedHeight(16);
-        connect(m_sendLevelSlider, &QSlider::sliderPressed, this,
-                [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
-        connect(m_sendLevelSlider, &QSlider::valueChanged, this, [this](int v) {
-            m_track->sendLevel.store(v / 100.0f, std::memory_order_relaxed);
-        });
-        connect(m_sendLevelSlider, &QSlider::sliderReleased, this, [this]() {
-            if (m_commandStack && m_dragBeforeState) {
-                m_commandStack->push(std::make_unique<TrackStateCommand>(
-                    m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Send Level"));
-            }
-            m_dragBeforeState.reset();
-        });
-        headerLayout->addWidget(m_sendLevelSlider, 3, 2, 1, 2);
-    }
+    headerLayout->addWidget(m_sourceCombo, 1, 1, 1, 2);
 
     rowLayout->addWidget(header);
 
@@ -300,27 +207,6 @@ void TrackRowWidget::setLaneScrollOffset(int64_t sampleOffset) {
 }
 
 void TrackRowWidget::refreshTakeLanes() { rebuildTakeLanes(); }
-
-void TrackRowWidget::refreshSendBusOptions(const std::vector<std::shared_ptr<Track>>& busTracks) {
-    if (!m_sendBusCombo) return; // this row's own track is a Bus; no send control
-
-    QString currentId = m_track->sendBusId().toString();
-    m_sendBusCombo->blockSignals(true);
-    m_sendBusCombo->clear();
-    m_sendBusCombo->addItem("No Send", QString());
-    int selectIndex = 0;
-    for (auto& bus : busTracks) {
-        QString id = bus->id.toString();
-        m_sendBusCombo->addItem(bus->name, id);
-        if (id == currentId) selectIndex = m_sendBusCombo->count() - 1;
-    }
-    m_sendBusCombo->setCurrentIndex(selectIndex);
-    m_sendBusCombo->blockSignals(false);
-    // The bus the track was sending to may no longer exist (removed):
-    // reflect that back onto the track itself rather than leaving it
-    // silently pointing at a stale id.
-    if (selectIndex == 0 && !currentId.isEmpty()) m_track->setSendBusId(QUuid());
-}
 
 void TrackRowWidget::rebuildTakeLanes() {
     for (auto* w : m_takeLaneWidgets) {

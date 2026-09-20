@@ -51,8 +51,6 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     row->clipLane()->setSharedTimelineLength(m_lastTimelineLength);
     row->clipLane()->setContentExtentSamples(m_lastContentExtentSamples);
     row->clipLane()->setPlayheadSample(m_lastPlayheadSample);
-
-    refreshSendBusOptions();
 }
 
 void TimelineView::removeTrack(const QUuid& trackId) {
@@ -63,16 +61,6 @@ void TimelineView::removeTrack(const QUuid& trackId) {
     m_layout->removeWidget(it->second);
     it->second->deleteLater();
     m_rows.erase(it);
-
-    refreshSendBusOptions();
-}
-
-void TimelineView::refreshSendBusOptions() {
-    std::vector<std::shared_ptr<Track>> busTracks;
-    for (auto& [id, row] : m_rows) {
-        if (row->track()->kind == TrackKind::Bus) busTracks.push_back(row->track());
-    }
-    for (auto& [id, row] : m_rows) row->refreshSendBusOptions(busTracks);
 }
 
 void TimelineView::clear() {

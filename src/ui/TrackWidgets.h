@@ -2,15 +2,11 @@
 
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDial>
 #include <QLabel>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QSlider>
 #include <QWidget>
 #include <memory>
-#include <optional>
-
 #include <vector>
 
 #include "command/CommandStack.h"
@@ -50,11 +46,6 @@ public:
     // recording) and rebuilds the expandable take-lane widgets. Call after
     // any punch/loop recording finishes or is undone/redone.
     void refreshTakeLanes();
-    // Repopulates the send-bus dropdown with the current set of Bus tracks
-    // in the session (called by TimelineView whenever a track is added or
-    // removed), preserving this track's current selection if it's still
-    // present. No-op for a Bus track's own row (buses don't send).
-    void refreshSendBusOptions(const std::vector<std::shared_ptr<Track>>& busTracks);
 
 signals:
     void selected(std::shared_ptr<Track> track);
@@ -74,15 +65,9 @@ private:
 
     std::shared_ptr<Track> m_track;
     QRadioButton* m_selectButton = nullptr;
-    QCheckBox* m_muteBox = nullptr;
-    QCheckBox* m_soloBox = nullptr;
     QCheckBox* m_armBox = nullptr;
     QComboBox* m_sourceCombo = nullptr;
     QPushButton* m_effectsButton = nullptr;
-    QDial* m_panDial = nullptr;
-    QSlider* m_volumeSlider = nullptr;
-    QComboBox* m_sendBusCombo = nullptr;
-    QSlider* m_sendLevelSlider = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
     QScrollBar* m_laneScrollBar = nullptr;
     QPushButton* m_takesToggleButton = nullptr;
@@ -92,9 +77,6 @@ private:
     QPushButton* m_automationToggleButton = nullptr;
     AutomationLaneWidget* m_automationLane = nullptr;
     CommandStack* m_commandStack = nullptr;
-    // Captured on press for the pan dial / volume slider so a whole drag
-    // gesture becomes one undo step instead of one per intermediate value.
-    std::optional<TrackState> m_dragBeforeState;
 };
 
 } // namespace rsd

@@ -33,9 +33,6 @@ public:
     void setContentExtentSamples(int64_t samples);
     void setPlayheadSample(int64_t sample);
     void clearSelectionOn(const QUuid& trackId);
-    // Repopulates every row's send-bus dropdown from the current set of
-    // Bus tracks. Call after any track add/remove/rename/kind change.
-    void refreshSendBusOptions();
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);
