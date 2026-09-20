@@ -10,6 +10,7 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <functional>
 
 #include "command/EditCommands.h"
@@ -194,10 +195,15 @@ void EffectsPopoverWidget::showMasterAt(MasterBus* masterBus, QRect globalAnchor
 
 void EffectsPopoverWidget::repositionAndResize() {
     QRect available = this->screen() ? this->screen()->availableGeometry() : QRect(0, 0, 1920, 1080);
-    // Leave room for the popup's own header/add-row chrome plus some
-    // breathing room from the screen edges, so a fully-expanded chain can
-    // grow to fill most of the screen without scrolling.
-    m_scroll->setMaximumHeight(available.height() - 80);
+    // QScrollArea::sizeHint() doesn't grow with its contents, so relying on
+    // adjustSize() alone never actually resizes the popup as effects are
+    // added or removed. Instead, size the scroll area to fit its contents
+    // directly (up to the available screen height, minus room for the
+    // popup's own header/add-row chrome and some breathing room from the
+    // screen edges), then adjustSize() the popup around that.
+    int maxScrollHeight = available.height() - 80;
+    int desiredScrollHeight = m_slotsContainer->sizeHint().height();
+    m_scroll->setFixedHeight(std::min(desiredScrollHeight, maxScrollHeight));
     adjustSize();
     move(computePopoverPosition(m_anchorGlobalRect, sizeHint(), available));
 }
