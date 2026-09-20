@@ -217,10 +217,7 @@ MainWindow::MainWindow(QWidget* parent)
     toolbar->addWidget(m_masterVolumeSlider);
     m_masterFxButton = new QPushButton("Master FX", this);
     m_masterFxButton->setToolTip("Show effects for the master bus");
-    connect(m_masterFxButton, &QPushButton::clicked, this, [this]() {
-        m_effectsRack->setMasterBus(&m_session->masterBus);
-        m_effectsDock->raise();
-    });
+    connect(m_masterFxButton, &QPushButton::clicked, this, &MainWindow::onMasterEffectsPanelRequested);
     toolbar->addWidget(m_masterFxButton);
     toolbar->addSeparator();
     toolbar->addAction(m_zoomInAction);
@@ -312,7 +309,9 @@ MainWindow::MainWindow(QWidget* parent)
     m_effectsRack->setSampleRate(m_session->sampleRate);
     connect(m_effectsRack, &EffectsRackPanel::effectCountChanged, this,
             [this](std::shared_ptr<Track> track) {
-                if (track) m_timeline->refreshTrackEffectsButton(track->id);
+                if (!track) return;
+                m_timeline->refreshTrackEffectsButton(track->id);
+                m_mixer->refreshTrackEffectsButton(track->id);
             });
     m_effectsDock->setWidget(m_effectsRack);
     addDockWidget(Qt::RightDockWidgetArea, m_effectsDock);
@@ -343,6 +342,17 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::RightDockWidgetArea, loopBrowserDock);
     tabifyDockWidget(mediaDock, loopBrowserDock);
 
+    auto* mixerDock = new QDockWidget("Mixer", this);
+    m_mixer = new MixerPanel(mixerDock);
+    m_mixer->setCommandStack(&m_commandStack);
+    m_mixer->setMasterBus(&m_session->masterBus);
+    connect(m_mixer, &MixerPanel::trackSelected, this, &MainWindow::onTrackSelected);
+    connect(m_mixer, &MixerPanel::effectsPanelRequested, this, &MainWindow::onEffectsPanelRequested);
+    connect(m_mixer, &MixerPanel::masterEffectsPanelRequested, this,
+            &MainWindow::onMasterEffectsPanelRequested);
+    mixerDock->setWidget(m_mixer);
+    addDockWidget(Qt::BottomDockWidgetArea, mixerDock);
+
     // Each dock's built-in toggleViewAction stays in sync automatically
     // (checked/unchecked) whether it's hidden from here or via the dock's
     // own close button, so no extra state tracking is needed.
@@ -352,6 +362,7 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(m_instrumentDock->toggleViewAction());
     viewMenu->addAction(m_pianoRollDock->toggleViewAction());
     viewMenu->addAction(loopBrowserDock->toggleViewAction());
+    viewMenu->addAction(mixerDock->toggleViewAction());
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -431,6 +442,7 @@ void MainWindow::onAddTrackClicked() {
     track->name = QString("Track %1").arg(m_trackCounter);
     m_commandStack.push(std::make_unique<AddTrackCommand>(m_session.get(), track));
     m_timeline->addTrack(track);
+    m_mixer->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
     updateStatusLabel();
     refreshMasterAndScale();
@@ -444,6 +456,7 @@ void MainWindow::onAddInstrumentTrackClicked() {
     track->name = QString("Instrument %1").arg(m_trackCounter);
     m_commandStack.push(std::make_unique<AddTrackCommand>(m_session.get(), track));
     m_timeline->addTrack(track);
+    m_mixer->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
     updateStatusLabel();
     refreshMasterAndScale();
@@ -457,6 +470,7 @@ void MainWindow::onAddBusTrackClicked() {
     track->name = QString("Bus %1").arg(m_busCounter);
     m_commandStack.push(std::make_unique<AddTrackCommand>(m_session.get(), track));
     m_timeline->addTrack(track);
+    m_mixer->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
     updateStatusLabel();
     refreshMasterAndScale();
@@ -474,6 +488,7 @@ void MainWindow::onRemoveTrackClicked() {
     size_t index = static_cast<size_t>(std::distance(m_session->tracks.begin(), it));
     m_commandStack.push(std::make_unique<RemoveTrackCommand>(m_session.get(), *it, index));
     m_timeline->removeTrack(idToRemove);
+    m_mixer->removeTrack(idToRemove);
     m_activeTrack = m_session->tracks.empty() ? nullptr : m_session->tracks.front();
     updateStatusLabel();
     refreshMasterAndScale();
@@ -520,6 +535,11 @@ void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track>) {
     // Track selection already happened via the row's own "Active" radio
     // button (TrackRowWidget checks it before emitting this signal); just
     // bring the (possibly tabbed-behind) effects dock to the front.
+    m_effectsDock->raise();
+}
+
+void MainWindow::onMasterEffectsPanelRequested() {
+    m_effectsRack->setMasterBus(&m_session->masterBus);
     m_effectsDock->raise();
 }
 
@@ -1097,15 +1117,18 @@ void MainWindow::rebuildRecentSessionsMenu() {
 
 void MainWindow::rebuildTimelineFromSession() {
     m_timeline->clear();
+    m_mixer->clear();
     m_activeTrack.reset();
     m_trackWithClipSelection.reset();
     m_deleteClipAction->setEnabled(false);
     m_pianoRollPanel->setBpm(m_session->bpm);
     m_pianoRollPanel->setSampleRate(m_session->sampleRate);
+    m_mixer->setMasterBus(&m_session->masterBus);
 
     m_trackCounter = 0;
     for (auto& track : m_session->tracks) {
         m_timeline->addTrack(track);
+        m_mixer->addTrack(track);
         if (!m_activeTrack) m_activeTrack = track;
         ++m_trackCounter;
     }

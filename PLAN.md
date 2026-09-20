@@ -30,9 +30,9 @@ without relying on chat history. Update status as items complete.
 9. [x] Loop/sample library browser
 10. [x] Export/bounce with format + stems options
 11. [x] Multi-source input: mic + system audio (loopback) recorded to separate tracks (Linux/PulseAudio)
-12. [ ] Mixer view: dockable strip at the bottom with a vertical fader, pan,
+12. [x] Mixer view: dockable strip at the bottom with a vertical fader, pan,
     mute/solo, and effect slots per track (Pro Tools/Ableton-style), toggled
-    via a new View menu
+    via the View menu
 
 ## Completed: Clip-level gain handle (trim/fade already existed)
 
@@ -674,6 +674,69 @@ Verification plan (approved):
       played back live; confirm 16-bit vs 32-bit float files both open
       correctly in another tool; confirm stems open individually and
       sum (roughly) back to the full mix.
+
+## Completed: Mixer view
+
+Goal (feature #12): a bottom-docked strip of per-track mixer channels
+(Pro Tools/Ableton-style) as an alternate, side-by-side view of the same
+controls already on each track row header — no new audio logic, purely a
+second UI surface over already-tested state (`TrackState`/
+`TrackStateCommand`, `panToGains`, effect counts). Approved: strips include
+aux-send controls too, matching the track row header exactly (not a
+subset).
+
+Design (approved):
+- [x] New `ui/MixerStripWidget` (one per Audio/Instrument/Bus track):
+      vertical `QSlider` (volume), `QDial` (pan), Mute/Solo checkboxes, an
+      FX button (reused `formatEffectsButtonLabel`, opens/raises the
+      effects rack like the track row's own FX button), and — for non-Bus
+      tracks — a send-bus dropdown + level slider. Wired the same way
+      `TrackWidgets.cpp` wires its header controls: mutate the atomic
+      live during a drag, push one `TrackStateCommand` (before/after
+      snapshot) on release/change. Duplicated wiring rather than a shared
+      base class with `TrackRowWidget` — consistent with this codebase's
+      existing per-widget-owns-its-wiring style, and the two controls
+      sets are laid out too differently (horizontal compact row vs.
+      vertical strip) to share much beyond copy-pasted signal plumbing.
+- [x] New `ui/MixerPanel` (dockable): a horizontal, scrollable row of
+      `MixerStripWidget`s (one per session track, in track order) plus a
+      fixed Master strip (master volume fader + a "Master FX" button
+      reusing `EffectsRackPanel::setMasterBus`). Mirrors `TimelineView`'s
+      `addTrack()`/`removeTrack()`/`clear()`/`refreshSendBusOptions()`
+      interface, driven from the exact same `MainWindow` call sites so
+      the two per-track widget collections (timeline rows, mixer strips)
+      never drift out of sync.
+- [x] `MainWindow`: new "Mixer" dock, `Qt::BottomDockWidgetArea`, added to
+      the existing View menu's toggle list (the View menu already exists
+      from the virtual-instruments feature — no new menu needed).
+      `EffectsRackPanel::effectCountChanged` also refreshes the matching
+      mixer strip's FX label, not just the track row's. The toolbar's
+      "Master FX" button and the mixer's own Master FX button both now
+      call one shared `MainWindow::onMasterEffectsPanelRequested()`
+      instead of duplicating that 3-line lambda.
+- Known v1 limitation (not asked, flagging for review): clicking a mixer
+  strip's FX button sets that track Active (via the same
+  `onTrackSelected` the timeline row's radio button uses) but doesn't
+  visually check that track's "Active" radio button back on the timeline
+  row — the two views' notion of "selected" only syncs one direction.
+  Cosmetic only; every actual control (fader/pan/mute/solo/send/FX
+  content) stays fully in sync both ways.
+
+Verification plan (approved):
+- [x] Automated: none new, as planned — this feature adds no new logic,
+      only UI composition over `TrackState`/`TrackStateCommand`/
+      `panToGains`, already covered by `test_EditCommands.cpp`/
+      `test_PanLawMath.cpp`. Full suite (25/25 binaries) still passes
+      unchanged.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full
+      timeout under a real X display, no crash/error output) with the
+      Mixer dock, master strip, and initial track's strip all
+      constructed at startup.
+- [ ] Full manual (needs real interaction, not done from this session):
+      dragging a mixer strip's fader/pan/send updates the matching track
+      row header (and vice versa); mute/solo/FX-click behave identically
+      from either view; undo/redo of a mixer-strip edit works; adding/
+      removing a track keeps both views in sync.
 
 ## Notes
 

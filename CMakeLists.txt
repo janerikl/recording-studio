@@ -42,6 +42,8 @@ add_executable(recording_studio
     src/ui/AutomationLaneWidget.cpp
     src/ui/LoopBrowserPanel.cpp
     src/ui/ExportDialog.cpp
+    src/ui/MixerStripWidget.cpp
+    src/ui/MixerPanel.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)

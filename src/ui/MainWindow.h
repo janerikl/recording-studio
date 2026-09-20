@@ -30,6 +30,7 @@
 #include "ui/PianoRollPanel.h"
 #include "ui/LoopBrowserPanel.h"
 #include "ui/ExportDialog.h"
+#include "ui/MixerPanel.h"
 
 #include <unordered_map>
 
@@ -64,6 +65,7 @@ private slots:
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
     void onEffectsPanelRequested(std::shared_ptr<Track> track);
+    void onMasterEffectsPanelRequested();
     void onInstrumentNoteOn(int pitch, float velocity);
     void onInstrumentNoteOff(int pitch);
     void onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take);
@@ -176,6 +178,7 @@ private:
     QDockWidget* m_instrumentDock = nullptr;
     PianoRollPanel* m_pianoRollPanel = nullptr;
     LoopBrowserPanel* m_loopBrowser = nullptr;
+    MixerPanel* m_mixer = nullptr;
     QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
