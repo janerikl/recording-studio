@@ -11,10 +11,11 @@
 namespace rsd {
 
 namespace {
-// Header is laid out as a compact 3-row grid so the whole row can be as
-// short as the waveform lane (kLaneHeight in ClipLaneWidget.cpp) instead of
-// the tall single-column stack this used to be.
-constexpr int kHeaderWidth = 360;
+// The header used to need 360px to fit a full channel-strip's worth of
+// controls in one row; now that those live only on the mixer strip (see
+// MixerStripWidget), it's just Name/Active/Takes/Auto stacked two rows
+// tall over two columns — narrower, freeing width for the waveform lane.
+constexpr int kHeaderWidth = 160;
 } // namespace
 
 TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
@@ -34,13 +35,13 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     header->setFixedWidth(kHeaderWidth);
 
     auto* nameLabel = new QLabel(m_track->name, header);
-    headerLayout->addWidget(nameLabel, 0, 0, 1, 2);
+    headerLayout->addWidget(nameLabel, 0, 0);
 
     m_selectButton = new QRadioButton("Active", header);
     connect(m_selectButton, &QRadioButton::toggled, this, [this](bool checked) {
         if (checked) emit selected(m_track);
     });
-    headerLayout->addWidget(m_selectButton, 0, 2, 1, 2);
+    headerLayout->addWidget(m_selectButton, 0, 1);
 
     // Shows/hides the stacked take lanes captured by the most recent
     // punch/loop recording (see rebuildTakeLanes()). Disabled when the
@@ -52,7 +53,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     connect(m_takesToggleButton, &QPushButton::toggled, this, [this](bool checked) {
         if (m_takeLanesContainer) m_takeLanesContainer->setVisible(checked);
     });
-    headerLayout->addWidget(m_takesToggleButton, 0, 4);
+    headerLayout->addWidget(m_takesToggleButton, 1, 0);
 
     // Shows/hides this track's automation curve lane (volume/pan), always
     // available (unlike Takes, not gated on any prior recording).
@@ -61,7 +62,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_automationToggleButton->setCheckable(true);
     connect(m_automationToggleButton, &QPushButton::toggled, this,
             [this](bool checked) { m_automationLane->setVisible(checked); });
-    headerLayout->addWidget(m_automationToggleButton, 0, 5);
+    headerLayout->addWidget(m_automationToggleButton, 1, 1);
 
     // Mute/Solo/Pan/Volume/Send/Arm/input-source/FX all now live only on
     // the Mixer panel's strip for this track (see MixerStripWidget) —

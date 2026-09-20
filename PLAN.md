@@ -799,6 +799,19 @@ Name/Active/Takes/Auto.
   (25/25 binaries) still passes. Smoke-tested: app builds and launches
   cleanly.
 
+## Completed: Restacked the (now much smaller) track row header
+
+Follow-up: with the header down to just Name/Active/Takes/Auto, the old
+360px single-row layout left a lot of empty horizontal space. Restacked
+into a 2x2 grid (Name/Active on row 1, Takes/Auto on row 2) and shrank
+`kHeaderWidth` from 360 to 160, giving the waveform lane more width.
+
+- [x] `TrackWidgets.cpp`: regridded the four remaining controls into two
+      rows of two columns instead of one row of four/six columns.
+- Automated: none new (pure layout change, no logic change); full suite
+  (25/25 binaries) still passes. Smoke-tested: app builds and launches
+  cleanly.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.
