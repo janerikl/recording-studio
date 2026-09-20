@@ -84,6 +84,49 @@ private slots:
         for (float v : out) QCOMPARE(v, 0.25f);
     }
 
+    void mixSessionBlockUpdatesPerTrackPostFaderPeaks() {
+        Session session;
+        auto track = makeTrackWithClip(0.5f, 100);
+        track->pan.store(0.0f);
+        session.tracks.push_back(track);
+
+        SessionMixScratch scratch;
+        std::vector<float> out(100 * 2, 0.0f);
+        mixSessionBlock(session, 48000, 2, 0, 100, true, out.data(), scratch);
+
+        // Unity volume, center pan: post-fader peak matches the dry sample.
+        QCOMPARE(track->postFaderPeakL.load(), 0.5f);
+        QCOMPARE(track->postFaderPeakR.load(), 0.5f);
+    }
+
+    void mixSessionBlockScalesPerTrackPeakByVolume() {
+        Session session;
+        auto track = makeTrackWithClip(0.5f, 100);
+        track->volume.store(0.5f);
+        session.tracks.push_back(track);
+
+        SessionMixScratch scratch;
+        std::vector<float> out(100 * 2, 0.0f);
+        mixSessionBlock(session, 48000, 2, 0, 100, true, out.data(), scratch);
+
+        QCOMPARE(track->postFaderPeakL.load(), 0.25f);
+        QCOMPARE(track->postFaderPeakR.load(), 0.25f);
+    }
+
+    void mixSessionBlockZeroesPeakForMutedTrack() {
+        Session session;
+        auto track = makeTrackWithClip(0.5f, 100);
+        track->muted.store(true);
+        session.tracks.push_back(track);
+
+        SessionMixScratch scratch;
+        std::vector<float> out(100 * 2, 0.0f);
+        mixSessionBlock(session, 48000, 2, 0, 100, true, out.data(), scratch);
+
+        QCOMPARE(track->postFaderPeakL.load(), 0.0f);
+        QCOMPARE(track->postFaderPeakR.load(), 0.0f);
+    }
+
     void renderTrackBlockExcludesSendAndMasterProcessing() {
         Session session;
         auto bus = std::make_shared<Track>();

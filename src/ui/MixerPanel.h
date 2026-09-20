@@ -36,6 +36,9 @@ public:
     void clear();
     void refreshTrackEffectsButton(const QUuid& trackId);
     void refreshSendBusOptions();
+    // Polls every strip's post-fader peak into its meter. Call from the same
+    // timer that drives the transport toolbar's global input/output meters.
+    void updateMeters();
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);

@@ -66,6 +66,13 @@ public:
     // this class (m_clips etc.) — nullptr means "no send".
     std::atomic<float> sendLevel{0.0f};
 
+    // Post-fader (post volume/pan) peak level for this track's most recently
+    // mixed block, written by mixSessionBlock and polled by the UI's meter
+    // timer (see MainWindow::updateMeters). Not decayed/smoothed here —
+    // that's the meter widget's job, same as the existing global meters.
+    std::atomic<float> postFaderPeakL{0.0f};
+    std::atomic<float> postFaderPeakR{0.0f};
+
     QUuid sendBusId() const {
         auto id = m_sendBusId.load();
         return id ? *id : QUuid();

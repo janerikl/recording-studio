@@ -115,4 +115,8 @@ void MixerPanel::refreshSendBusOptions() {
     for (auto& [id, strip] : m_strips) strip->refreshSendBusOptions(busTracks);
 }
 
+void MixerPanel::updateMeters() {
+    for (auto& [id, strip] : m_strips) strip->updateMeter();
+}
+
 } // namespace rsd

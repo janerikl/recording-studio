@@ -1,5 +1,6 @@
 #include "MixerStripWidget.h"
 
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
 #include "ui/TrackEffectsLabel.h"
@@ -8,7 +9,7 @@ namespace rsd {
 
 MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
-    setFixedWidth(70);
+    setFixedWidth(90);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(2, 4, 2, 4);
     layout->setSpacing(2);
@@ -89,7 +90,14 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
         }
         m_dragBeforeState.reset();
     });
-    layout->addWidget(m_volumeSlider, 1, Qt::AlignHCenter);
+    m_levelMeter = new LevelMeterWidget(LevelMeterWidget::Orientation::Vertical, this);
+    m_levelMeter->setFixedHeight(120); // matches m_volumeSlider's fixed height above
+
+    auto* faderRow = new QHBoxLayout();
+    faderRow->setSpacing(4);
+    faderRow->addWidget(m_volumeSlider);
+    faderRow->addWidget(m_levelMeter);
+    layout->addLayout(faderRow, 1);
 
     m_muteBox = new QCheckBox("Mute", this);
     m_muteBox->setChecked(m_track->muted.load());
@@ -149,6 +157,11 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
         });
         layout->addWidget(m_sendLevelSlider);
     }
+}
+
+void MixerStripWidget::updateMeter() {
+    m_levelMeter->setLevels(m_track->postFaderPeakL.load(std::memory_order_relaxed),
+                             m_track->postFaderPeakR.load(std::memory_order_relaxed));
 }
 
 void MixerStripWidget::refreshEffectsButton() {

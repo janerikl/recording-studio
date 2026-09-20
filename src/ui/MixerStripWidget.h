@@ -14,6 +14,7 @@
 #include "command/CommandStack.h"
 #include "command/EditCommands.h"
 #include "model/Track.h"
+#include "ui/LevelMeterWidget.h"
 
 namespace rsd {
 
@@ -39,6 +40,10 @@ public:
     // Repopulates the send-bus dropdown with the current set of Bus
     // tracks; no-op for a Bus track's own strip (buses don't send).
     void refreshSendBusOptions(const std::vector<std::shared_ptr<Track>>& busTracks);
+    // Polls this track's post-fader peak atomics into the strip's meter.
+    // Call periodically from the same timer that drives the transport
+    // toolbar's global meters.
+    void updateMeter();
 
 signals:
     void selected(std::shared_ptr<Track> track);
@@ -56,6 +61,7 @@ private:
     QComboBox* m_sourceCombo = nullptr;
     QDial* m_panDial = nullptr;
     QSlider* m_volumeSlider = nullptr;
+    LevelMeterWidget* m_levelMeter = nullptr;
     QComboBox* m_sendBusCombo = nullptr;
     QSlider* m_sendLevelSlider = nullptr;
 

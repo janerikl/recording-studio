@@ -1,6 +1,7 @@
 #include "SessionMixer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include "AutomationMath.h"
@@ -125,9 +126,26 @@ void mixSessionBlock(Session& session, unsigned int sampleRate, unsigned int cha
         bool soloed = track->soloed.load(std::memory_order_relaxed);
         bool muted = track->muted.load(std::memory_order_relaxed);
         bool audible = anySoloed ? soloed : !muted;
-        if (!audible) continue;
+        if (!audible) {
+            track->postFaderPeakL.store(0.0f, std::memory_order_relaxed);
+            track->postFaderPeakR.store(0.0f, std::memory_order_relaxed);
+            continue;
+        }
 
         renderTrackBlock(*track, sampleRate, channels, pos, nFrames, playbackActive, trackBuf);
+
+        // Post-fader peak for the UI's per-track meter: trackBuf already has
+        // this track's volume/pan applied by renderTrackBlock above.
+        {
+            float peakL = 0.0f, peakR = 0.0f;
+            for (size_t i = 0; i < needed; ++i) {
+                float mag = std::fabs(trackBuf[i]);
+                if (i % channels == 0) peakL = std::max(peakL, mag);
+                else peakR = std::max(peakR, mag);
+            }
+            track->postFaderPeakL.store(peakL, std::memory_order_relaxed);
+            track->postFaderPeakR.store(peakR, std::memory_order_relaxed);
+        }
 
         // Aux send: post-fader tap into a bus track's aux buffer, in
         // addition to this track's own contribution to the master mix.
@@ -155,7 +173,11 @@ void mixSessionBlock(Session& session, unsigned int sampleRate, unsigned int cha
         bool soloed = track->soloed.load(std::memory_order_relaxed);
         bool muted = track->muted.load(std::memory_order_relaxed);
         bool audible = anySoloed ? soloed : !muted;
-        if (!audible) continue;
+        if (!audible) {
+            track->postFaderPeakL.store(0.0f, std::memory_order_relaxed);
+            track->postFaderPeakR.store(0.0f, std::memory_order_relaxed);
+            continue;
+        }
 
         float* busBuf = scratch.busScratch[track->id].data();
 
@@ -166,12 +188,18 @@ void mixSessionBlock(Session& session, unsigned int sampleRate, unsigned int cha
         float pan = track->pan.load(std::memory_order_relaxed);
         auto [gainL, gainR] = panToGains(volume, pan);
 
+        float peakL = 0.0f, peakR = 0.0f;
         for (unsigned int i = 0; i < nFrames; ++i) {
             for (unsigned int ch = 0; ch < channels; ++ch) {
                 float g = (ch % 2 == 0) ? gainL : gainR;
-                masterAccum[i * channels + ch] += busBuf[i * channels + ch] * g;
+                float sample = busBuf[i * channels + ch] * g;
+                masterAccum[i * channels + ch] += sample;
+                if (ch % 2 == 0) peakL = std::max(peakL, std::fabs(sample));
+                else peakR = std::max(peakR, std::fabs(sample));
             }
         }
+        track->postFaderPeakL.store(peakL, std::memory_order_relaxed);
+        track->postFaderPeakR.store(peakR, std::memory_order_relaxed);
     }
 
     // Master bus: final effects chain + volume, then write to output.

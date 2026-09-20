@@ -833,6 +833,7 @@ void MainWindow::updatePlayhead() {
 void MainWindow::updateMeters() {
     m_inputMeter->setLevels(m_engine->inputPeakL(), m_engine->inputPeakR());
     m_outputMeter->setLevels(m_engine->outputPeakL(), m_engine->outputPeakR());
+    m_mixer->updateMeters();
 }
 
 void MainWindow::onZoomInClicked() {
