@@ -351,30 +351,9 @@ void EffectsPopoverWidget::rebuild() {
         headerLayout->addWidget(removeButton);
         boxLayout->addWidget(headerRow);
 
-        // Params start collapsed to keep the popover compact; "Edit" reveals
-        // them in place.
-        auto* paramsContainer = new QWidget;
-        auto* paramsLayout = new QVBoxLayout(paramsContainer);
-        paramsLayout->setContentsMargins(0, 0, 0, 0);
-        addParamControls(paramsLayout, effect, m_commandStack);
-        paramsContainer->setVisible(false);
-        paramsContainer->setObjectName("paramsContainer");
-
-        auto* expandButton = new QPushButton("Edit");
-        expandButton->setCheckable(true);
-        connect(expandButton, &QPushButton::toggled, this,
-                [this, paramsContainer, expandButton](bool checked) {
-                    paramsContainer->setVisible(checked);
-                    expandButton->setText(checked ? "Hide" : "Edit");
-                    // Grow (or shrink back) the popup so the newly
-                    // revealed/hidden params are visible without scrolling,
-                    // repositioning if the new size would run off-screen.
-                    repositionAndResize();
-                });
-        // Insert before the stretch/remove so header keeps its layout order.
-        headerLayout->insertWidget(headerLayout->count() - 1, expandButton);
-
-        boxLayout->addWidget(paramsContainer);
+        // Params are shown immediately (no expand/collapse step) so the
+        // whole chain is editable as soon as the popover opens.
+        addParamControls(boxLayout, effect, m_commandStack);
 
         m_slotsLayout->insertWidget(static_cast<int>(i), box);
     }

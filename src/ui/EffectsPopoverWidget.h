@@ -18,8 +18,8 @@ namespace rsd {
 
 // Small popup shown next to a mixer strip's FX button, in place of the old
 // docked EffectsRackPanel. Same effect-chain editing (add/remove/reorder/
-// bypass/params) as the dock had, but each effect's parameters start
-// collapsed to keep the popup compact; a per-effect toggle expands them.
+// bypass/params) as the dock had; every effect's parameters are shown
+// immediately, no extra click needed to reveal them.
 //
 // Lives as Qt::Popup: shows near the button that requested it and closes
 // itself on an outside click, so callers just position + show() it rather
