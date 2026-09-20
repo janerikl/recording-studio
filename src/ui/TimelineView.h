@@ -24,6 +24,9 @@ public:
     void addTrack(std::shared_ptr<Track> track);
     void removeTrack(const QUuid& trackId);
     void setCommandStack(CommandStack* stack);
+    // Forwarded to every row's ClipLaneWidget, for its gridlines (see
+    // ClipLaneWidget::setSampleRate).
+    void setSampleRate(int sampleRate);
     void clear(); // remove all rows, e.g. before loading a new session
     void refreshTrackWaveform(const QUuid& trackId);
     void refreshTrackTakeLanes(const QUuid& trackId);
@@ -64,6 +67,7 @@ private:
     int64_t m_lastPlayheadSample = 0;
     TrackRowWidget* m_highlightedRow = nullptr;
     CommandStack* m_commandStack = nullptr;
+    int m_sampleRate = 48000;
 };
 
 } // namespace rsd

@@ -13,6 +13,7 @@
 #include <QToolTip>
 #include <QWheelEvent>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 #include "command/EditCommands.h"
@@ -21,6 +22,7 @@
 #include "ui/MediaLibraryPanel.h"
 #include "ui/MidiNoteDisplayMath.h"
 #include "ui/TimelineScaleMath.h"
+#include "ui/TimelineTicks.h"
 #include "ui/WaveformDisplayMath.h"
 #include "waveform/WaveformCache.h"
 
@@ -157,9 +159,33 @@ void ClipLaneWidget::paintMidiNotes(QPainter& painter) {
     }
 }
 
+void ClipLaneWidget::paintGridLines(QPainter& painter) {
+    int64_t total = effectiveTimelineLength();
+    if (total <= 0 || m_sampleRate <= 0 || width() <= 0) return;
+
+    double totalSeconds = static_cast<double>(total) / m_sampleRate;
+    double tickSeconds = niceTickSeconds(totalSeconds, width());
+
+    int64_t offset = effectiveScrollOffset();
+    double offsetSeconds = static_cast<double>(offset) / m_sampleRate;
+    // Start from the tick at/just before the visible window so gridlines
+    // stay anchored to absolute time as this lane is scrolled, rather than
+    // always starting a fresh tick at the left edge.
+    double startSeconds = std::floor(offsetSeconds / tickSeconds) * tickSeconds;
+
+    painter.setPen(QColor(55, 55, 55));
+    for (double t = startSeconds; t <= offsetSeconds + totalSeconds; t += tickSeconds) {
+        if (t < 0) continue;
+        int x = sampleToX(static_cast<int64_t>(t * m_sampleRate));
+        if (x < 0 || x > width()) continue;
+        painter.drawLine(x, 0, x, height());
+    }
+}
+
 void ClipLaneWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(30, 30, 30));
+    paintGridLines(painter);
 
     if (m_track->kind == TrackKind::Instrument) {
         paintMidiNotes(painter);

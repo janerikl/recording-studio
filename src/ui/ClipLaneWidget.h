@@ -42,6 +42,13 @@ public:
     // out of alignment with each other.
     void setSharedTimelineLength(int64_t samples);
     void setPlayheadSample(int64_t sample);
+    // Needed only to label/space the background gridlines matching the
+    // ruler's tick marks (see paintGridLines()); doesn't affect any
+    // sample<->pixel math elsewhere in this widget.
+    void setSampleRate(int sampleRate) {
+        m_sampleRate = sampleRate;
+        update();
+    }
 
     // Horizontal scroll support (only meaningful once zoomed in past what
     // fits in the widget's width). Scrolling is per-track by default; the
@@ -88,6 +95,9 @@ signals:
 
 protected:
     void paintMidiNotes(QPainter& painter); // Instrument tracks: view-only note rectangles
+    // Vertical gridlines at the same tick spacing as TimeRulerWidget, so a
+    // track's clips can be visually lined up against the ruler's time marks.
+    void paintGridLines(QPainter& painter);
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -129,6 +139,7 @@ private:
     float m_dragOrigGain = 1.0f;
     int64_t m_dragTotalSamples = 0; // timeline scale locked at drag start
 
+    int m_sampleRate = 48000; // only used to convert gridline tick seconds to samples
     int64_t m_sharedTimelineLength = 0; // 0 = not set, fall back to local computation
     int64_t m_playheadSample = -1;      // -1 = hidden
     bool m_scrubbingPlayhead = false;

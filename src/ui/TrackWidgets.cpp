@@ -13,14 +13,6 @@
 
 namespace rsd {
 
-namespace {
-// The header used to need 360px to fit a full channel-strip's worth of
-// controls in one row; now that those live only on the mixer strip (see
-// MixerStripWidget), it's just Name/Active/Takes/Auto stacked two rows
-// tall over two columns — narrower, freeing width for the waveform lane.
-constexpr int kHeaderWidth = 160;
-} // namespace
-
 TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
     setAttribute(Qt::WA_StyledBackground, true); // so setDropHighlight's stylesheet actually paints
@@ -30,11 +22,16 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     // new per-track scrollbar), rows would balloon to fill the window.
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* rowLayout = new QHBoxLayout(this);
+    // Qt's default style margins/spacing here would silently add to
+    // kTrackLaneLeftMargin, throwing off the ruler/master-waveform
+    // alignment that assumes the clip lane starts at exactly that offset.
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(0);
 
     // Fixed color accent per TrackKind (Audio/Instrument/Bus), so a track's
     // type is visible at a glance without opening its controls.
     auto* kindStripe = new QFrame(this);
-    kindStripe->setFixedWidth(4);
+    kindStripe->setFixedWidth(kTrackKindStripeWidth);
     kindStripe->setFrameShape(QFrame::NoFrame);
     kindStripe->setAutoFillBackground(true);
     QPalette stripePalette = kindStripe->palette();
@@ -42,11 +39,15 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     kindStripe->setPalette(stripePalette);
     rowLayout->addWidget(kindStripe);
 
+    // The header used to need 360px to fit a full channel-strip's worth of
+    // controls in one row; now that those live only on the mixer strip (see
+    // MixerStripWidget), it's just Name/Active/Takes/Auto stacked two rows
+    // tall over two columns — narrower, freeing width for the waveform lane.
     auto* header = new QWidget(this);
     auto* headerLayout = new QGridLayout(header);
     headerLayout->setContentsMargins(4, 2, 4, 2);
     headerLayout->setSpacing(2);
-    header->setFixedWidth(kHeaderWidth);
+    header->setFixedWidth(kTrackHeaderWidth);
 
     auto* nameLabel = new QLabel(m_track->name, header);
     headerLayout->addWidget(nameLabel, 0, 0);

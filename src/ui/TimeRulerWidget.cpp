@@ -7,6 +7,8 @@
 #include <cmath>
 #include <iterator>
 
+#include "ui/TimelineTicks.h"
+
 namespace rsd {
 
 TimeRulerWidget::TimeRulerWidget(QWidget* parent) : QWidget(parent) {
@@ -38,17 +40,8 @@ void TimeRulerWidget::paintEvent(QPaintEvent*) {
     double totalSeconds = static_cast<double>(m_timelineLength) / std::max(1, m_sampleRate);
     if (totalSeconds <= 0) return;
 
-    // Choose a "nice" tick spacing (in seconds) aiming for ~80px between ticks.
     int lw = laneWidth();
-    double targetPxPerTick = 80.0;
-    double secondsPerPixel = totalSeconds / std::max(1, lw);
-    double rawTickSeconds = targetPxPerTick * secondsPerPixel;
-
-    static const double niceSteps[] = {0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300};
-    double tickSeconds = niceSteps[std::size(niceSteps) - 1];
-    for (double step : niceSteps) {
-        if (step >= rawTickSeconds) { tickSeconds = step; break; }
-    }
+    double tickSeconds = niceTickSeconds(totalSeconds, lw);
 
     painter.setPen(QColor(150, 150, 150));
     for (double t = 0; t <= totalSeconds; t += tickSeconds) {

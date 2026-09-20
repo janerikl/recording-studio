@@ -250,6 +250,10 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_ruler = new TimeRulerWidget(central);
     m_ruler->setSampleRate(m_session->sampleRate);
+    // Same left offset as a track row's clip lane (kind stripe + header), so
+    // the ruler's ticks/playhead/punch region line up with every track's
+    // clips instead of assuming their own, independently-hardcoded margin.
+    m_ruler->setLeftMargin(kTrackLaneLeftMargin);
     connect(m_ruler, &TimeRulerWidget::seekRequested, this, &MainWindow::onSeekRequested);
     connect(m_ruler, &TimeRulerWidget::punchRegionEdited, this,
             &MainWindow::onPunchRegionEditedOnRuler);
@@ -260,6 +264,8 @@ MainWindow::MainWindow(QWidget* parent)
     // a live oscilloscope), via refreshMasterAndScale().
     m_masterWaveform = new WaveformWidget(central);
     m_masterWaveform->setFixedHeight(80);
+    m_masterWaveform->setLeftMargin(kTrackLaneLeftMargin);
+    m_masterWaveform->setSampleRate(m_session->sampleRate);
     layout->addWidget(m_masterWaveform);
 
     m_timeline = new TimelineView(central);
@@ -269,6 +275,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_timeline, &TimelineView::seekRequested, this, &MainWindow::onSeekRequested);
     connect(m_timeline, &TimelineView::clipMovedToTrack, this, &MainWindow::onClipMovedToTrack);
     m_timeline->setCommandStack(&m_commandStack);
+    m_timeline->setSampleRate(m_session->sampleRate);
     connect(m_timeline, &TimelineView::mediaDroppedOnTrack, this,
             &MainWindow::onMediaDroppedOnTrack);
     connect(m_timeline, &TimelineView::externalFileDroppedOnTrack, this,
@@ -991,6 +998,8 @@ void MainWindow::onSettingsClicked() {
     // for a rate chosen before recording; a caveat for changing mid-session.
     m_session->sampleRate = static_cast<int>(dialog.chosenSampleRate());
     m_ruler->setSampleRate(m_session->sampleRate);
+    m_masterWaveform->setSampleRate(m_session->sampleRate);
+    m_timeline->setSampleRate(m_session->sampleRate);
     refreshMasterAndScale();
 
     m_recordAction->setEnabled(true);
@@ -1024,6 +1033,9 @@ bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessag
     m_commandStack.clear();
     updateUndoRedoButtons();
     m_effectsPopover->setSampleRate(m_session->sampleRate);
+    m_ruler->setSampleRate(m_session->sampleRate);
+    m_masterWaveform->setSampleRate(m_session->sampleRate);
+    m_timeline->setSampleRate(m_session->sampleRate);
 
     m_mediaLibrary->resetLibrary();
     for (auto& entry : libraryEntries) {

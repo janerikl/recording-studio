@@ -19,6 +19,15 @@ class QVBoxLayout;
 
 namespace rsd {
 
+// How far a track row's clip lane starts from the row's own left edge
+// (kind-color stripe + name/controls header). TimeRulerWidget and the
+// master WaveformWidget are given this same value as their left margin so
+// their tick marks/waveform line up with every track's clips instead of
+// each computing its own, independent offset.
+inline constexpr int kTrackKindStripeWidth = 4;
+inline constexpr int kTrackHeaderWidth = 160;
+inline constexpr int kTrackLaneLeftMargin = kTrackKindStripeWidth + kTrackHeaderWidth;
+
 // One row in the timeline: track header controls (name, mute/solo/arm,
 // select-for-record/import) plus that track's editable clip lane.
 class TrackRowWidget : public QWidget {

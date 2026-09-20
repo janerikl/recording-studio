@@ -1,10 +1,18 @@
 #include "TimelineView.h"
 
+#include <QFrame>
+
 namespace rsd {
 
 TimelineView::TimelineView(QWidget* parent) : QScrollArea(parent) {
+    // A frame/border here, or non-zero margins on m_layout, would offset
+    // every row's clip lane relative to the ruler/master waveform above
+    // (see kTrackLaneLeftMargin) — this scroll area's viewport must start
+    // flush at x = 0 like they do.
+    setFrameShape(QFrame::NoFrame);
     m_content = new QWidget(this);
     m_layout = new QVBoxLayout(m_content);
+    m_layout->setContentsMargins(0, 0, 0, 0);
     m_layout->addStretch();
 
     setWidget(m_content);
@@ -18,9 +26,15 @@ void TimelineView::setCommandStack(CommandStack* stack) {
     for (auto& [id, row] : m_rows) row->setCommandStack(stack);
 }
 
+void TimelineView::setSampleRate(int sampleRate) {
+    m_sampleRate = sampleRate;
+    for (auto& [id, row] : m_rows) row->clipLane()->setSampleRate(sampleRate);
+}
+
 void TimelineView::addTrack(std::shared_ptr<Track> track) {
     auto* row = new TrackRowWidget(track, m_content);
     row->setCommandStack(m_commandStack);
+    row->clipLane()->setSampleRate(m_sampleRate);
     connect(row, &TrackRowWidget::selected, this, &TimelineView::trackSelected);
     connect(row, &TrackRowWidget::clipSelectionChanged, this, &TimelineView::clipSelectionChanged);
     connect(row->clipLane(), &ClipLaneWidget::seekRequested, this, &TimelineView::seekRequested);

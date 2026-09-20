@@ -86,6 +86,11 @@ target_include_directories(popover_positioning_tests PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(popover_positioning_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME PopoverPositioningTests COMMAND popover_positioning_tests)
 
+add_executable(timeline_ticks_tests test_TimelineTicks.cpp)
+target_include_directories(timeline_ticks_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(timeline_ticks_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME TimelineTicksTests COMMAND timeline_ticks_tests)
+
 add_executable(clip_lane_scroll_math_tests test_ClipLaneScrollMath.cpp)
 target_include_directories(clip_lane_scroll_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(clip_lane_scroll_math_tests PRIVATE Qt6::Core Qt6::Test)
