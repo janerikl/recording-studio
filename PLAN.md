@@ -28,7 +28,7 @@ without relying on chat history. Update status as items complete.
 8. [x] Bus routing / sends (aux tracks, submixes) — v1: aux sends + master
     bus, including master-effects UI, see below
 9. [x] Loop/sample library browser
-10. [ ] Export/bounce with format + stems options
+10. [x] Export/bounce with format + stems options
 11. [x] Multi-source input: mic + system audio (loopback) recorded to separate tracks (Linux/PulseAudio)
 12. [ ] Mixer view: dockable strip at the bottom with a vertical fader, pan,
     mute/solo, and effect slots per track (Pro Tools/Ableton-style), toggled
@@ -575,6 +575,105 @@ Verification plan (approved):
       app restart; dragging a plain file from an OS file manager straight
       onto a track (the prerequisite fix) also works, not just from the
       new browser panel.
+
+## Completed: Export/bounce with format + stems options
+
+Goal (feature #10). Research found the existing export path
+(`MainWindow::onExportClicked` → `renderTrackToBuffer`/
+`renderSessionToBuffer`) predates effects/automation/bus-routing:
+`renderSessionToBuffer` only applies static volume/pan, skipping effects,
+automation curves, bus sends, and the master bus entirely — a bounce
+sounds nothing like real playback. Approved (asked first): fix this as
+part of the feature rather than layering format/stems on top of the
+broken mixdown.
+
+Scope decisions (approved):
+- Stems: full mixdown + optional per-track stems (Audio/Instrument tracks
+  only, not Bus tracks) in v1. No per-bus stems yet.
+- Formats: WAV only, 32-bit float or 16-bit PCM (both via libsndfile
+  flags already available, no new dependency). No FLAC/OGG in v1.
+
+Pragmatic defaults (not asked, flagging here for review): stems render
+every non-Bus track unconditionally, ignoring current mute/solo state
+(a "give me all the raw components" export) — only the *full mixdown*
+respects mute/solo, matching real playback. Export length = last
+clip/MIDI-note end across the session; a long effect tail (reverb/delay)
+past that point gets cut off (same limitation the old code had).
+
+Design (approved):
+- [x] `Synth.h::SynthEngine` gains a `reset()` (all voices inactive) so
+      export starts from deterministic silence regardless of any
+      in-progress live audition state.
+- [x] New `audio/SessionMixer.h/.cpp` (not header-only pure math like
+      `PanLawMath`/`BusMixMath` — this is a full subsystem, tested at the
+      integration level instead): extracts the exact per-block mixing
+      logic that used to be inline in `AudioEngine::rtCallback` (track
+      clips/synth → effects → automation-ramped volume/pan → bus aux
+      accumulation → bus effects/volume → master effects/volume) into
+      `mixSessionBlock(Session&, sampleRate, channels, pos, nFrames,
+      playbackActive, out, SessionMixScratch&)`, callable with no RtAudio
+      stream running at all. A `renderTrackBlock()` helper factors out
+      just the per-track processing step so a per-track stem render is a
+      one-line wrapper around it (skips bus/master mixing entirely, per
+      the stems scope decision above) instead of a second, duplicated
+      mixing path.
+- [x] `AudioEngine::rtCallback` refactored to call `mixSessionBlock()`
+      instead of its own inline copy of this logic — same behavior,
+      no duplication between playback and export (its 3 scratch-buffer
+      members collapsed into one `SessionMixScratch`). Preview audition
+      (loop-browser click-to-hear) stays AudioEngine-only, mixed onto
+      `out` *after* `mixSessionBlock()` writes it — scaled by the master
+      volume (for consistent loudness) but not master effects, so
+      auditioning isn't colored by e.g. a master reverb.
+- [x] New `audio/OfflineRenderer.h/.cpp`: `sessionContentLengthSamples()`
+      (latest clip/MIDI-note end across the session) plus
+      `renderSessionMixdown()`/`renderTrackStem()`, which drive
+      `mixSessionBlock()`/`renderTrackBlock()` block-by-block (1024-frame
+      internal blocks) from sample 0 to that length into an in-memory
+      `AudioBuffer`, no audio device needed. `MainWindow` calls this on
+      the GUI thread after stopping any live playback first
+      (`onStopClicked()`) and resetting every track's `SynthEngine`, so
+      there's no concurrent access to track state from a live RT
+      callback.
+- [x] `AudioFileIO::writeFile` gains a format parameter
+      (`ExportFormat::Wav32Float` / `Wav16Pcm`, mapped to
+      `SF_FORMAT_WAV | SF_FORMAT_FLOAT` / `SF_FORMAT_WAV | SF_FORMAT_PCM_16`)
+      — the actual `sf_writef_float()` write call is unchanged; libsndfile
+      handles the float→int16 conversion internally for the PCM_16 case.
+- [x] New `ExportDialog` (format radio buttons + "Also export stems"
+      checkbox), shown before the existing save-file dialog.
+      `onExportClicked` now bounces the full session (the old "export
+      active track only" behavior — and its `renderTrackToBuffer` helper
+      — is gone; a single track's stem is just one of the per-track stem
+      files now). Stems are written alongside the chosen mixdown path as
+      `<name> - <trackname>.wav`. Note: `renderTrackToBuffer`'s sibling,
+      `renderSessionToBuffer` (the static volume/pan-only render), is
+      intentionally left as-is — it's also used for the master waveform
+      overview widget, a cheap visual-only render that doesn't need full
+      mixing fidelity.
+
+Verification plan (approved):
+- [x] Automated (written first): `tests/test_SessionMixer.cpp` (5 cases,
+      real `Session`/`Track`/`Clip` objects, no mocking) covering: a dry
+      track at unity volume/pan passes its clip through unchanged; a
+      muted track is silent; an aux send scales into its bus's output on
+      top of the direct contribution; the master volume scales the final
+      block; `renderTrackBlock()` for a stem excludes send/master
+      processing. `tests/test_OfflineRenderer.cpp` (4 cases) covers
+      `sessionContentLengthSamples()` and the block-splitting loop across
+      an internal block boundary for both the mixdown and a stem. Full
+      suite (25/25 binaries) passes, including all pre-existing
+      bus-routing/automation/effects tests unchanged after the
+      `rtCallback` refactor.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full
+      timeout under a real X display, no crash/error output) with the
+      new Export dialog wired in.
+- [ ] Full manual (needs real interaction, not done from this session):
+      export a session with an effect, an automation curve, and a bus
+      send, and confirm by ear that the exported WAV matches what
+      played back live; confirm 16-bit vs 32-bit float files both open
+      correctly in another tool; confirm stems open individually and
+      sum (roughly) back to the full mix.
 
 ## Notes
 

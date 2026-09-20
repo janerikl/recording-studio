@@ -30,11 +30,11 @@ std::shared_ptr<AudioBuffer> AudioFileIO::loadFile(const QString& path) {
     return buffer;
 }
 
-bool AudioFileIO::writeFile(const QString& path, const AudioBuffer& buffer) {
+bool AudioFileIO::writeFile(const QString& path, const AudioBuffer& buffer, ExportFormat format) {
     SF_INFO info{};
     info.samplerate = buffer.sampleRate;
     info.channels = buffer.channels;
-    info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+    info.format = SF_FORMAT_WAV | (format == ExportFormat::Wav16Pcm ? SF_FORMAT_PCM_16 : SF_FORMAT_FLOAT);
 
     SNDFILE* file = sf_open(path.toUtf8().constData(), SFM_WRITE, &info);
     if (!file) {

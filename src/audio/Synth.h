@@ -151,6 +151,13 @@ public:
         }
     }
 
+    // Silences every voice immediately (no release tail). Used before an
+    // offline render starts, so export begins from deterministic silence
+    // regardless of any in-progress live audition.
+    void reset() {
+        m_voices = std::array<SynthVoice, kMaxVoices>();
+    }
+
 private:
     std::array<SynthVoice, kMaxVoices> m_voices;
 };

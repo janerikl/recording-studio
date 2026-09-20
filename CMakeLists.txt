@@ -18,6 +18,8 @@ add_executable(recording_studio
     src/audio/AudioEngine.cpp
     src/audio/Mixer.cpp
     src/audio/Effects.cpp
+    src/audio/SessionMixer.cpp
+    src/audio/OfflineRenderer.cpp
     src/command/CommandStack.cpp
     src/io/AudioFileIO.cpp
     src/io/SessionIO.cpp
@@ -39,6 +41,7 @@ add_executable(recording_studio
     src/ui/PianoRollPanel.cpp
     src/ui/AutomationLaneWidget.cpp
     src/ui/LoopBrowserPanel.cpp
+    src/ui/ExportDialog.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)

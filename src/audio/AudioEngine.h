@@ -10,6 +10,7 @@
 
 #include "PunchRecorder.h"
 #include "RingBuffer.h"
+#include "SessionMixer.h"
 #include "TransportClock.h"
 #include "model/Clip.h"
 #include "model/Session.h"
@@ -125,20 +126,12 @@ private:
     RingBuffer<float> m_captureRing{48000 * 2 * 10}; // 10s headroom at 48kHz stereo
     PunchRecorder m_punchRecorder;
     std::shared_ptr<Track> m_recordTarget;
-    // Per-track mixdown scratch space, reused every callback so effect
-    // processing never allocates on the audio thread. Sized generously
-    // above any realistic (buffer frames * channels) the stream will open
-    // with (512-frame stereo blocks in practice).
-    std::vector<float> m_trackScratch = std::vector<float>(8192 * 2, 0.0f);
-    // Master mixdown accumulation buffer: every track's post-fader output
-    // (and every bus track's post-effects output) sums here before the
-    // master bus's own effects/volume apply and the result is written to
-    // the output buffer.
-    std::vector<float> m_masterScratch = std::vector<float>(8192 * 2, 0.0f);
-    // Per-bus aux accumulation buffers, keyed by bus track id, reused across
-    // callbacks. Only grows/inserts when a new bus track is added (a
-    // structural, GUI-thread-driven event), not on every block.
-    std::map<QUuid, std::vector<float>> m_busScratch;
+    // Mixdown scratch space (per-track/master/per-bus buffers), reused
+    // every callback so mixSessionBlock() never allocates on the audio
+    // thread. Sized generously above any realistic (buffer frames *
+    // channels) the stream will open with (512-frame stereo in practice).
+    SessionMixScratch m_mixScratch{std::vector<float>(8192 * 2, 0.0f),
+                                    std::vector<float>(8192 * 2, 0.0f), {}};
 
     // Loop browser audition: an unattached, throwaway Clip (never on any
     // track) wrapping the clicked buffer, played from m_previewPosition

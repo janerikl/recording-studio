@@ -131,6 +131,27 @@ target_include_directories(preview_playback_math_tests PRIVATE ${CMAKE_SOURCE_DI
 target_link_libraries(preview_playback_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME PreviewPlaybackMathTests COMMAND preview_playback_math_tests)
 
+add_executable(session_mixer_tests
+    test_SessionMixer.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/SessionMixer.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/Effects.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/Mixer.cpp
+)
+target_include_directories(session_mixer_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(session_mixer_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME SessionMixerTests COMMAND session_mixer_tests)
+
+add_executable(offline_renderer_tests
+    test_OfflineRenderer.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/OfflineRenderer.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/SessionMixer.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/Effects.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/Mixer.cpp
+)
+target_include_directories(offline_renderer_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(offline_renderer_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME OfflineRendererTests COMMAND offline_renderer_tests)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 

@@ -23,6 +23,7 @@
 #include <QWidget>
 #include <algorithm>
 
+#include "audio/OfflineRenderer.h"
 #include "audio/PanLawMath.h"
 #include "audio/RecordRouting.h"
 #include "command/EditCommands.h"
@@ -904,22 +905,60 @@ void MainWindow::onImportClicked() {
 }
 
 void MainWindow::onExportClicked() {
-    if (!m_activeTrack) {
-        QMessageBox::warning(this, "No Track", "Add a track first.");
+    if (m_session->tracks.empty()) {
+        QMessageBox::warning(this, "No Tracks", "Add a track first.");
         return;
     }
 
-    QString path = QFileDialog::getSaveFileName(this, "Export Active Track", QString(),
-                                                  "WAV Files (*.wav)");
-    if (path.isEmpty()) return;
+    int64_t lengthSamples = sessionContentLengthSamples(*m_session);
+    if (lengthSamples <= 0) {
+        QMessageBox::warning(this, "Nothing to Export", "The session has no recorded content yet.");
+        return;
+    }
 
-    auto rendered = renderTrackToBuffer(*m_activeTrack);
-    if (!AudioFileIO::writeFile(path, *rendered)) {
+    ExportDialog exportDialog(this);
+    if (exportDialog.exec() != QDialog::Accepted) return;
+
+    QString path = QFileDialog::getSaveFileName(this, "Export Mixdown", QString(), "WAV Files (*.wav)");
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".wav", Qt::CaseInsensitive)) path += ".wav";
+
+    // Stop playback/recording first: rendering offline drains the same
+    // per-track live-note queues and mutates the same SynthEngine state
+    // the live RT callback touches, so the two must never run at once.
+    onStopClicked();
+    for (auto& track : m_session->tracks) track->synthEngine.reset();
+
+    ExportFormat format = exportDialog.chosenFormat();
+    auto mixdown = renderSessionMixdown(*m_session, static_cast<unsigned int>(m_session->sampleRate),
+                                         static_cast<unsigned int>(m_session->channels), lengthSamples);
+    if (!AudioFileIO::writeFile(path, *mixdown, format)) {
         QMessageBox::warning(this, "Export Failed", "Could not write: " + path);
         return;
     }
 
-    QMessageBox::information(this, "Export Complete", "Saved to: " + path);
+    QStringList stemPaths;
+    if (exportDialog.exportStems()) {
+        QFileInfo info(path);
+        QString dir = info.absolutePath();
+        QString baseName = info.completeBaseName();
+
+        for (auto& track : m_session->tracks) {
+            if (track->kind == TrackKind::Bus) continue;
+            auto stem = renderTrackStem(*track, static_cast<unsigned int>(m_session->sampleRate),
+                                         static_cast<unsigned int>(m_session->channels), lengthSamples);
+            QString stemPath = dir + "/" + baseName + " - " + track->name + ".wav";
+            if (AudioFileIO::writeFile(stemPath, *stem, format)) {
+                stemPaths.append(stemPath);
+            } else {
+                QMessageBox::warning(this, "Stem Export Failed", "Could not write: " + stemPath);
+            }
+        }
+    }
+
+    QString message = "Saved to: " + path;
+    if (!stemPaths.isEmpty()) message += QString("\n\nPlus %1 stem file(s).").arg(stemPaths.size());
+    QMessageBox::information(this, "Export Complete", message);
 }
 
 void MainWindow::onSaveSessionClicked() {
@@ -1208,37 +1247,6 @@ void MainWindow::onRedoClicked() {
 void MainWindow::updateUndoRedoButtons() {
     m_undoAction->setEnabled(m_commandStack.canUndo());
     m_redoAction->setEnabled(m_commandStack.canRedo());
-}
-
-std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track) const {
-    auto clips = track.clipsSnapshot();
-
-    int64_t totalFrames = 0;
-    for (auto& clip : *clips) {
-        totalFrames = std::max(totalFrames, clip->sessionStartSample + clip->lengthSamples);
-    }
-
-    auto out = std::make_shared<AudioBuffer>();
-    out->channels = m_session->channels;
-    out->sampleRate = m_session->sampleRate;
-    out->samples.assign(static_cast<size_t>(totalFrames) * out->channels, 0.0f);
-
-    for (auto& clip : *clips) {
-        if (clip->muted || !clip->buffer) continue;
-        for (int64_t i = 0; i < clip->lengthSamples; ++i) {
-            int64_t sourceFrame = clip->sourceOffsetSamples + i;
-            if (sourceFrame < 0 || sourceFrame >= clip->buffer->frameCount()) continue;
-            int64_t destFrame = clip->sessionStartSample + i;
-
-            for (int ch = 0; ch < out->channels; ++ch) {
-                int srcCh = ch % clip->buffer->channels;
-                out->samples[destFrame * out->channels + ch] +=
-                    clip->buffer->samples[sourceFrame * clip->buffer->channels + srcCh];
-            }
-        }
-    }
-
-    return out;
 }
 
 std::shared_ptr<AudioBuffer> MainWindow::renderSessionToBuffer() const {

@@ -5,12 +5,10 @@
 #include <cstring>
 #include <iostream>
 
-#include "AutomationMath.h"
 #include "BusMixMath.h"
-#include "Effects.h"
 #include "Mixer.h"
-#include "PanLawMath.h"
 #include "PreviewPlaybackMath.h"
+#include "SessionMixer.h"
 
 namespace rsd {
 
@@ -79,190 +77,26 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     int64_t pos = self->m_transport.positionSamples();
 
     if (self->m_session) {
-        bool anySoloed = false;
-        for (auto& track : self->m_session->tracks) {
-            if (track->soloed.load(std::memory_order_relaxed)) { anySoloed = true; break; }
-        }
+        mixSessionBlock(*self->m_session, self->m_sampleRate, self->m_channels, pos, nFrames,
+                         playbackActive, out, self->m_mixScratch);
 
-        size_t scratchNeeded = static_cast<size_t>(nFrames) * self->m_channels;
-        if (self->m_trackScratch.size() < scratchNeeded) {
-            self->m_trackScratch.resize(scratchNeeded, 0.0f);
-        }
-        float* scratch = self->m_trackScratch.data();
-
-        if (self->m_masterScratch.size() < scratchNeeded) {
-            self->m_masterScratch.resize(scratchNeeded, 0.0f);
-        }
-        float* masterAccum = self->m_masterScratch.data();
-        std::memset(masterAccum, 0, sizeof(float) * scratchNeeded);
-
-        // Zero every bus track's aux accumulation buffer up front so
-        // sends below can accumulate into them in any track order,
-        // regardless of a bus's position in the track list.
-        for (auto& track : self->m_session->tracks) {
-            if (track->kind != TrackKind::Bus) continue;
-            auto& buf = self->m_busScratch[track->id];
-            if (buf.size() < scratchNeeded) buf.resize(scratchNeeded, 0.0f);
-            std::fill(buf.begin(), buf.begin() + static_cast<long>(scratchNeeded), 0.0f);
-        }
-
-        for (auto& track : self->m_session->tracks) {
-            if (track->kind == TrackKind::Bus) continue; // mixed in a second pass below
-
-            // Instrument tracks always drain their live-note queue and
-            // render, even while stopped, so clicking the on-screen
-            // keyboard is audible without needing to hit Play first. Audio
-            // tracks have nothing to do outside actual playback/recording.
-            bool isInstrument = track->kind == TrackKind::Instrument;
-            if (!playbackActive && !isInstrument) continue;
-
-            bool soloed = track->soloed.load(std::memory_order_relaxed);
-            bool muted = track->muted.load(std::memory_order_relaxed);
-            // Solo overrides mute for the soloed track(s); when any track
-            // is soloed, every non-soloed track is implicitly silenced.
-            bool audible = anySoloed ? soloed : !muted;
-            if (!audible) continue;
-
-            std::memset(scratch, 0, sizeof(float) * scratchNeeded);
-
-            if (isInstrument) {
-                NoteEvent ev;
-                while (track->liveNoteEvents.pop(ev)) {
-                    if (ev.noteOn) {
-                        track->synthEngine.noteOn(ev.pitch, ev.velocity,
-                                                   static_cast<float>(self->m_sampleRate));
-                    } else {
-                        track->synthEngine.noteOff(ev.pitch);
-                    }
-                }
-                if (playbackActive) {
-                    // Block-level timing granularity (not sample-accurate):
-                    // a note triggers/releases wherever its start/end lands
-                    // within the current callback block.
-                    auto notes = track->midiClipsSnapshot();
-                    int64_t blockEnd = pos + static_cast<int64_t>(nFrames);
-                    for (auto& note : *notes) {
-                        int64_t noteEnd = note->startSample + note->lengthSamples;
-                        if (note->startSample >= pos && note->startSample < blockEnd) {
-                            track->synthEngine.noteOn(note->pitch, note->velocity,
-                                                       static_cast<float>(self->m_sampleRate));
-                        }
-                        if (noteEnd >= pos && noteEnd < blockEnd) {
-                            track->synthEngine.noteOff(note->pitch);
-                        }
-                    }
-                }
-                track->synthEngine.render(scratch, nFrames, self->m_channels, track->synthParams);
-            } else if (playbackActive) {
-                auto clips = track->clipsSnapshot();
-                for (auto& clip : *clips) {
-                    // Clip gain/fades only here; track gain is applied after
-                    // the effect chain below (post-fader inserts).
-                    mixClipInto(scratch, nFrames, self->m_channels, pos, *clip, 1.0f, 1.0f);
-                }
-            }
-
-            auto effects = track->effectsSnapshot();
-            processEffectChain(*effects, scratch, nFrames, self->m_channels);
-
-            // Volume/pan for this block: an automation curve (if present for
-            // that target) is evaluated at the block's start and end sample
-            // and linearly ramped per-sample across the block, so fast
-            // automation moves don't produce zipper noise. A target with no
-            // lane falls back to the track's static atomic for both ends
-            // (i.e. no ramp — same as before automation existed).
-            float staticVolume = track->volume.load(std::memory_order_relaxed);
-            float staticPan = track->pan.load(std::memory_order_relaxed);
-            auto lanes = track->automationLanesSnapshot();
-            float volumeStart = staticVolume, volumeEnd = staticVolume;
-            float panStart = staticPan, panEnd = staticPan;
-            for (auto& lane : *lanes) {
-                if (lane->points.empty()) continue;
-                if (lane->target == AutomationTarget::Volume) {
-                    volumeStart = evaluateAutomation(lane->points, pos, staticVolume);
-                    volumeEnd = evaluateAutomation(lane->points, pos + nFrames, staticVolume);
-                } else if (lane->target == AutomationTarget::Pan) {
-                    panStart = evaluateAutomation(lane->points, pos, staticPan);
-                    panEnd = evaluateAutomation(lane->points, pos + nFrames, staticPan);
-                }
-            }
-            auto [gainLStart, gainRStart] = panToGains(volumeStart, panStart);
-            auto [gainLEnd, gainREnd] = panToGains(volumeEnd, panEnd);
-
-            // Aux send: post-fader tap into a bus track's aux buffer, in
-            // addition to this track's own contribution to the master mix.
-            QUuid destBusId = track->sendBusId();
-            float sendLevel = track->sendLevel.load(std::memory_order_relaxed);
-            float* sendBuf = nullptr;
-            if (!destBusId.isNull() && sendLevel > 0.0f) {
-                auto it = self->m_busScratch.find(destBusId);
-                if (it != self->m_busScratch.end()) sendBuf = it->second.data();
-            }
-
-            for (unsigned int i = 0; i < nFrames; ++i) {
-                float t = nFrames > 1 ? static_cast<float>(i) / static_cast<float>(nFrames - 1) : 0.0f;
-                float gainL = gainLStart + t * (gainLEnd - gainLStart);
-                float gainR = gainRStart + t * (gainREnd - gainRStart);
-                for (unsigned int ch = 0; ch < self->m_channels; ++ch) {
-                    float g = (ch % 2 == 0) ? gainL : gainR;
-                    float v = scratch[i * self->m_channels + ch] * g;
-                    masterAccum[i * self->m_channels + ch] += v;
-                    if (sendBuf) sendBuf[i * self->m_channels + ch] += applySend(v, sendLevel);
-                }
-            }
-        }
-
-        // Second pass: mix each bus track's accumulated aux buffer (sends
-        // from the first pass) through its own effects chain and
-        // volume/pan, into the master accumulation buffer. Buses never
-        // send to other buses, so processing order between buses doesn't
-        // matter here.
-        for (auto& track : self->m_session->tracks) {
-            if (track->kind != TrackKind::Bus) continue;
-
-            bool soloed = track->soloed.load(std::memory_order_relaxed);
-            bool muted = track->muted.load(std::memory_order_relaxed);
-            bool audible = anySoloed ? soloed : !muted;
-            if (!audible) continue;
-
-            float* busBuf = self->m_busScratch[track->id].data();
-
-            auto effects = track->effectsSnapshot();
-            processEffectChain(*effects, busBuf, nFrames, self->m_channels);
-
-            float volume = track->volume.load(std::memory_order_relaxed);
-            float pan = track->pan.load(std::memory_order_relaxed);
-            auto [gainL, gainR] = panToGains(volume, pan);
-
-            for (unsigned int i = 0; i < nFrames; ++i) {
-                for (unsigned int ch = 0; ch < self->m_channels; ++ch) {
-                    float g = (ch % 2 == 0) ? gainL : gainR;
-                    masterAccum[i * self->m_channels + ch] += busBuf[i * self->m_channels + ch] * g;
-                }
-            }
-        }
-
-        // Loop browser audition: mixed straight into the master buffer,
+        // Loop browser audition: mixed straight onto the final output,
         // independent of transport state/session tracks, one throwaway
         // Clip at a time. Cleared once it plays past its own length.
+        // Scaled by the master volume (but not master effects — auditioning
+        // shouldn't be colored by e.g. a master reverb) so it's leveled
+        // consistently with the rest of the mix.
         auto previewClip = self->m_previewClip.load();
         if (previewClip) {
             int64_t previewPos = self->m_previewPosition.load(std::memory_order_relaxed);
-            mixClipInto(masterAccum, nFrames, self->m_channels, previewPos, *previewClip, 1.0f, 1.0f);
+            float mv = clampMasterVolume(self->m_session->masterBus.volume.load(std::memory_order_relaxed));
+            mixClipInto(out, nFrames, self->m_channels, previewPos, *previewClip, mv, mv);
             previewPos += nFrames;
             if (isPreviewFinished(previewPos, previewClip->lengthSamples)) {
                 self->m_previewClip.store(nullptr);
             } else {
                 self->m_previewPosition.store(previewPos, std::memory_order_relaxed);
             }
-        }
-
-        // Master bus: final effects chain + volume, then write to output.
-        auto masterEffects = self->m_session->masterBus.effectsSnapshot();
-        processEffectChain(*masterEffects, masterAccum, nFrames, self->m_channels);
-        float masterVolume = self->m_session->masterBus.volume.load(std::memory_order_relaxed);
-        for (size_t i = 0; i < scratchNeeded; ++i) {
-            out[i] = applyMasterVolume(masterAccum[i], masterVolume);
         }
     }
 

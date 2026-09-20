@@ -29,6 +29,7 @@
 #include "ui/InstrumentPanel.h"
 #include "ui/PianoRollPanel.h"
 #include "ui/LoopBrowserPanel.h"
+#include "ui/ExportDialog.h"
 
 #include <unordered_map>
 
@@ -96,7 +97,6 @@ private:
     void rebuildRecentSessionsMenu();
     void updateUndoRedoButtons();
     static QIcon recordIcon();
-    std::shared_ptr<AudioBuffer> renderTrackToBuffer(const Track& track) const;
     std::shared_ptr<AudioBuffer> renderSessionToBuffer() const;
 
     std::unique_ptr<AudioEngine> m_engine;
