@@ -5,9 +5,11 @@
 #include <QWidget>
 #include <memory>
 
+class QContextMenuEvent;
 class QDragEnterEvent;
 class QDropEvent;
 
+#include "command/CommandStack.h"
 #include "model/Track.h"
 
 namespace rsd {
@@ -27,6 +29,11 @@ public:
     QUuid selectedClipId() const { return m_selectedClipId; }
     void deleteSelected();
     void clearSelection();
+
+    // Edits made directly in this lane (move/trim/split/delete) push their
+    // own undo command once the CommandStack is set; not required for the
+    // widget to function without undo support.
+    void setCommandStack(CommandStack* stack) { m_commandStack = stack; }
 
     // All track lanes (and the ruler) must agree on the same sample<->pixel
     // scale, otherwise the playhead/ruler and each lane's clips would drift
@@ -58,12 +65,13 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
     bool event(QEvent* event) override; // handles QEvent::ToolTip for per-clip hover info
 
 private:
-    enum class DragMode { None, Move, TrimStart, TrimEnd };
+    enum class DragMode { None, Move, TrimStart, TrimEnd, FadeIn, FadeOut };
 
     int64_t xToSample(int x) const;
     int sampleToX(int64_t sample) const;
@@ -75,6 +83,8 @@ private:
 
     std::shared_ptr<Track> m_track;
     QUuid m_selectedClipId;
+    CommandStack* m_commandStack = nullptr;
+    std::shared_ptr<const Track::ClipList> m_editBeforeSnapshot; // set while a drag/edit is in flight
 
     DragMode m_dragMode = DragMode::None;
     QUuid m_dragClipId;
@@ -82,6 +92,8 @@ private:
     int64_t m_dragOrigStart = 0;
     int64_t m_dragOrigOffset = 0;
     int64_t m_dragOrigLength = 0;
+    int64_t m_dragOrigFadeIn = 0;
+    int64_t m_dragOrigFadeOut = 0;
     int64_t m_dragTotalSamples = 0; // timeline scale locked at drag start
 
     int64_t m_sharedTimelineLength = 0; // 0 = not set, fall back to local computation
@@ -89,6 +101,10 @@ private:
     bool m_scrubbingPlayhead = false;
 
     static constexpr int kEdgeThresholdPx = 10;
+    // A fade handle only grabs the mouse within this many pixels of the top
+    // of the clip, near an edge — below that band, the same edge is a trim
+    // handle instead (checked in that order in mousePressEvent).
+    static constexpr int kFadeHandleBandPx = 14;
 };
 
 } // namespace rsd

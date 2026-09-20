@@ -16,6 +16,8 @@ pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 add_executable(recording_studio
     src/main.cpp
     src/audio/AudioEngine.cpp
+    src/audio/Mixer.cpp
+    src/command/CommandStack.cpp
     src/io/AudioFileIO.cpp
     src/io/SessionIO.cpp
     src/waveform/WaveformCache.cpp
@@ -40,5 +42,6 @@ target_link_libraries(recording_studio PRIVATE
 
 option(BUILD_TESTS "Build unit tests" OFF)
 if(BUILD_TESTS)
+    enable_testing()
     add_subdirectory(tests)
 endif()

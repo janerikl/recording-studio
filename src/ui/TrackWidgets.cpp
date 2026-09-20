@@ -24,18 +24,35 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     headerLayout->addWidget(m_selectButton);
 
     m_muteBox = new QCheckBox("Mute", header);
-    connect(m_muteBox, &QCheckBox::toggled, this,
-            [this](bool checked) { m_track->muted.store(checked, std::memory_order_relaxed); });
+    connect(m_muteBox, &QCheckBox::toggled, this, [this](bool checked) {
+        TrackState before = TrackState::capture(*m_track);
+        m_track->muted.store(checked, std::memory_order_relaxed);
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, before, TrackState::capture(*m_track), "Mute Track"));
+        }
+    });
     headerLayout->addWidget(m_muteBox);
 
     m_soloBox = new QCheckBox("Solo", header);
-    connect(m_soloBox, &QCheckBox::toggled, this,
-            [this](bool checked) { m_track->soloed.store(checked, std::memory_order_relaxed); });
+    connect(m_soloBox, &QCheckBox::toggled, this, [this](bool checked) {
+        TrackState before = TrackState::capture(*m_track);
+        m_track->soloed.store(checked, std::memory_order_relaxed);
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, before, TrackState::capture(*m_track), "Solo Track"));
+        }
+    });
     headerLayout->addWidget(m_soloBox);
 
     m_armBox = new QCheckBox("Rec Arm", header);
     connect(m_armBox, &QCheckBox::toggled, this, [this](bool checked) {
+        TrackState before = TrackState::capture(*m_track);
         m_track->recordArmed.store(checked, std::memory_order_relaxed);
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, before, TrackState::capture(*m_track), "Arm Track"));
+        }
     });
     headerLayout->addWidget(m_armBox);
 
@@ -49,6 +66,8 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_panDial->setValue(0);
     m_panDial->setToolTip("Pan");
     m_panDial->setFixedSize(48, 48);
+    connect(m_panDial, &QDial::sliderPressed, this,
+            [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
     connect(m_panDial, &QDial::valueChanged, this, [this](int v) {
         float p = v / 100.0f;
         float gl = p <= 0 ? 1.0f : 1.0f - p;
@@ -58,6 +77,13 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
         if (m_gainLSlider) m_gainLSlider->setValue(static_cast<int>(gl * 100));
         if (m_gainRSlider) m_gainRSlider->setValue(static_cast<int>(gr * 100));
     });
+    connect(m_panDial, &QDial::sliderReleased, this, [this]() {
+        if (m_commandStack && m_dragBeforeState) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Pan Track"));
+        }
+        m_dragBeforeState.reset();
+    });
     headerLayout->addWidget(new QLabel("Pan", header));
     headerLayout->addWidget(m_panDial);
 
@@ -65,8 +91,17 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_gainLSlider->setRange(0, 200);
     m_gainLSlider->setValue(static_cast<int>(m_track->gainL.load() * 100));
     m_gainLSlider->setToolTip("Gain L");
+    connect(m_gainLSlider, &QSlider::sliderPressed, this,
+            [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
     connect(m_gainLSlider, &QSlider::valueChanged, this,
             [this](int v) { m_track->gainL.store(v / 100.0f, std::memory_order_relaxed); });
+    connect(m_gainLSlider, &QSlider::sliderReleased, this, [this]() {
+        if (m_commandStack && m_dragBeforeState) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Gain L"));
+        }
+        m_dragBeforeState.reset();
+    });
     headerLayout->addWidget(new QLabel("Gain L", header));
     headerLayout->addWidget(m_gainLSlider);
 
@@ -74,8 +109,17 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_gainRSlider->setRange(0, 200);
     m_gainRSlider->setValue(static_cast<int>(m_track->gainR.load() * 100));
     m_gainRSlider->setToolTip("Gain R");
+    connect(m_gainRSlider, &QSlider::sliderPressed, this,
+            [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
     connect(m_gainRSlider, &QSlider::valueChanged, this,
             [this](int v) { m_track->gainR.store(v / 100.0f, std::memory_order_relaxed); });
+    connect(m_gainRSlider, &QSlider::sliderReleased, this, [this]() {
+        if (m_commandStack && m_dragBeforeState) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Gain R"));
+        }
+        m_dragBeforeState.reset();
+    });
     headerLayout->addWidget(new QLabel("Gain R", header));
     headerLayout->addWidget(m_gainRSlider);
 
@@ -89,6 +133,11 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
 
 void TrackRowWidget::setDropHighlight(bool on) {
     setStyleSheet(on ? "background: rgba(120, 180, 255, 40);" : "");
+}
+
+void TrackRowWidget::setCommandStack(CommandStack* stack) {
+    m_commandStack = stack;
+    m_clipLane->setCommandStack(stack);
 }
 
 } // namespace rsd

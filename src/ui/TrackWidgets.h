@@ -7,7 +7,10 @@
 #include <QSlider>
 #include <QWidget>
 #include <memory>
+#include <optional>
 
+#include "command/CommandStack.h"
+#include "command/EditCommands.h"
 #include "model/Track.h"
 #include "ui/ClipLaneWidget.h"
 
@@ -26,6 +29,7 @@ public:
     ClipLaneWidget* clipLane() const { return m_clipLane; }
     void refreshWaveform() { m_clipLane->refresh(); }
     void setDropHighlight(bool on); // visual feedback while a cross-track drag hovers this row
+    void setCommandStack(CommandStack* stack);
 
 signals:
     void selected(std::shared_ptr<Track> track);
@@ -41,6 +45,10 @@ private:
     QSlider* m_gainLSlider = nullptr;
     QSlider* m_gainRSlider = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
+    CommandStack* m_commandStack = nullptr;
+    // Captured on press for the pan dial / gain sliders so a whole drag
+    // gesture becomes one undo step instead of one per intermediate value.
+    std::optional<TrackState> m_dragBeforeState;
 };
 
 } // namespace rsd

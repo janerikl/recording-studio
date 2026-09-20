@@ -23,6 +23,7 @@ public:
 
     void addTrack(std::shared_ptr<Track> track);
     void removeTrack(const QUuid& trackId);
+    void setCommandStack(CommandStack* stack);
     void clear(); // remove all rows, e.g. before loading a new session
     void refreshTrackWaveform(const QUuid& trackId);
     void deleteSelectedClipOn(const QUuid& trackId);
@@ -55,6 +56,7 @@ private:
     int64_t m_lastTimelineLength = 0;
     int64_t m_lastPlayheadSample = 0;
     TrackRowWidget* m_highlightedRow = nullptr;
+    CommandStack* m_commandStack = nullptr;
 };
 
 } // namespace rsd

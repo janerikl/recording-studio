@@ -13,8 +13,14 @@ TimelineView::TimelineView(QWidget* parent) : QScrollArea(parent) {
     m_selectGroup = new QButtonGroup(this);
 }
 
+void TimelineView::setCommandStack(CommandStack* stack) {
+    m_commandStack = stack;
+    for (auto& [id, row] : m_rows) row->setCommandStack(stack);
+}
+
 void TimelineView::addTrack(std::shared_ptr<Track> track) {
     auto* row = new TrackRowWidget(track, m_content);
+    row->setCommandStack(m_commandStack);
     connect(row, &TrackRowWidget::selected, this, &TimelineView::trackSelected);
     connect(row, &TrackRowWidget::clipSelectionChanged, this, &TimelineView::clipSelectionChanged);
     connect(row->clipLane(), &ClipLaneWidget::seekRequested, this, &TimelineView::seekRequested);

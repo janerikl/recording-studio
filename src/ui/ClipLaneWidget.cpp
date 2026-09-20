@@ -1,9 +1,11 @@
 #include "ClipLaneWidget.h"
 
+#include <QContextMenuEvent>
 #include <QDebug>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QHelpEvent>
+#include <QInputDialog>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
@@ -12,6 +14,8 @@
 #include <algorithm>
 #include <cstdlib>
 
+#include "command/EditCommands.h"
+#include "ui/ClipEditMath.h"
 #include "ui/MediaLibraryPanel.h"
 #include "waveform/WaveformCache.h"
 
@@ -164,6 +168,24 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
 
         painter.setPen(QColor(200, 200, 200));
         painter.drawText(x0 + 4, 16, label);
+
+        // Fade triangles: shade the faded-out region so the fade region and
+        // its length are visible without needing to select the clip.
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 0, 0, 110));
+        if (clip->fadeInSamples > 0) {
+            int fadeW = std::max(1, sampleToX(clip->sessionStartSample + clip->fadeInSamples) - x0);
+            QPolygon tri;
+            tri << QPoint(x0, 4) << QPoint(x0 + fadeW, 4) << QPoint(x0, height() - 4);
+            painter.drawPolygon(tri);
+        }
+        if (clip->fadeOutSamples > 0) {
+            int fadeStartX =
+                sampleToX(clip->sessionStartSample + clip->lengthSamples - clip->fadeOutSamples);
+            QPolygon tri;
+            tri << QPoint(fadeStartX, 4) << QPoint(x1, 4) << QPoint(x1, height() - 4);
+            painter.drawPolygon(tri);
+        }
     }
 
     if (m_playheadSample >= 0) {
@@ -195,12 +217,21 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
     m_dragOrigStart = clip->sessionStartSample;
     m_dragOrigOffset = clip->sourceOffsetSamples;
     m_dragOrigLength = clip->lengthSamples;
+    m_dragOrigFadeIn = clip->fadeInSamples;
+    m_dragOrigFadeOut = clip->fadeOutSamples;
     // Lock the timeline scale for the whole gesture — recomputing it from the
     // live (already-edited) clip state on every move causes the scale to
     // shift mid-drag, snowballing tiny mouse movements into huge trims.
     m_dragTotalSamples = timelineLengthSamples();
 
-    if (std::abs(event->pos().x() - x0) <= kEdgeThresholdPx) {
+    bool nearTopBand = event->pos().y() <= 4 + kFadeHandleBandPx;
+    if (nearTopBand && std::abs(event->pos().x() - x0) <= kEdgeThresholdPx) {
+        m_dragMode = DragMode::FadeIn;
+        setCursor(Qt::SizeHorCursor);
+    } else if (nearTopBand && std::abs(event->pos().x() - x1) <= kEdgeThresholdPx) {
+        m_dragMode = DragMode::FadeOut;
+        setCursor(Qt::SizeHorCursor);
+    } else if (std::abs(event->pos().x() - x0) <= kEdgeThresholdPx) {
         m_dragMode = DragMode::TrimStart;
         setCursor(Qt::SizeHorCursor);
     } else if (std::abs(event->pos().x() - x1) <= kEdgeThresholdPx) {
@@ -211,7 +242,8 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
         setCursor(Qt::ClosedHandCursor);
     }
 
-    emit editStarted(); // snapshot the pre-edit state for undo, before any mutation below
+    m_editBeforeSnapshot = m_track->clipsSnapshot(); // pre-edit state, for undo
+    emit editStarted();
     update();
 }
 
@@ -278,6 +310,14 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
         int64_t newLength =
             std::clamp<int64_t>(m_dragOrigLength + deltaSamples, 1, available);
         edited->lengthSamples = newLength;
+    } else if (m_dragMode == DragMode::FadeIn) {
+        // Dragging the top-left handle rightward lengthens the fade-in.
+        edited->fadeInSamples =
+            clampFadeSamples(m_dragOrigFadeIn + deltaSamples, m_dragOrigLength, m_dragOrigFadeOut);
+    } else if (m_dragMode == DragMode::FadeOut) {
+        // Dragging the top-right handle leftward lengthens the fade-out.
+        edited->fadeOutSamples =
+            clampFadeSamples(m_dragOrigFadeOut - deltaSamples, m_dragOrigLength, m_dragOrigFadeIn);
     }
 
     m_track->replaceClip(m_dragClipId, edited);
@@ -289,12 +329,26 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ClipLaneWidget::mouseReleaseEvent(QMouseEvent* event) {
+    bool wasEditing = m_dragMode != DragMode::None;
+
     if (m_dragMode == DragMode::Move) {
         emit clipDropped(m_dragClipId, event->globalPosition().toPoint());
     }
     m_dragMode = DragMode::None;
     m_scrubbingPlayhead = false;
     updateHoverCursor(event->pos());
+
+    // If clipDropped() above reassigned the clip to a different track (the
+    // emit chain runs synchronously), MainWindow::onClipMovedToTrack already
+    // pushed its own command covering both tracks — nothing to push here.
+    auto after = m_track->clipsSnapshot();
+    bool clipStillHere = std::any_of(after->begin(), after->end(),
+                                      [&](const auto& c) { return c->id == m_dragClipId; });
+    if (wasEditing && clipStillHere && m_editBeforeSnapshot && m_commandStack &&
+        after != m_editBeforeSnapshot) {
+        m_commandStack->push(std::make_unique<TrackClipsCommand>(m_track, m_editBeforeSnapshot, after));
+    }
+    m_editBeforeSnapshot.reset();
 }
 
 void ClipLaneWidget::mouseDoubleClickEvent(QMouseEvent* event) {
@@ -302,15 +356,46 @@ void ClipLaneWidget::mouseDoubleClickEvent(QMouseEvent* event) {
     auto clip = findClipAt(sample);
     if (!clip) return;
 
+    auto before = m_track->clipsSnapshot();
     m_track->splitClip(clip->id, sample);
+    if (m_commandStack) {
+        m_commandStack->push(
+            std::make_unique<TrackClipsCommand>(m_track, before, m_track->clipsSnapshot(), "Split Clip"));
+    }
     m_selectedClipId = QUuid();
     emit selectionChanged(false);
     update();
 }
 
+void ClipLaneWidget::contextMenuEvent(QContextMenuEvent* event) {
+    int64_t sample = xToSample(event->pos().x());
+    auto clip = findClipAt(sample);
+    if (!clip) return;
+
+    bool ok = false;
+    double newGain = QInputDialog::getDouble(this, "Clip Gain", "Gain (0.0 - 2.0):", clip->gain, 0.0,
+                                              2.0, 2, &ok);
+    if (!ok) return;
+
+    if (m_commandStack) {
+        m_commandStack->push(std::make_unique<SetClipGainCommand>(m_track, clip->id, clip->gain,
+                                                                    static_cast<float>(newGain)));
+    } else {
+        auto edited = std::make_shared<Clip>(*clip);
+        edited->gain = static_cast<float>(newGain);
+        m_track->replaceClip(clip->id, edited);
+    }
+    update();
+}
+
 void ClipLaneWidget::deleteSelected() {
     if (m_selectedClipId.isNull()) return;
+    auto before = m_track->clipsSnapshot();
     m_track->removeClip(m_selectedClipId);
+    if (m_commandStack) {
+        m_commandStack->push(
+            std::make_unique<TrackClipsCommand>(m_track, before, m_track->clipsSnapshot(), "Delete Clip"));
+    }
     m_selectedClipId = QUuid();
     emit selectionChanged(false);
     update();
