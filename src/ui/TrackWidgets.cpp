@@ -78,36 +78,12 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
             [this](bool checked) { m_automationLane->setVisible(checked); });
     headerLayout->addWidget(m_automationToggleButton, 0, 6);
 
-    // Mute/Solo/Pan/Volume/Send now live only on the Mixer panel's strip
-    // for this track (see MixerStripWidget) — kept here would just be a
-    // duplicate control fighting the same TrackState. Arm and input
-    // source aren't on the mixer strip, so they stay on the row.
-    m_armBox = new QCheckBox("Arm", header);
-    connect(m_armBox, &QCheckBox::toggled, this, [this](bool checked) {
-        TrackState before = TrackState::capture(*m_track);
-        m_track->recordArmed.store(checked, std::memory_order_relaxed);
-        if (m_commandStack) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, before, TrackState::capture(*m_track), "Arm Track"));
-        }
-    });
-    headerLayout->addWidget(m_armBox, 1, 0);
-
-    m_sourceCombo = new QComboBox(header);
-    m_sourceCombo->addItem("Mic", QVariant::fromValue(static_cast<int>(AudioSource::Mic)));
-    m_sourceCombo->addItem("System Audio",
-                            QVariant::fromValue(static_cast<int>(AudioSource::SystemAudio)));
-    m_sourceCombo->setToolTip("Input source");
-    m_sourceCombo->setCurrentIndex(m_track->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
-    connect(m_sourceCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
-        TrackState before = TrackState::capture(*m_track);
-        m_track->inputSource.store(index == 1 ? AudioSource::SystemAudio : AudioSource::Mic);
-        if (m_commandStack) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, before, TrackState::capture(*m_track), "Change Track Input Source"));
-        }
-    });
-    headerLayout->addWidget(m_sourceCombo, 1, 1, 1, 2);
+    // Mute/Solo/Pan/Volume/Send/Arm/input-source all now live only on the
+    // Mixer panel's strip for this track (see MixerStripWidget) — kept
+    // here would just be a duplicate control fighting the same
+    // TrackState. The row keeps only what the mixer doesn't have:
+    // Active selection, FX/Takes/Auto (which toggle lanes/panels, not
+    // just mirror a value).
 
     rowLayout->addWidget(header);
 

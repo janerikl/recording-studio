@@ -52,6 +52,8 @@ private:
     QPushButton* m_effectsButton = nullptr;
     QCheckBox* m_muteBox = nullptr;
     QCheckBox* m_soloBox = nullptr;
+    QCheckBox* m_armBox = nullptr;
+    QComboBox* m_sourceCombo = nullptr;
     QDial* m_panDial = nullptr;
     QSlider* m_volumeSlider = nullptr;
     QComboBox* m_sendBusCombo = nullptr;

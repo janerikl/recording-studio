@@ -28,6 +28,33 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
     });
     layout->addWidget(m_effectsButton);
 
+    m_armBox = new QCheckBox("Arm", this);
+    m_armBox->setChecked(m_track->recordArmed.load());
+    connect(m_armBox, &QCheckBox::toggled, this, [this](bool checked) {
+        TrackState before = TrackState::capture(*m_track);
+        m_track->recordArmed.store(checked, std::memory_order_relaxed);
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, before, TrackState::capture(*m_track), "Arm Track"));
+        }
+    });
+    layout->addWidget(m_armBox);
+
+    m_sourceCombo = new QComboBox(this);
+    m_sourceCombo->addItem("Mic", QVariant::fromValue(static_cast<int>(AudioSource::Mic)));
+    m_sourceCombo->addItem("Sys", QVariant::fromValue(static_cast<int>(AudioSource::SystemAudio)));
+    m_sourceCombo->setToolTip("Input source");
+    m_sourceCombo->setCurrentIndex(m_track->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
+    connect(m_sourceCombo, &QComboBox::currentIndexChanged, this, [this](int index) {
+        TrackState before = TrackState::capture(*m_track);
+        m_track->inputSource.store(index == 1 ? AudioSource::SystemAudio : AudioSource::Mic);
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackStateCommand>(
+                m_track, before, TrackState::capture(*m_track), "Change Track Input Source"));
+        }
+    });
+    layout->addWidget(m_sourceCombo);
+
     m_panDial = new QDial(this);
     m_panDial->setRange(-100, 100);
     m_panDial->setValue(static_cast<int>(m_track->pan.load() * 100));

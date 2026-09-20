@@ -759,6 +759,28 @@ itself, not just mirror a value; FX was kept per the approved choice).
   full suite (25/25 binaries) still passes. Smoke-tested: app builds and
   launches cleanly.
 
+## Completed: Moved Arm + input-source to the mixer strip too
+
+Follow-up: real DAW mixer strips (Pro Tools/Ableton/Logic) put record-arm
+and input selection on the channel strip, not just the track header —
+asked and confirmed. Moved `Arm` checkbox and the Mic/System Audio
+dropdown from `TrackRowWidget` to `MixerStripWidget` (abbreviated
+"System Audio" to "Sys" there to fit the 70px-wide strip). The track row
+header is now just Name/Active/FX/Takes/Auto — everything else lives on
+the mixer strip.
+
+- [x] `TrackRowWidget`: removed `m_armBox`/`m_sourceCombo` and their
+      wiring (now unconditional, ungated on track kind, same as before
+      the move — Bus tracks still get an Arm/source control that's
+      inert in practice, matching pre-existing behavior rather than
+      introducing a new gate).
+- [x] `MixerStripWidget`: added the same two controls, same
+      `TrackStateCommand` wiring pattern as everything else on the
+      strip.
+- Automated: none new (pure UI relocation, no logic change); full suite
+  (25/25 binaries) still passes. Smoke-tested: app builds and launches
+  cleanly.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.

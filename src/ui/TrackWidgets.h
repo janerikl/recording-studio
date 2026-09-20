@@ -1,7 +1,5 @@
 #pragma once
 
-#include <QCheckBox>
-#include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QRadioButton>
@@ -65,8 +63,6 @@ private:
 
     std::shared_ptr<Track> m_track;
     QRadioButton* m_selectButton = nullptr;
-    QCheckBox* m_armBox = nullptr;
-    QComboBox* m_sourceCombo = nullptr;
     QPushButton* m_effectsButton = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
     QScrollBar* m_laneScrollBar = nullptr;
