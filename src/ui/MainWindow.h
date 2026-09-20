@@ -58,6 +58,7 @@ private slots:
     void onSettingsClicked();
     void onAddTrackClicked();
     void onAddInstrumentTrackClicked();
+    void onAddBusTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
     void onEffectsPanelRequested(std::shared_ptr<Track> track);
@@ -136,6 +137,9 @@ private:
     QAction* m_redoAction = nullptr;
     QAction* m_addTrackAction = nullptr;
     QAction* m_addInstrumentTrackAction = nullptr;
+    QAction* m_addBusTrackAction = nullptr;
+    class QSlider* m_masterVolumeSlider = nullptr;
+    class QPushButton* m_masterFxButton = nullptr;
     QAction* m_removeTrackAction = nullptr;
     QAction* m_zoomInAction = nullptr;
     QAction* m_zoomOutAction = nullptr;
@@ -172,6 +176,7 @@ private:
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;
+    int m_busCounter = 0;
 };
 
 } // namespace rsd

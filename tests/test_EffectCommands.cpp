@@ -3,6 +3,7 @@
 #include "audio/Effects.h"
 #include "command/CommandStack.h"
 #include "command/EditCommands.h"
+#include "model/MasterBus.h"
 #include "model/Track.h"
 
 using namespace rsd;
@@ -113,6 +114,32 @@ private slots:
 
         stack.undo();
         QVERIFY(!eq->bypassed.load());
+    }
+
+    void setEffectChainCommandIsUndoableAndRedoableOnAnyHost() {
+        // Same command used for both Track and MasterBus effect chains
+        // (EffectsRackPanel's "master mode") — verified here against a
+        // plain MasterBus, since Track already has its own dedicated
+        // EffectChainCommand covered above.
+        MasterBus bus;
+
+        auto before = bus.effectsSnapshot();
+        auto eq = std::make_shared<EqEffect>();
+        eq->prepare(48000.0);
+        bus.addEffect(eq);
+        auto after = bus.effectsSnapshot();
+
+        CommandStack stack;
+        auto restore = [&bus](std::shared_ptr<const EffectChain> chain) { bus.restoreEffects(chain); };
+        stack.push(std::make_unique<SetEffectChainCommand>(restore, before, after, "Add EQ"));
+        QCOMPARE(bus.effectsSnapshot()->size(), size_t(1));
+
+        stack.undo();
+        QCOMPARE(bus.effectsSnapshot()->size(), size_t(0));
+
+        stack.redo();
+        QCOMPARE(bus.effectsSnapshot()->size(), size_t(1));
+        QCOMPARE(bus.effectsSnapshot()->front()->id, eq->id);
     }
 };
 

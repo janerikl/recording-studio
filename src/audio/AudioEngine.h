@@ -2,7 +2,9 @@
 
 #include <RtAudio.h>
 #include <QString>
+#include <QUuid>
 #include <atomic>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -120,6 +122,15 @@ private:
     // above any realistic (buffer frames * channels) the stream will open
     // with (512-frame stereo blocks in practice).
     std::vector<float> m_trackScratch = std::vector<float>(8192 * 2, 0.0f);
+    // Master mixdown accumulation buffer: every track's post-fader output
+    // (and every bus track's post-effects output) sums here before the
+    // master bus's own effects/volume apply and the result is written to
+    // the output buffer.
+    std::vector<float> m_masterScratch = std::vector<float>(8192 * 2, 0.0f);
+    // Per-bus aux accumulation buffers, keyed by bus track id, reused across
+    // callbacks. Only grows/inserts when a new bus track is added (a
+    // structural, GUI-thread-driven event), not on every block.
+    std::map<QUuid, std::vector<float>> m_busScratch;
 
     std::atomic<float> m_inputPeakL{0.0f};
     std::atomic<float> m_inputPeakR{0.0f};

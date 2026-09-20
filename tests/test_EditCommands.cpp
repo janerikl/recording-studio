@@ -72,6 +72,30 @@ private slots:
         QVERIFY(track->muted.load());
     }
 
+    void trackStateCommandUndoRedoRestoresSend() {
+        auto track = std::make_shared<Track>();
+        auto bus = std::make_shared<Track>();
+        bus->kind = TrackKind::Bus;
+        TrackState before = TrackState::capture(*track);
+
+        track->setSendBusId(bus->id);
+        track->sendLevel.store(0.75f);
+        TrackState after = TrackState::capture(*track);
+
+        CommandStack stack;
+        stack.push(std::make_unique<TrackStateCommand>(track, before, after));
+        QCOMPARE(track->sendBusId(), bus->id);
+        QCOMPARE(track->sendLevel.load(), 0.75f);
+
+        stack.undo();
+        QVERIFY(track->sendBusId().isNull());
+        QCOMPARE(track->sendLevel.load(), 0.0f);
+
+        stack.redo();
+        QCOMPARE(track->sendBusId(), bus->id);
+        QCOMPARE(track->sendLevel.load(), 0.75f);
+    }
+
     void addTrackCommandUndoRedo() {
         Session session;
         auto track = std::make_shared<Track>();

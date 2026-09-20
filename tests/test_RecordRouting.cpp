@@ -35,6 +35,19 @@ private slots:
         QVERIFY(split.systemAudioTracks.empty());
     }
 
+    void filterRecordableTracksKeepsOnlyAudioKind() {
+        auto audio = std::make_shared<Track>();
+        auto instrument = std::make_shared<Track>();
+        instrument->kind = TrackKind::Instrument;
+        auto bus = std::make_shared<Track>();
+        bus->kind = TrackKind::Bus;
+
+        auto recordable = filterRecordableTracks({audio, instrument, bus});
+
+        QCOMPARE(recordable.size(), size_t(1));
+        QCOMPARE(recordable[0], audio);
+    }
+
     void allSystemAudioLeavesMicEmpty() {
         auto sys1 = std::make_shared<Track>();
         sys1->inputSource.store(AudioSource::SystemAudio);

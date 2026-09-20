@@ -5,13 +5,17 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
+#include <QPushButton>
 #include <QSettings>
 #include <QShortcut>
+#include <QSignalBlocker>
+#include <QSlider>
 #include <QStringList>
 #include <QStyle>
 #include <QVBoxLayout>
@@ -76,6 +80,10 @@ MainWindow::MainWindow(QWidget* parent)
         QIcon::fromTheme("list-add-symbolic", style()->standardIcon(QStyle::SP_FileDialogNewFolder)),
         "Add Instrument Track", this);
     m_addInstrumentTrackAction->setToolTip("Add Instrument Track (basic synth, on-screen keyboard)");
+    m_addBusTrackAction = new QAction(
+        QIcon::fromTheme("list-add-symbolic", style()->standardIcon(QStyle::SP_FileDialogNewFolder)),
+        "Add Bus Track", this);
+    m_addBusTrackAction->setToolTip("Add Bus Track (aux send destination, e.g. a shared reverb bus)");
     m_removeTrackAction = new QAction(
         QIcon::fromTheme("list-remove-symbolic", style()->standardIcon(QStyle::SP_TrashIcon)),
         "Remove Track", this);
@@ -128,6 +136,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_addTrackAction, &QAction::triggered, this, &MainWindow::onAddTrackClicked);
     connect(m_addInstrumentTrackAction, &QAction::triggered, this,
             &MainWindow::onAddInstrumentTrackClicked);
+    connect(m_addBusTrackAction, &QAction::triggered, this, &MainWindow::onAddBusTrackClicked);
     connect(m_removeTrackAction, &QAction::triggered, this, &MainWindow::onRemoveTrackClicked);
     connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomInClicked);
     connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOutClicked);
@@ -178,6 +187,7 @@ MainWindow::MainWindow(QWidget* parent)
     editMenu->addSeparator();
     editMenu->addAction(m_addTrackAction);
     editMenu->addAction(m_addInstrumentTrackAction);
+    editMenu->addAction(m_addBusTrackAction);
     editMenu->addAction(m_removeTrackAction);
 
     // --- Toolbar: frequently-used actions as icons, text hidden (tooltip shows on hover) ---
@@ -191,7 +201,26 @@ MainWindow::MainWindow(QWidget* parent)
     toolbar->addSeparator();
     toolbar->addAction(m_addTrackAction);
     toolbar->addAction(m_addInstrumentTrackAction);
+    toolbar->addAction(m_addBusTrackAction);
     toolbar->addAction(m_removeTrackAction);
+    toolbar->addSeparator();
+    toolbar->addWidget(new QLabel("Master", this));
+    m_masterVolumeSlider = new QSlider(Qt::Horizontal, this);
+    m_masterVolumeSlider->setRange(0, 200);
+    m_masterVolumeSlider->setValue(100);
+    m_masterVolumeSlider->setFixedWidth(90);
+    m_masterVolumeSlider->setToolTip("Master Volume");
+    connect(m_masterVolumeSlider, &QSlider::valueChanged, this, [this](int value) {
+        m_session->masterBus.volume.store(static_cast<float>(value) / 100.0f);
+    });
+    toolbar->addWidget(m_masterVolumeSlider);
+    m_masterFxButton = new QPushButton("Master FX", this);
+    m_masterFxButton->setToolTip("Show effects for the master bus");
+    connect(m_masterFxButton, &QPushButton::clicked, this, [this]() {
+        m_effectsRack->setMasterBus(&m_session->masterBus);
+        m_effectsDock->raise();
+    });
+    toolbar->addWidget(m_masterFxButton);
     toolbar->addSeparator();
     toolbar->addAction(m_zoomInAction);
     toolbar->addAction(m_zoomOutAction);
@@ -409,6 +438,19 @@ void MainWindow::onAddInstrumentTrackClicked() {
     updateUndoRedoButtons();
 }
 
+void MainWindow::onAddBusTrackClicked() {
+    ++m_busCounter;
+    auto track = std::make_shared<Track>();
+    track->kind = TrackKind::Bus;
+    track->name = QString("Bus %1").arg(m_busCounter);
+    m_commandStack.push(std::make_unique<AddTrackCommand>(m_session.get(), track));
+    m_timeline->addTrack(track);
+    if (!m_activeTrack) m_activeTrack = track;
+    updateStatusLabel();
+    refreshMasterAndScale();
+    updateUndoRedoButtons();
+}
+
 void MainWindow::onRemoveTrackClicked() {
     if (!m_activeTrack) return;
     auto idToRemove = m_activeTrack->id;
@@ -536,12 +578,9 @@ void MainWindow::onRecordClicked() {
 
     // Instrument tracks don't record from an audio input stream at all —
     // MIDI note capture is handled separately (PianoKeyboardWidget writes
-    // directly into the track's pending notes while armed+recording).
-    std::vector<std::shared_ptr<Track>> armedAudioTracks;
-    for (auto& t : armedTracks) {
-        if (t->kind == TrackKind::Audio) armedAudioTracks.push_back(t);
-    }
-    auto split = splitTracksBySource(armedAudioTracks);
+    // directly into the track's pending notes while armed+recording). Bus
+    // tracks are never recorded to either.
+    auto split = splitTracksBySource(filterRecordableTracks(armedTracks));
     m_recordTargetTracks = split.micTracks;
     m_systemAudioRecordTargetTracks = split.systemAudioTracks;
 
@@ -966,9 +1005,12 @@ void MainWindow::onCloseSessionClicked() {
     onStopClicked(); // stop any playback/recording before discarding session state
 
     m_session->tracks.clear();
+    m_session->masterBus.volume.store(1.0f);
+    m_session->masterBus.restoreEffects(std::make_shared<const EffectChain>());
     m_commandStack.clear();
     updateUndoRedoButtons();
     m_trackCounter = 0;
+    m_busCounter = 0;
     m_mediaLibrary->resetLibrary();
     m_currentSessionPath.clear();
 
@@ -1023,6 +1065,9 @@ void MainWindow::rebuildTimelineFromSession() {
     refreshMasterAndScale();
     updatePlayhead();
     m_effectsRack->setTrack(m_activeTrack);
+
+    QSignalBlocker blocker(m_masterVolumeSlider);
+    m_masterVolumeSlider->setValue(static_cast<int>(m_session->masterBus.volume.load() * 100.0f));
 }
 
 void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId) {

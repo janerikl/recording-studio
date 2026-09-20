@@ -23,9 +23,13 @@ namespace rsd {
 enum class AudioSource { Mic, SystemAudio };
 
 // Audio tracks hold recorded/imported Clips; Instrument tracks hold
-// MidiNotes played through a built-in synth instead. Everything else about
-// a Track (mute/solo/arm/gain/pan/effects) applies the same way to both.
-enum class TrackKind { Audio, Instrument };
+// MidiNotes played through a built-in synth instead. Bus tracks hold
+// neither — they're fed only by other tracks' sends (see sendBusId/
+// sendLevel below) and exist purely for their volume/pan/effects chain
+// (e.g. a shared reverb bus). Everything else about a Track (mute/solo/
+// arm/gain/pan/effects) applies the same way to all three, though Bus
+// tracks are never armed/recorded to.
+enum class TrackKind { Audio, Instrument, Bus };
 
 // Clip list is stored behind an atomic shared_ptr to a const vector so the
 // realtime audio callback can snapshot-read it without locking, while the
@@ -49,6 +53,26 @@ public:
     // exists for that target, falling back to these static atomics).
     std::atomic<float> volume{1.0f};
     std::atomic<float> pan{0.0f};
+
+    // Aux send: post-fader tap of this track's output into a Bus track's
+    // aux buffer, in addition to (not instead of) this track's normal
+    // contribution to the master mix. At most one send per track for v1.
+    // A Bus track's own send is meaningless (buses don't send to other
+    // buses, avoiding any cycle) and is left untouched/ignored by
+    // AudioEngine. Stored as atomic<shared_ptr<const QUuid>> rather than
+    // atomic<QUuid> directly: QUuid is 16 bytes, which isn't lock-free on
+    // this platform's libstdc++/libatomic setup, whereas the
+    // atomic-shared_ptr pattern is already used lock-free elsewhere in
+    // this class (m_clips etc.) — nullptr means "no send".
+    std::atomic<float> sendLevel{0.0f};
+
+    QUuid sendBusId() const {
+        auto id = m_sendBusId.load();
+        return id ? *id : QUuid();
+    }
+    void setSendBusId(const QUuid& id) {
+        m_sendBusId.store(id.isNull() ? nullptr : std::make_shared<const QUuid>(id));
+    }
 
     // Instrument-track only, but harmless to carry on every track. Params
     // are live-tweaked atomics (see Effects.h's Effect for the same
@@ -273,6 +297,7 @@ private:
     std::atomic<std::shared_ptr<const ClipList>> m_takeLanes;
     std::atomic<std::shared_ptr<const MidiNoteList>> m_midiNotes;
     std::atomic<std::shared_ptr<const AutomationLaneList>> m_automationLanes;
+    std::atomic<std::shared_ptr<const QUuid>> m_sendBusId{nullptr};
 };
 
 } // namespace rsd

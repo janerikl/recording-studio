@@ -153,6 +153,52 @@ private slots:
         QVERIFY(qFuzzyCompare(loadedComp->thresholdDb.load(), -12.0f));
         QVERIFY(qFuzzyCompare(loadedComp->ratio.load(), 3.5f));
     }
+
+    void roundTripsBusRoutingAndMasterBus() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        auto bus = session.addTrack("Reverb Bus");
+        bus->kind = TrackKind::Bus;
+        bus->volume.store(0.8f);
+
+        auto track = session.addTrack("T0");
+        track->setSendBusId(bus->id);
+        track->sendLevel.store(0.4f);
+
+        session.masterBus.volume.store(0.9f);
+        auto masterEq = std::make_shared<EqEffect>();
+        masterEq->prepare(48000.0);
+        masterEq->midGainDb.store(2.0f);
+        session.masterBus.addEffect(masterEq);
+
+        QVector<LibraryEntry> emptyLibrary;
+        QVERIFY(SessionIO::saveSession(path, session, emptyLibrary));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loaded.tracks.size(), size_t(2));
+        auto loadedBus = loaded.tracks.at(0);
+        auto loadedTrack = loaded.tracks.at(1);
+
+        QCOMPARE(loadedBus->kind, TrackKind::Bus);
+        QVERIFY(qFuzzyCompare(loadedBus->volume.load(), 0.8f));
+
+        QCOMPARE(loadedTrack->kind, TrackKind::Audio);
+        QCOMPARE(loadedTrack->sendBusId(), bus->id);
+        QVERIFY(qFuzzyCompare(loadedTrack->sendLevel.load(), 0.4f));
+
+        QVERIFY(qFuzzyCompare(loaded.masterBus.volume.load(), 0.9f));
+        auto masterEffects = loaded.masterBus.effectsSnapshot();
+        QCOMPARE(masterEffects->size(), size_t(1));
+        auto loadedMasterEq = std::dynamic_pointer_cast<EqEffect>(masterEffects->at(0));
+        QVERIFY(loadedMasterEq);
+        QVERIFY(qFuzzyCompare(loadedMasterEq->midGainDb.load(), 2.0f));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestSessionIO)

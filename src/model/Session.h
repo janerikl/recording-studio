@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "MasterBus.h"
 #include "Track.h"
 
 namespace rsd {
@@ -15,6 +16,7 @@ public:
     int channels = 2;
     double bpm = 120.0;
     std::vector<std::shared_ptr<Track>> tracks;
+    MasterBus masterBus;
     QString filePath;
     bool dirty = false;
 

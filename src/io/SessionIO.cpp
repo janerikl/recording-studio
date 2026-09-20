@@ -144,10 +144,16 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
         QJsonObject trackJson;
         trackJson["id"] = track->id.toString();
         trackJson["name"] = track->name;
+        trackJson["kind"] = track->kind == TrackKind::Bus       ? "bus"
+                             : track->kind == TrackKind::Instrument ? "instrument"
+                                                                     : "audio";
         trackJson["volume"] = track->volume.load();
         trackJson["pan"] = track->pan.load();
         trackJson["muted"] = track->muted.load();
         trackJson["soloed"] = track->soloed.load();
+        QUuid sendBusId = track->sendBusId();
+        if (!sendBusId.isNull()) trackJson["sendBusId"] = sendBusId.toString();
+        trackJson["sendLevel"] = track->sendLevel.load();
 
         QJsonArray automationLanesJson;
         for (auto& lane : *track->automationLanesSnapshot()) {
@@ -211,6 +217,13 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
         tracksJson.append(trackJson);
     }
     root["tracks"] = tracksJson;
+
+    root["masterVolume"] = session.masterBus.volume.load();
+    QJsonArray masterEffectsJson;
+    for (auto& effect : *session.masterBus.effectsSnapshot()) {
+        masterEffectsJson.append(effectToJson(*effect));
+    }
+    root["masterEffects"] = masterEffectsJson;
 
     QJsonArray libraryJson;
     for (auto& entry : libraryEntries) {
@@ -282,10 +295,16 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
         auto track = std::make_shared<Track>();
         track->id = QUuid(trackJson["id"].toString());
         track->name = trackJson["name"].toString();
+        QString kindStr = trackJson["kind"].toString("audio");
+        track->kind = kindStr == "bus" ? TrackKind::Bus
+                      : kindStr == "instrument" ? TrackKind::Instrument
+                                                 : TrackKind::Audio;
         track->volume.store(static_cast<float>(trackJson["volume"].toDouble(1.0)));
         track->pan.store(static_cast<float>(trackJson["pan"].toDouble(0.0)));
         track->muted.store(trackJson["muted"].toBool(false));
         track->soloed.store(trackJson["soloed"].toBool(false));
+        track->setSendBusId(QUuid(trackJson["sendBusId"].toString()));
+        track->sendLevel.store(static_cast<float>(trackJson["sendLevel"].toDouble(0.0)));
 
         Track::AutomationLaneList automationLanes;
         for (const auto& laneVal : trackJson["automationLanes"].toArray()) {
@@ -346,6 +365,12 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
         }
 
         outSession.tracks.push_back(track);
+    }
+
+    outSession.masterBus.volume.store(static_cast<float>(root["masterVolume"].toDouble(1.0)));
+    for (const auto& effectVal : root["masterEffects"].toArray()) {
+        auto effect = effectFromJson(effectVal.toObject(), outSession.sampleRate);
+        if (effect) outSession.masterBus.addEffect(effect);
     }
 
     for (const auto& entryVal : root["mediaLibrary"].toArray()) {

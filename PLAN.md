@@ -25,7 +25,8 @@ without relying on chat history. Update status as items complete.
     lane, no full manual pass yet, see below
 7. [x] Automation lanes (volume/pan over time) — v1 scope, no full manual
     pass yet, see below
-8. [ ] Bus routing / sends (aux tracks, submixes)
+8. [x] Bus routing / sends (aux tracks, submixes) — v1: aux sends + master
+    bus, including master-effects UI, see below
 9. [ ] Loop/sample library browser
 10. [ ] Export/bounce with format + stems options
 11. [x] Multi-source input: mic + system audio (loopback) recorded to separate tracks (Linux/PulseAudio)
@@ -439,6 +440,87 @@ Verification plan (approved):
       record/play, automate a volume fade and a pan sweep, confirm
       audibly click-free; undo/redo of automation edits; save/reload
       preserves curves.
+
+## In progress: Bus routing / sends (aux tracks, submixes)
+
+Goal (feature #8): aux sends from tracks to bus tracks, plus a master bus.
+Scoped down (approved): aux sends only for v1 (no full submix/group routing
+where a track's *main* output moves to a bus — tracks always output
+directly to master, sends are an additional post-fader tap). One send per
+track (single dropdown + level), unlimited bus tracks, no bus-to-bus
+sends (no cycles possible).
+
+Design (approved):
+- [x] `Track::TrackKind` gains `Bus`. Bus tracks have no clips/MIDI, only
+      volume/pan/effects, fed by other tracks' sends.
+- [x] `Track` gains `sendBusId()`/`setSendBusId()` (backed by
+      `atomic<shared_ptr<const QUuid>>`, not `atomic<QUuid>` — QUuid is
+      16 bytes and wasn't lock-free with this platform's libstdc++/
+      libatomic, so it reuses the same atomic-shared_ptr pattern already
+      used lock-free elsewhere in `Track`) and `sendLevel` (atomic float
+      0..1, default 0/none), post-fader tap (after the sending track's
+      own volume/pan/mute).
+- [x] New `MasterBus` (not a `Track`, `model/MasterBus.h`): `volume`
+      atomic + `EffectChain`, owned by `Session`, always present, not a
+      track in the track list.
+- [x] `AudioEngine::rtCallback` reordered: each Audio/Instrument track's
+      post-fader buffer accumulates into (a) the master accumulation
+      buffer directly and (b) its send-bus's aux buffer (scaled by
+      `sendLevel`), if set. After all tracks process, each Bus track runs
+      its own effects+volume/pan over its aux buffer and mixes into the
+      master buffer. Master bus effects+volume apply last, before output.
+- [x] `audio/BusMixMath.h` (pure, tested first): send-level clamp/scale,
+      master-volume apply — mirrors `PanLawMath`/`AutomationMath`.
+- [x] `TrackState`/`TrackStateCommand` (existing generic track-field
+      undo command) extended with `sendBusId`/`sendLevel` rather than a
+      separate `TrackSendCommand` — same snapshot/restore shape as the
+      volume/pan/mute/solo/arm/input-source fields it already covers.
+- [x] `SessionIO`: Track JSON gains `"kind"` (also fixed serializing this
+      for Instrument tracks, previously never persisted — pre-existing
+      gap, not scope creep since Bus needed it too), `"sendBusId"`,
+      `"sendLevel"`; Session JSON gains `"masterVolume"` + `"masterEffects"`
+      (reuses existing effect serialization).
+- [x] UI: "Add Bus Track" menu action; each Audio/Instrument track row gets
+      a Send-bus dropdown + send-level slider next to Volume (populated by
+      `TimelineView::refreshSendBusOptions()`, called on every track add/
+      remove); a Master volume slider in the toolbar, synced on session
+      load/close.
+- [x] Master-effects UI (follow-up, closes the v1 descope above):
+      `EffectsRackPanel` generalized to show either a `Track`'s chain or
+      the session's `MasterBus`'s chain (exactly one host active at a
+      time) via small dispatch helpers (`currentChain()`,
+      `addEffectToHost()`, `removeEffectFromHost()`, `moveEffectInHost()`,
+      `pushChainCommand()`) instead of duplicating the whole per-effect
+      DSP control UI (EQ/Compressor/Delay/Reverb sliders stay shared).
+      New `command/EditCommands.h::SetEffectChainCommand` (function-based
+      restore, mirrors `SetEffectParamCommand`'s style) covers undo/redo
+      for the master-bus case since `EffectChainCommand` is hardcoded to
+      `Track`; `MasterBus` gained a `moveEffect()` mirroring `Track`'s, for
+      the Up/Down reorder buttons. A "Master FX" toolbar button (next to
+      the master volume slider) calls `setMasterBus()` and raises the
+      effects dock, same pattern as a track row's own FX button.
+
+Verification plan (approved):
+- [x] Automated (written first): `tests/test_BusMixMath.cpp` (10 cases),
+      `test_EditCommands.cpp` addition for send undo/redo,
+      `test_SessionIO.cpp` round-trip for bus/send/master fields,
+      `test_RecordRouting.cpp` addition (`filterRecordableTracks`) to
+      reject Bus tracks from the record-arm path,
+      `test_EffectCommands.cpp` addition for `SetEffectChainCommand`
+      against a plain `MasterBus`. Full suite (22/22 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full timeout
+      under a real X display, no crash/error output) both after the
+      routing/master-bus engine change and again after the master-effects
+      UI follow-up.
+- [ ] Full manual (needs real interaction, not done from this session):
+      add a Bus track, route a track's send to it with a reverb effect on
+      the bus, confirm audible wet signal without muting the dry track;
+      add an effect to the master bus via the new "Master FX" button and
+      confirm it's audible on the overall mix; confirm master volume
+      affects overall output; confirm undo/redo of send changes, Add Bus
+      Track, and master-effect add/remove/reorder; confirm save/reload
+      preserves routing/master volume/master effects in a real project
+      file (not just the unit test's in-memory round-trip).
 
 ## Notes
 

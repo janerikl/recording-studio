@@ -130,13 +130,19 @@ struct TrackState {
     bool soloed = false;
     bool recordArmed = false;
     AudioSource inputSource = AudioSource::Mic;
+    QUuid sendBusId;
+    float sendLevel = 0.0f;
 
     static TrackState capture(const Track& t) {
         return {t.volume.load(),      t.pan.load(),          t.muted.load(),
-                t.soloed.load(),      t.recordArmed.load(),  t.inputSource.load()};
+                t.soloed.load(),      t.recordArmed.load(),  t.inputSource.load(),
+                t.sendBusId(),        t.sendLevel.load()};
     }
 };
 
+// Covers volume/pan/mute/solo/arm/input-source/send edits from the track
+// header widgets — one command type shared by all of them since they're
+// all simple atomic-field snapshots restored on undo/redo.
 class TrackStateCommand : public Command {
 public:
     TrackStateCommand(std::shared_ptr<Track> track, TrackState before, TrackState after,
@@ -155,6 +161,8 @@ private:
         m_track->soloed.store(s.soloed);
         m_track->recordArmed.store(s.recordArmed);
         m_track->inputSource.store(s.inputSource);
+        m_track->setSendBusId(s.sendBusId);
+        m_track->sendLevel.store(s.sendLevel);
     }
 
     std::shared_ptr<Track> m_track;
@@ -248,6 +256,30 @@ private:
     std::shared_ptr<Track> m_track;
     std::shared_ptr<const EffectChain> m_before;
     std::shared_ptr<const EffectChain> m_after;
+    QString m_text;
+};
+
+// Same shape as EffectChainCommand (before/after snapshot swap), but via a
+// restore function instead of a hardcoded Track pointer, so one command
+// type covers editing a Track's chain or a MasterBus's chain — used by
+// EffectsRackPanel, which can point at either.
+class SetEffectChainCommand : public Command {
+public:
+    using ChainPtr = std::shared_ptr<const EffectChain>;
+
+    SetEffectChainCommand(std::function<void(ChainPtr)> restore, ChainPtr before, ChainPtr after,
+                           QString text = "Edit Effects")
+        : m_restore(std::move(restore)), m_before(std::move(before)), m_after(std::move(after)),
+          m_text(std::move(text)) {}
+
+    void redo() override { m_restore(m_after); }
+    void undo() override { m_restore(m_before); }
+    QString text() const override { return m_text; }
+
+private:
+    std::function<void(ChainPtr)> m_restore;
+    ChainPtr m_before;
+    ChainPtr m_after;
     QString m_text;
 };
 

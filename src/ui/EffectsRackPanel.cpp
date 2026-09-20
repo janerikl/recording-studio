@@ -114,6 +114,13 @@ EffectsRackPanel::EffectsRackPanel(QWidget* parent) : QWidget(parent) {
 
 void EffectsRackPanel::setTrack(std::shared_ptr<Track> track) {
     m_track = std::move(track);
+    m_masterBus = nullptr;
+    rebuild();
+}
+
+void EffectsRackPanel::setMasterBus(MasterBus* masterBus) {
+    m_track.reset();
+    m_masterBus = masterBus;
     rebuild();
 }
 
@@ -121,8 +128,41 @@ void EffectsRackPanel::refresh() {
     rebuild();
 }
 
+std::shared_ptr<const EffectChain> EffectsRackPanel::currentChain() const {
+    if (m_track) return m_track->effectsSnapshot();
+    if (m_masterBus) return m_masterBus->effectsSnapshot();
+    return nullptr;
+}
+
+void EffectsRackPanel::addEffectToHost(std::shared_ptr<Effect> effect) {
+    if (m_track) m_track->addEffect(std::move(effect));
+    else if (m_masterBus) m_masterBus->addEffect(std::move(effect));
+}
+
+void EffectsRackPanel::removeEffectFromHost(const QUuid& effectId) {
+    if (m_track) m_track->removeEffect(effectId);
+    else if (m_masterBus) m_masterBus->removeEffect(effectId);
+}
+
+void EffectsRackPanel::moveEffectInHost(const QUuid& effectId, int newIndex) {
+    if (m_track) m_track->moveEffect(effectId, newIndex);
+    else if (m_masterBus) m_masterBus->moveEffect(effectId, newIndex);
+}
+
+void EffectsRackPanel::pushChainCommand(std::shared_ptr<const EffectChain> before,
+                                         std::shared_ptr<const EffectChain> after, const QString& text) {
+    if (!m_commandStack) return;
+    if (m_track) {
+        m_commandStack->push(std::make_unique<EffectChainCommand>(m_track, before, after, text));
+    } else if (m_masterBus) {
+        MasterBus* bus = m_masterBus;
+        auto restore = [bus](std::shared_ptr<const EffectChain> chain) { bus->restoreEffects(chain); };
+        m_commandStack->push(std::make_unique<SetEffectChainCommand>(restore, before, after, text));
+    }
+}
+
 void EffectsRackPanel::addEffectOfType(EffectType type) {
-    if (!m_track) return;
+    if (!m_track && !m_masterBus) return;
 
     std::shared_ptr<Effect> effect;
     switch (type) {
@@ -133,15 +173,12 @@ void EffectsRackPanel::addEffectOfType(EffectType type) {
     }
     effect->prepare(m_sampleRate);
 
-    auto before = m_track->effectsSnapshot();
-    m_track->addEffect(effect);
-    auto after = m_track->effectsSnapshot();
-    if (m_commandStack) {
-        m_commandStack->push(
-            std::make_unique<EffectChainCommand>(m_track, before, after, "Add " + effectTypeName(type)));
-    }
+    auto before = currentChain();
+    addEffectToHost(effect);
+    auto after = currentChain();
+    pushChainCommand(before, after, "Add " + effectTypeName(type));
     rebuild();
-    emit effectCountChanged(m_track);
+    if (m_track) emit effectCountChanged(m_track);
 }
 
 void EffectsRackPanel::rebuild() {
@@ -152,15 +189,17 @@ void EffectsRackPanel::rebuild() {
         delete item;
     }
 
-    if (!m_track) {
+    if (!m_track && !m_masterBus) {
         m_trackNameLabel->setText("No track selected");
         m_addTypeCombo->setEnabled(false);
         return;
     }
-    m_trackNameLabel->setText(m_track->name.isEmpty() ? "Track" : m_track->name);
+    m_trackNameLabel->setText(m_masterBus       ? "Master"
+                               : m_track->name.isEmpty() ? "Track"
+                                                          : m_track->name);
     m_addTypeCombo->setEnabled(true);
 
-    auto chain = m_track->effectsSnapshot();
+    auto chain = currentChain();
     for (size_t i = 0; i < chain->size(); ++i) {
         auto effect = chain->at(i);
         QUuid effectId = effect->id;
@@ -194,13 +233,10 @@ void EffectsRackPanel::rebuild() {
         if (i > 0) {
             auto* upButton = new QPushButton("Up");
             connect(upButton, &QPushButton::clicked, this, [this, effectId, i]() {
-                auto before = m_track->effectsSnapshot();
-                m_track->moveEffect(effectId, static_cast<int>(i) - 1);
-                auto after = m_track->effectsSnapshot();
-                if (m_commandStack) {
-                    m_commandStack->push(
-                        std::make_unique<EffectChainCommand>(m_track, before, after, "Reorder Effects"));
-                }
+                auto before = currentChain();
+                moveEffectInHost(effectId, static_cast<int>(i) - 1);
+                auto after = currentChain();
+                pushChainCommand(before, after, "Reorder Effects");
                 rebuild();
             });
             headerLayout->addWidget(upButton);
@@ -208,13 +244,10 @@ void EffectsRackPanel::rebuild() {
         if (i + 1 < chain->size()) {
             auto* downButton = new QPushButton("Down");
             connect(downButton, &QPushButton::clicked, this, [this, effectId, i]() {
-                auto before = m_track->effectsSnapshot();
-                m_track->moveEffect(effectId, static_cast<int>(i) + 1);
-                auto after = m_track->effectsSnapshot();
-                if (m_commandStack) {
-                    m_commandStack->push(
-                        std::make_unique<EffectChainCommand>(m_track, before, after, "Reorder Effects"));
-                }
+                auto before = currentChain();
+                moveEffectInHost(effectId, static_cast<int>(i) + 1);
+                auto after = currentChain();
+                pushChainCommand(before, after, "Reorder Effects");
                 rebuild();
             });
             headerLayout->addWidget(downButton);
@@ -222,15 +255,12 @@ void EffectsRackPanel::rebuild() {
 
         auto* removeButton = new QPushButton("Remove");
         connect(removeButton, &QPushButton::clicked, this, [this, effectId]() {
-            auto before = m_track->effectsSnapshot();
-            m_track->removeEffect(effectId);
-            auto after = m_track->effectsSnapshot();
-            if (m_commandStack) {
-                m_commandStack->push(
-                    std::make_unique<EffectChainCommand>(m_track, before, after, "Remove Effect"));
-            }
+            auto before = currentChain();
+            removeEffectFromHost(effectId);
+            auto after = currentChain();
+            pushChainCommand(before, after, "Remove Effect");
             rebuild();
-            emit effectCountChanged(m_track);
+            if (m_track) emit effectCountChanged(m_track);
         });
         headerLayout->addWidget(removeButton);
         boxLayout->addWidget(headerRow);
