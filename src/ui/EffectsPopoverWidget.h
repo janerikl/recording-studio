@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QRect>
 #include <QWidget>
 #include <memory>
 
@@ -10,6 +11,7 @@
 
 class QComboBox;
 class QLabel;
+class QScrollArea;
 class QVBoxLayout;
 
 namespace rsd {
@@ -31,9 +33,17 @@ public:
     void setCommandStack(CommandStack* stack) { m_commandStack = stack; }
     void setSampleRate(double sampleRate) { m_sampleRate = sampleRate; }
 
-    // Same one-host-at-a-time behavior as EffectsRackPanel.
+    // Same one-host-at-a-time behavior as EffectsRackPanel. Prefer showAt()
+    // over calling these directly, which also (re)positions the popup.
     void setTrack(std::shared_ptr<Track> track);
     void setMasterBus(MasterBus* masterBus);
+
+    // Shows the track's effect chain in a popup anchored below
+    // `globalAnchorRect` (the FX button's geometry in global screen
+    // coordinates). Repositions/resizes itself as needed if the chain is
+    // later expanded/collapsed or effects are added/removed while open.
+    void showAt(std::shared_ptr<Track> track, QRect globalAnchorRect);
+    void showMasterAt(MasterBus* masterBus, QRect globalAnchorRect);
 
 signals:
     void effectCountChanged(std::shared_ptr<Track> track);
@@ -41,6 +51,7 @@ signals:
 private:
     void rebuild();
     void addEffectOfType(EffectType type);
+    void repositionAndResize();
 
     std::shared_ptr<const EffectChain> currentChain() const;
     void addEffectToHost(std::shared_ptr<Effect> effect);
@@ -56,8 +67,11 @@ private:
 
     QLabel* m_trackNameLabel = nullptr;
     QComboBox* m_addTypeCombo = nullptr;
+    QScrollArea* m_scroll = nullptr;
     QWidget* m_slotsContainer = nullptr;
     QVBoxLayout* m_slotsLayout = nullptr;
+
+    QRect m_anchorGlobalRect;
 };
 
 } // namespace rsd

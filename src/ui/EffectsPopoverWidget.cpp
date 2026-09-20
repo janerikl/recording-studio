@@ -6,12 +6,14 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScreen>
 #include <QScrollArea>
 #include <QSlider>
 #include <QVBoxLayout>
 #include <functional>
 
 #include "command/EditCommands.h"
+#include "ui/PopoverPositioning.h"
 
 namespace rsd {
 
@@ -166,17 +168,38 @@ EffectsPopoverWidget::EffectsPopoverWidget(QWidget* parent) : QWidget(parent, Qt
     addRowLayout->addWidget(addButton);
     outer->addWidget(addRow);
 
-    auto* scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setStyleSheet("QScrollArea { border: none; background: transparent; }");
-    scroll->setMaximumHeight(360);
+    m_scroll = new QScrollArea;
+    m_scroll->setWidgetResizable(true);
+    m_scroll->setStyleSheet("QScrollArea { border: none; background: transparent; }");
     m_slotsContainer = new QWidget;
     m_slotsLayout = new QVBoxLayout(m_slotsContainer);
     m_slotsLayout->addStretch();
-    scroll->setWidget(m_slotsContainer);
-    outer->addWidget(scroll, 1);
+    m_scroll->setWidget(m_slotsContainer);
+    outer->addWidget(m_scroll, 1);
 
     setTrack(nullptr);
+}
+
+void EffectsPopoverWidget::showAt(std::shared_ptr<Track> track, QRect globalAnchorRect) {
+    m_anchorGlobalRect = globalAnchorRect;
+    setTrack(std::move(track));  // triggers rebuild(), which repositions.
+    show();
+}
+
+void EffectsPopoverWidget::showMasterAt(MasterBus* masterBus, QRect globalAnchorRect) {
+    m_anchorGlobalRect = globalAnchorRect;
+    setMasterBus(masterBus);  // triggers rebuild(), which repositions.
+    show();
+}
+
+void EffectsPopoverWidget::repositionAndResize() {
+    QRect available = this->screen() ? this->screen()->availableGeometry() : QRect(0, 0, 1920, 1080);
+    // Leave room for the popup's own header/add-row chrome plus some
+    // breathing room from the screen edges, so a fully-expanded chain can
+    // grow to fill most of the screen without scrolling.
+    m_scroll->setMaximumHeight(available.height() - 80);
+    adjustSize();
+    move(computePopoverPosition(m_anchorGlobalRect, sizeHint(), available));
 }
 
 void EffectsPopoverWidget::setTrack(std::shared_ptr<Track> track) {
@@ -339,10 +362,15 @@ void EffectsPopoverWidget::rebuild() {
 
         auto* expandButton = new QPushButton("Edit");
         expandButton->setCheckable(true);
-        connect(expandButton, &QPushButton::toggled, paramsContainer, [paramsContainer, expandButton](bool checked) {
-            paramsContainer->setVisible(checked);
-            expandButton->setText(checked ? "Hide" : "Edit");
-        });
+        connect(expandButton, &QPushButton::toggled, this,
+                [this, paramsContainer, expandButton](bool checked) {
+                    paramsContainer->setVisible(checked);
+                    expandButton->setText(checked ? "Hide" : "Edit");
+                    // Grow (or shrink back) the popup so the newly
+                    // revealed/hidden params are visible without scrolling,
+                    // repositioning if the new size would run off-screen.
+                    repositionAndResize();
+                });
         // Insert before the stretch/remove so header keeps its layout order.
         headerLayout->insertWidget(headerLayout->count() - 1, expandButton);
 
@@ -350,6 +378,8 @@ void EffectsPopoverWidget::rebuild() {
 
         m_slotsLayout->insertWidget(static_cast<int>(i), box);
     }
+
+    repositionAndResize();
 }
 
 } // namespace rsd

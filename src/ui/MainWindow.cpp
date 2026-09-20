@@ -12,7 +12,6 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
-#include <QScreen>
 #include <QSettings>
 #include <QShortcut>
 #include <QSignalBlocker>
@@ -32,7 +31,6 @@
 #include "io/AudioFileIO.h"
 #include "io/SessionIO.h"
 #include "model/CompMath.h"
-#include "ui/PopoverPositioning.h"
 #include "ui/TimelineScaleMath.h"
 
 namespace rsd {
@@ -509,19 +507,11 @@ void MainWindow::onInstrumentNoteOff(int pitch) {
 }
 
 void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect) {
-    m_effectsPopover->setTrack(track);
-    QSize hint = m_effectsPopover->sizeHint();
-    QPoint pos = computePopoverPosition(globalAnchorRect, hint, screen()->availableGeometry());
-    m_effectsPopover->move(pos);
-    m_effectsPopover->show();
+    m_effectsPopover->showAt(track, globalAnchorRect);
 }
 
 void MainWindow::onMasterEffectsPanelRequested(QRect globalAnchorRect) {
-    m_effectsPopover->setMasterBus(&m_session->masterBus);
-    QSize hint = m_effectsPopover->sizeHint();
-    QPoint pos = computePopoverPosition(globalAnchorRect, hint, screen()->availableGeometry());
-    m_effectsPopover->move(pos);
-    m_effectsPopover->show();
+    m_effectsPopover->showMasterAt(&m_session->masterBus, globalAnchorRect);
 }
 
 void MainWindow::onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take) {
