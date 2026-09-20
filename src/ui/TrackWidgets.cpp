@@ -22,6 +22,11 @@ constexpr int kHeaderWidth = 300;
 TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     : QWidget(parent), m_track(std::move(track)) {
     setAttribute(Qt::WA_StyledBackground, true); // so setDropHighlight's stylesheet actually paints
+    // Cap the row at its own content height so TimelineView's trailing
+    // stretch (not this row) absorbs any extra vertical space in the scroll
+    // area — otherwise, once the lane gained its own QVBoxLayout (for the
+    // new per-track scrollbar), rows would balloon to fill the window.
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
     auto* rowLayout = new QHBoxLayout(this);
 
     auto* header = new QWidget(this);
