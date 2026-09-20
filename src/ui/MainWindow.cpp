@@ -288,8 +288,6 @@ MainWindow::MainWindow(QWidget* parent)
             &MainWindow::onMediaDroppedOnTrack);
     connect(m_timeline, &TimelineView::externalFileDroppedOnTrack, this,
             &MainWindow::onExternalFileDroppedOnTrack);
-    connect(m_timeline, &TimelineView::effectsPanelRequested, this,
-            &MainWindow::onEffectsPanelRequested);
     connect(m_timeline, &TimelineView::takeSelected, this, &MainWindow::onTakeSelected);
     layout->addWidget(m_timeline, 1);
 
@@ -309,9 +307,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_effectsRack->setSampleRate(m_session->sampleRate);
     connect(m_effectsRack, &EffectsRackPanel::effectCountChanged, this,
             [this](std::shared_ptr<Track> track) {
-                if (!track) return;
-                m_timeline->refreshTrackEffectsButton(track->id);
-                m_mixer->refreshTrackEffectsButton(track->id);
+                if (track) m_mixer->refreshTrackEffectsButton(track->id);
             });
     m_effectsDock->setWidget(m_effectsRack);
     addDockWidget(Qt::RightDockWidgetArea, m_effectsDock);

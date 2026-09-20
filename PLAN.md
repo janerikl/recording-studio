@@ -781,6 +781,24 @@ the mixer strip.
   (25/25 binaries) still passes. Smoke-tested: app builds and launches
   cleanly.
 
+## Completed: Removed the FX button from the track row too
+
+Follow-up: after Arm/input-source moved to the mixer, the track row's FX
+button became the last remaining duplicate (mixer strip already has its
+own FX button doing the same thing — select track + raise the effects
+dock). Removed from `TrackRowWidget`; the row is now just
+Name/Active/Takes/Auto.
+
+- [x] `TrackRowWidget`: removed `m_effectsButton`, `refreshEffectsButton()`,
+      and the `effectsPanelRequested` signal (nothing emits it anymore).
+- [x] `TimelineView`: removed the now-dead `effectsPanelRequested`
+      forwarding signal and `refreshTrackEffectsButton()` (its only
+      caller, `MainWindow`, now refreshes just the mixer strip's FX
+      label via `MixerPanel::refreshTrackEffectsButton()`).
+- Automated: none new (pure removal, no logic change); full suite
+  (25/25 binaries) still passes. Smoke-tested: app builds and launches
+  cleanly.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.

@@ -8,8 +8,6 @@
 #include <algorithm>
 #include <climits>
 
-#include "ui/TrackEffectsLabel.h"
-
 namespace rsd {
 
 namespace {
@@ -44,19 +42,6 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     });
     headerLayout->addWidget(m_selectButton, 0, 2, 1, 2);
 
-    // Jumps straight to this track's effects: selects the row (so the side
-    // panel shows its chain) and asks the panel to be brought to the front,
-    // without needing to click the row first and then hunt for the dock.
-    m_effectsButton = new QPushButton(QString::fromStdString(
-                                           formatEffectsButtonLabel(m_track->effectsSnapshot()->size())),
-                                       header);
-    m_effectsButton->setToolTip("Show effects for this track");
-    connect(m_effectsButton, &QPushButton::clicked, this, [this]() {
-        m_selectButton->setChecked(true);
-        emit effectsPanelRequested(m_track);
-    });
-    headerLayout->addWidget(m_effectsButton, 0, 4);
-
     // Shows/hides the stacked take lanes captured by the most recent
     // punch/loop recording (see rebuildTakeLanes()). Disabled when the
     // track has no takes.
@@ -67,7 +52,7 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     connect(m_takesToggleButton, &QPushButton::toggled, this, [this](bool checked) {
         if (m_takeLanesContainer) m_takeLanesContainer->setVisible(checked);
     });
-    headerLayout->addWidget(m_takesToggleButton, 0, 5);
+    headerLayout->addWidget(m_takesToggleButton, 0, 4);
 
     // Shows/hides this track's automation curve lane (volume/pan), always
     // available (unlike Takes, not gated on any prior recording).
@@ -76,14 +61,14 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     m_automationToggleButton->setCheckable(true);
     connect(m_automationToggleButton, &QPushButton::toggled, this,
             [this](bool checked) { m_automationLane->setVisible(checked); });
-    headerLayout->addWidget(m_automationToggleButton, 0, 6);
+    headerLayout->addWidget(m_automationToggleButton, 0, 5);
 
-    // Mute/Solo/Pan/Volume/Send/Arm/input-source all now live only on the
-    // Mixer panel's strip for this track (see MixerStripWidget) — kept
-    // here would just be a duplicate control fighting the same
-    // TrackState. The row keeps only what the mixer doesn't have:
-    // Active selection, FX/Takes/Auto (which toggle lanes/panels, not
-    // just mirror a value).
+    // Mute/Solo/Pan/Volume/Send/Arm/input-source/FX all now live only on
+    // the Mixer panel's strip for this track (see MixerStripWidget) —
+    // kept here would just be a duplicate control fighting the same
+    // TrackState. The row keeps only what the mixer doesn't have: Active
+    // selection and Takes/Auto (which toggle lanes, not just mirror a
+    // value).
 
     rowLayout->addWidget(header);
 
@@ -171,11 +156,6 @@ void TrackRowWidget::setCommandStack(CommandStack* stack) {
     m_commandStack = stack;
     m_clipLane->setCommandStack(stack);
     m_automationLane->setCommandStack(stack);
-}
-
-void TrackRowWidget::refreshEffectsButton() {
-    m_effectsButton->setText(
-        QString::fromStdString(formatEffectsButtonLabel(m_track->effectsSnapshot()->size())));
 }
 
 void TrackRowWidget::setLaneScrollOffset(int64_t sampleOffset) {

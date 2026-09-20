@@ -33,9 +33,6 @@ public:
     void refreshWaveform() { m_clipLane->refresh(); }
     void setDropHighlight(bool on); // visual feedback while a cross-track drag hovers this row
     void setCommandStack(CommandStack* stack);
-    // Re-reads the track's live effect chain and updates the "FX" button
-    // label. Call after any edit made through the effects rack panel.
-    void refreshEffectsButton();
     // Sets this row's lane scroll position without re-broadcasting a sync
     // request (used by TimelineView to apply another row's Shift-synced
     // scroll to this one).
@@ -48,9 +45,6 @@ public:
 signals:
     void selected(std::shared_ptr<Track> track);
     void clipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
-    // The inline FX button was clicked: select this track (as clicking the
-    // row already does) AND bring the effects rack panel to the front.
-    void effectsPanelRequested(std::shared_ptr<Track> track);
     // This row's lane was scrolled with Shift held: TimelineView should
     // apply the same absolute sample offset to every other row.
     void syncScrollToAllRequested(int64_t sampleOffset);
@@ -63,7 +57,6 @@ private:
 
     std::shared_ptr<Track> m_track;
     QRadioButton* m_selectButton = nullptr;
-    QPushButton* m_effectsButton = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
     QScrollBar* m_laneScrollBar = nullptr;
     QPushButton* m_takesToggleButton = nullptr;

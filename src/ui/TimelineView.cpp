@@ -31,7 +31,6 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     connect(row->clipLane(), &ClipLaneWidget::mediaDropped, this, &TimelineView::onMediaDropped);
     connect(row->clipLane(), &ClipLaneWidget::externalFileDropped, this,
             &TimelineView::onExternalFileDropped);
-    connect(row, &TrackRowWidget::effectsPanelRequested, this, &TimelineView::effectsPanelRequested);
     connect(row, &TrackRowWidget::takeSelected, this, &TimelineView::takeSelected);
     connect(row, &TrackRowWidget::syncScrollToAllRequested, this, [this, row](int64_t samples) {
         for (auto& [id, other] : m_rows) {
@@ -76,12 +75,6 @@ void TimelineView::refreshTrackWaveform(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;
     it->second->refreshWaveform();
-}
-
-void TimelineView::refreshTrackEffectsButton(const QUuid& trackId) {
-    auto it = m_rows.find(trackId.toString());
-    if (it == m_rows.end()) return;
-    it->second->refreshEffectsButton();
 }
 
 void TimelineView::refreshTrackTakeLanes(const QUuid& trackId) {
