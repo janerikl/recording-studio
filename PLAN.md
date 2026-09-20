@@ -20,7 +20,7 @@ without relying on chat history. Update status as items complete.
 2. [x] Punch-in / loop recording
 3. [x] Playlist comping (multiple takes per track, comp best parts) — v1: whole-take comping only, see below
 4. [x] Clip-level editing tools (trim/fade/gain handles directly on clips)
-5. [ ] Virtual instruments (basic synth + sampler, MIDI-playable)
+5. [x] Virtual instruments (basic synth + sampler, MIDI-playable) — v1: synth only, on-screen keyboard only, see below
 6. [ ] MIDI piano-roll editor
 7. [ ] Automation lanes (volume/pan/filter over time)
 8. [ ] Bus routing / sends (aux tracks, submixes)
@@ -269,6 +269,63 @@ Verification plan (approved):
       swaps the active comp audibly and visibly; confirm undo/redo works;
       confirm a 9th pass warns instead of crashing. (Needs a live mic input
       to test — not done from this session.)
+
+## Completed: Virtual instruments (basic synth, v1 scope)
+
+Goal (feature #5). Scoped down (approved): on-screen keyboard only (no
+hardware MIDI input), simple built-in synth only (oscillator + ADSR +
+one-pole filter, no sampler).
+
+Design (approved):
+- [x] `Track` gains `TrackKind { Audio, Instrument }`, a `SynthParams`
+      (atomics, mutated live like `Effect` params), a `midiClips` list (same
+      copy-on-write pattern as `clips`), a `NoteEventQueue` (SPSC lock-free,
+      GUI pushes live note-on/off, RT drains) and a `SynthEngine` (RT-owned
+      voice pool).
+- [x] `audio/SynthMath.h`: pure oscillator/ADSR/filter math (tested).
+      `audio/NoteEventQueue.h`, `audio/Synth.h` (SynthVoice/SynthEngine,
+      fixed 8-voice pool, no RT allocation).
+- [x] `AudioEngine::rtCallback`: per-track loop restructured so Instrument
+      tracks always drain their live-note queue (audition works even while
+      stopped) and, during Playing/Recording, trigger notes from
+      `midiClips` whose start/end falls in the current block (block-level
+      timing granularity — not sample-accurate, acceptable for v1) —
+      otherwise reuses the existing scratch/effects/gain pipeline unchanged.
+- [x] `command/EditCommands.h::TrackMidiCommand` mirrors `TrackClipsCommand`.
+- [x] `ui/PianoKeyboardWidget` + `ui/InstrumentPanel`: clickable on-screen
+      keys, dock panel, active only when the selected track is an
+      Instrument track. Note capture while armed+recording is
+      GUI-thread-only bookkeeping (start/stop timestamps from
+      `transport().positionSamples()` at click time), finalized into
+      `midiClips` via `TrackMidiCommand` on Stop — separate from the
+      live-audition RT queue, and deliberately not integrated into the
+      existing mic/system-audio arm-routing logic
+      (`RecordRouting.h::splitTracksBySource` only ever sees Audio-kind
+      tracks, filtered in `MainWindow::onRecordClicked`).
+- [x] `ClipLaneWidget`: Instrument tracks paint notes as small rectangles
+      (`ui/MidiNoteDisplayMath.h::pitchToY`, pure, tested) instead of a
+      waveform — view-only, no drag/edit (that's the separate piano-roll
+      editor roadmap item).
+- [x] "Add Instrument Track" action alongside "Add Track".
+- Explicitly out of scope for v1: hardware MIDI input, sampler, note
+  editing/dragging on the timeline, undo for synth param tweaks (a v1
+  simplification — effect params ARE undoable elsewhere, this isn't parity).
+
+Verification plan (approved):
+- [x] Automated: pure-math tests for oscillator/ADSR/filter (`SynthMath`,
+      18 cases) and note-Y-position (`MidiNoteDisplayMath`, 5 cases). Full
+      suite (18/18 test binaries) passes.
+- [x] Smoke-tested live in the running app: added an Instrument track,
+      selected it (Instrument panel correctly showed its name/params vs.
+      the "No instrument track selected" placeholder beforehand), clicked a
+      piano key — key highlighted, **output level meter visibly moved**
+      (confirms the full RT path: click → NoteEventQueue → SynthEngine →
+      oscillator/ADSR/filter → mix → output), released — envelope tailed
+      off. No crash.
+- [ ] Full manual (needs actual listening + a recording pass, not done from
+      this session): confirm the tone is audible/musical; arm an Instrument
+      track, record a short phrase, confirm note rectangles appear and play
+      back correctly positioned; confirm undo/redo of a recorded phrase.
 
 ## Notes
 

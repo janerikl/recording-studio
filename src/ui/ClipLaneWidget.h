@@ -9,6 +9,7 @@ class QContextMenuEvent;
 class QDragEnterEvent;
 class QDropEvent;
 class QWheelEvent;
+class QPainter;
 
 #include "command/CommandStack.h"
 #include "model/Track.h"
@@ -82,6 +83,7 @@ signals:
     void syncScrollToAllRequested(int64_t sampleOffset);
 
 protected:
+    void paintMidiNotes(QPainter& painter); // Instrument tracks: view-only note rectangles
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;

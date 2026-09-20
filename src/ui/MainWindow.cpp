@@ -71,6 +71,10 @@ MainWindow::MainWindow(QWidget* parent)
         QIcon::fromTheme("list-add-symbolic", style()->standardIcon(QStyle::SP_FileDialogNewFolder)),
         "Add Track", this);
     m_addTrackAction->setToolTip("Add Track");
+    m_addInstrumentTrackAction = new QAction(
+        QIcon::fromTheme("list-add-symbolic", style()->standardIcon(QStyle::SP_FileDialogNewFolder)),
+        "Add Instrument Track", this);
+    m_addInstrumentTrackAction->setToolTip("Add Instrument Track (basic synth, on-screen keyboard)");
     m_removeTrackAction = new QAction(
         QIcon::fromTheme("list-remove-symbolic", style()->standardIcon(QStyle::SP_TrashIcon)),
         "Remove Track", this);
@@ -121,6 +125,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(importAction, &QAction::triggered, this, &MainWindow::onImportClicked);
     connect(exportAction, &QAction::triggered, this, &MainWindow::onExportClicked);
     connect(m_addTrackAction, &QAction::triggered, this, &MainWindow::onAddTrackClicked);
+    connect(m_addInstrumentTrackAction, &QAction::triggered, this,
+            &MainWindow::onAddInstrumentTrackClicked);
     connect(m_removeTrackAction, &QAction::triggered, this, &MainWindow::onRemoveTrackClicked);
     connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomInClicked);
     connect(m_zoomOutAction, &QAction::triggered, this, &MainWindow::onZoomOutClicked);
@@ -170,6 +176,7 @@ MainWindow::MainWindow(QWidget* parent)
     editMenu->addAction(m_deleteClipAction);
     editMenu->addSeparator();
     editMenu->addAction(m_addTrackAction);
+    editMenu->addAction(m_addInstrumentTrackAction);
     editMenu->addAction(m_removeTrackAction);
 
     // --- Toolbar: frequently-used actions as icons, text hidden (tooltip shows on hover) ---
@@ -182,6 +189,7 @@ MainWindow::MainWindow(QWidget* parent)
     toolbar->addAction(m_stopAction);
     toolbar->addSeparator();
     toolbar->addAction(m_addTrackAction);
+    toolbar->addAction(m_addInstrumentTrackAction);
     toolbar->addAction(m_removeTrackAction);
     toolbar->addSeparator();
     toolbar->addAction(m_zoomInAction);
@@ -277,6 +285,14 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::RightDockWidgetArea, m_effectsDock);
     tabifyDockWidget(mediaDock, m_effectsDock);
 
+    m_instrumentDock = new QDockWidget("Instrument", this);
+    m_instrumentPanel = new InstrumentPanel(m_instrumentDock);
+    connect(m_instrumentPanel, &InstrumentPanel::noteOn, this, &MainWindow::onInstrumentNoteOn);
+    connect(m_instrumentPanel, &InstrumentPanel::noteOff, this, &MainWindow::onInstrumentNoteOff);
+    m_instrumentDock->setWidget(m_instrumentPanel);
+    addDockWidget(Qt::RightDockWidgetArea, m_instrumentDock);
+    tabifyDockWidget(mediaDock, m_instrumentDock);
+
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
     connect(m_ringDrainTimer, &QTimer::timeout, this, &MainWindow::drainCaptureRing);
@@ -361,6 +377,19 @@ void MainWindow::onAddTrackClicked() {
     updateUndoRedoButtons();
 }
 
+void MainWindow::onAddInstrumentTrackClicked() {
+    ++m_trackCounter;
+    auto track = std::make_shared<Track>();
+    track->kind = TrackKind::Instrument;
+    track->name = QString("Instrument %1").arg(m_trackCounter);
+    m_commandStack.push(std::make_unique<AddTrackCommand>(m_session.get(), track));
+    m_timeline->addTrack(track);
+    if (!m_activeTrack) m_activeTrack = track;
+    updateStatusLabel();
+    refreshMasterAndScale();
+    updateUndoRedoButtons();
+}
+
 void MainWindow::onRemoveTrackClicked() {
     if (!m_activeTrack) return;
     auto idToRemove = m_activeTrack->id;
@@ -381,6 +410,36 @@ void MainWindow::onRemoveTrackClicked() {
 void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
     m_activeTrack = std::move(track);
     m_effectsRack->setTrack(m_activeTrack);
+    m_instrumentPanel->setTrack(m_activeTrack);
+}
+
+void MainWindow::onInstrumentNoteOn(int pitch, float velocity) {
+    if (!m_activeTrack || m_activeTrack->kind != TrackKind::Instrument) return;
+    m_activeTrack->liveNoteEvents.push({pitch, velocity, true});
+
+    if (m_activeTrack->recordArmed.load() && m_engine->transport().state() == TransportState::Recording) {
+        m_pendingNoteStarts[pitch] = m_engine->transport().positionSamples();
+    }
+}
+
+void MainWindow::onInstrumentNoteOff(int pitch) {
+    if (!m_activeTrack || m_activeTrack->kind != TrackKind::Instrument) return;
+    m_activeTrack->liveNoteEvents.push({pitch, 0.0f, false});
+
+    auto it = m_pendingNoteStarts.find(pitch);
+    if (it == m_pendingNoteStarts.end()) return;
+    int64_t start = it->second;
+    m_pendingNoteStarts.erase(it);
+
+    int64_t length = m_engine->transport().positionSamples() - start;
+    if (length <= 0) return;
+
+    auto note = std::make_shared<MidiNote>();
+    note->pitch = pitch;
+    note->velocity = 0.9f;
+    note->startSample = start;
+    note->lengthSamples = length;
+    m_pendingRecordedNotes.push_back(std::move(note));
 }
 
 void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track>) {
@@ -455,7 +514,14 @@ void MainWindow::onRecordClicked() {
         return;
     }
 
-    auto split = splitTracksBySource(armedTracks);
+    // Instrument tracks don't record from an audio input stream at all —
+    // MIDI note capture is handled separately (PianoKeyboardWidget writes
+    // directly into the track's pending notes while armed+recording).
+    std::vector<std::shared_ptr<Track>> armedAudioTracks;
+    for (auto& t : armedTracks) {
+        if (t->kind == TrackKind::Audio) armedAudioTracks.push_back(t);
+    }
+    auto split = splitTracksBySource(armedAudioTracks);
     m_recordTargetTracks = split.micTracks;
     m_systemAudioRecordTargetTracks = split.systemAudioTracks;
 
@@ -566,6 +632,36 @@ void MainWindow::onStopClicked() {
     m_engine->transport().setState(TransportState::Stopped);
     m_ringDrainTimer->stop();
     m_playheadTimer->stop();
+
+    if (wasRecording && m_activeTrack && m_activeTrack->kind == TrackKind::Instrument) {
+        // Finalize any note still held down when Stop was pressed, treating
+        // this moment as its end.
+        int64_t stopPos = m_engine->transport().positionSamples();
+        for (auto& [pitch, start] : m_pendingNoteStarts) {
+            int64_t length = stopPos - start;
+            if (length <= 0) continue;
+            auto note = std::make_shared<MidiNote>();
+            note->pitch = pitch;
+            note->velocity = 0.9f;
+            note->startSample = start;
+            note->lengthSamples = length;
+            m_pendingRecordedNotes.push_back(std::move(note));
+        }
+        m_pendingNoteStarts.clear();
+
+        if (!m_pendingRecordedNotes.empty()) {
+            auto before = m_activeTrack->midiClipsSnapshot();
+            Track::MidiNoteList updated(*before);
+            for (auto& n : m_pendingRecordedNotes) updated.push_back(n);
+            m_activeTrack->setMidiClips(updated);
+            auto after = m_activeTrack->midiClipsSnapshot();
+            m_commandStack.push(
+                std::make_unique<TrackMidiCommand>(m_activeTrack, before, after, "Record MIDI"));
+            m_pendingRecordedNotes.clear();
+            m_timeline->refreshTrackWaveform(m_activeTrack->id);
+            updateUndoRedoButtons();
+        }
+    }
 
     if (wasRecording && m_punchRecordingActive) {
         m_engine->transport().setPunchLoopEnabled(false);

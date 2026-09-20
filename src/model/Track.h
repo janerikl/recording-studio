@@ -8,7 +8,10 @@
 #include <vector>
 
 #include "Clip.h"
+#include "MidiNote.h"
 #include "audio/Effects.h"
+#include "audio/NoteEventQueue.h"
+#include "audio/Synth.h"
 
 namespace rsd {
 
@@ -18,15 +21,22 @@ namespace rsd {
 // SystemAudio-armed track can record concurrently onto separate clips.
 enum class AudioSource { Mic, SystemAudio };
 
+// Audio tracks hold recorded/imported Clips; Instrument tracks hold
+// MidiNotes played through a built-in synth instead. Everything else about
+// a Track (mute/solo/arm/gain/pan/effects) applies the same way to both.
+enum class TrackKind { Audio, Instrument };
+
 // Clip list is stored behind an atomic shared_ptr to a const vector so the
 // realtime audio callback can snapshot-read it without locking, while the
 // GUI thread performs edits via copy-on-write + atomic swap.
 class Track {
 public:
     using ClipList = std::vector<std::shared_ptr<Clip>>;
+    using MidiNoteList = std::vector<std::shared_ptr<MidiNote>>;
 
     QUuid id = QUuid::createUuid();
     QString name;
+    TrackKind kind = TrackKind::Audio;
     std::atomic<bool> muted{false};
     std::atomic<bool> soloed{false};
     std::atomic<bool> recordArmed{false};
@@ -37,10 +47,20 @@ public:
     std::atomic<float> gainL{1.0f};
     std::atomic<float> gainR{1.0f};
 
+    // Instrument-track only, but harmless to carry on every track. Params
+    // are live-tweaked atomics (see Effects.h's Effect for the same
+    // pattern); the queue/engine are RT-thread-owned, same trust model as
+    // AudioEngine's PunchRecorder — the GUI thread only ever pushes to the
+    // queue, never touches the engine directly.
+    SynthParams synthParams;
+    NoteEventQueue liveNoteEvents;
+    SynthEngine synthEngine;
+
     Track() {
         m_clips.store(std::make_shared<const ClipList>());
         m_effects.store(std::make_shared<const EffectChain>());
         m_takeLanes.store(std::make_shared<const ClipList>());
+        m_midiNotes.store(std::make_shared<const MidiNoteList>());
     }
 
     // GUI thread only.
@@ -131,6 +151,16 @@ public:
         m_takeLanes.store(std::make_shared<const ClipList>(std::move(takes)));
     }
 
+    // Recorded MIDI notes for an Instrument track: same copy-on-write/
+    // atomic-swap pattern as `clips`.
+    std::shared_ptr<const MidiNoteList> midiClipsSnapshot() const { return m_midiNotes.load(); }
+    void restoreMidiClips(std::shared_ptr<const MidiNoteList> snapshot) {
+        m_midiNotes.store(std::move(snapshot));
+    }
+    void setMidiClips(MidiNoteList notes) {
+        m_midiNotes.store(std::make_shared<const MidiNoteList>(std::move(notes)));
+    }
+
     // Effect chain: same copy-on-write + atomic-swap pattern as the clip
     // list, since it's read lock-free by the audio thread every callback.
     // Structural edits (add/remove/reorder) go through these; per-effect
@@ -177,6 +207,7 @@ private:
     std::atomic<std::shared_ptr<const ClipList>> m_clips;
     std::atomic<std::shared_ptr<const EffectChain>> m_effects;
     std::atomic<std::shared_ptr<const ClipList>> m_takeLanes;
+    std::atomic<std::shared_ptr<const MidiNoteList>> m_midiNotes;
 };
 
 } // namespace rsd

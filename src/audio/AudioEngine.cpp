@@ -56,52 +56,90 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
         self->m_inputPeakR.store(0.0f, std::memory_order_relaxed);
     }
 
-    if (state == TransportState::Playing || state == TransportState::Recording) {
-        int64_t pos = self->m_transport.positionSamples();
-        if (self->m_session) {
-            bool anySoloed = false;
-            for (auto& track : self->m_session->tracks) {
-                if (track->soloed.load(std::memory_order_relaxed)) { anySoloed = true; break; }
-            }
+    const bool playbackActive = state == TransportState::Playing || state == TransportState::Recording;
+    int64_t pos = self->m_transport.positionSamples();
 
-            size_t scratchNeeded = static_cast<size_t>(nFrames) * self->m_channels;
-            if (self->m_trackScratch.size() < scratchNeeded) {
-                self->m_trackScratch.resize(scratchNeeded, 0.0f);
-            }
-            float* scratch = self->m_trackScratch.data();
+    if (self->m_session) {
+        bool anySoloed = false;
+        for (auto& track : self->m_session->tracks) {
+            if (track->soloed.load(std::memory_order_relaxed)) { anySoloed = true; break; }
+        }
 
-            for (auto& track : self->m_session->tracks) {
-                bool soloed = track->soloed.load(std::memory_order_relaxed);
-                bool muted = track->muted.load(std::memory_order_relaxed);
-                // Solo overrides mute for the soloed track(s); when any track
-                // is soloed, every non-soloed track is implicitly silenced.
-                bool audible = anySoloed ? soloed : !muted;
-                if (!audible) continue;
+        size_t scratchNeeded = static_cast<size_t>(nFrames) * self->m_channels;
+        if (self->m_trackScratch.size() < scratchNeeded) {
+            self->m_trackScratch.resize(scratchNeeded, 0.0f);
+        }
+        float* scratch = self->m_trackScratch.data();
 
-                std::memset(scratch, 0, sizeof(float) * scratchNeeded);
+        for (auto& track : self->m_session->tracks) {
+            // Instrument tracks always drain their live-note queue and
+            // render, even while stopped, so clicking the on-screen
+            // keyboard is audible without needing to hit Play first. Audio
+            // tracks have nothing to do outside actual playback/recording.
+            bool isInstrument = track->kind == TrackKind::Instrument;
+            if (!playbackActive && !isInstrument) continue;
 
+            bool soloed = track->soloed.load(std::memory_order_relaxed);
+            bool muted = track->muted.load(std::memory_order_relaxed);
+            // Solo overrides mute for the soloed track(s); when any track
+            // is soloed, every non-soloed track is implicitly silenced.
+            bool audible = anySoloed ? soloed : !muted;
+            if (!audible) continue;
+
+            std::memset(scratch, 0, sizeof(float) * scratchNeeded);
+
+            if (isInstrument) {
+                NoteEvent ev;
+                while (track->liveNoteEvents.pop(ev)) {
+                    if (ev.noteOn) {
+                        track->synthEngine.noteOn(ev.pitch, ev.velocity,
+                                                   static_cast<float>(self->m_sampleRate));
+                    } else {
+                        track->synthEngine.noteOff(ev.pitch);
+                    }
+                }
+                if (playbackActive) {
+                    // Block-level timing granularity (not sample-accurate):
+                    // a note triggers/releases wherever its start/end lands
+                    // within the current callback block.
+                    auto notes = track->midiClipsSnapshot();
+                    int64_t blockEnd = pos + static_cast<int64_t>(nFrames);
+                    for (auto& note : *notes) {
+                        int64_t noteEnd = note->startSample + note->lengthSamples;
+                        if (note->startSample >= pos && note->startSample < blockEnd) {
+                            track->synthEngine.noteOn(note->pitch, note->velocity,
+                                                       static_cast<float>(self->m_sampleRate));
+                        }
+                        if (noteEnd >= pos && noteEnd < blockEnd) {
+                            track->synthEngine.noteOff(note->pitch);
+                        }
+                    }
+                }
+                track->synthEngine.render(scratch, nFrames, self->m_channels, track->synthParams);
+            } else if (playbackActive) {
                 auto clips = track->clipsSnapshot();
                 for (auto& clip : *clips) {
                     // Clip gain/fades only here; track gain is applied after
                     // the effect chain below (post-fader inserts).
                     mixClipInto(scratch, nFrames, self->m_channels, pos, *clip, 1.0f, 1.0f);
                 }
+            }
 
-                auto effects = track->effectsSnapshot();
-                processEffectChain(*effects, scratch, nFrames, self->m_channels);
+            auto effects = track->effectsSnapshot();
+            processEffectChain(*effects, scratch, nFrames, self->m_channels);
 
-                float gainL = track->gainL.load(std::memory_order_relaxed);
-                float gainR = track->gainR.load(std::memory_order_relaxed);
-                for (unsigned int i = 0; i < nFrames; ++i) {
-                    for (unsigned int ch = 0; ch < self->m_channels; ++ch) {
-                        float g = (ch % 2 == 0) ? gainL : gainR;
-                        out[i * self->m_channels + ch] += scratch[i * self->m_channels + ch] * g;
-                    }
+            float gainL = track->gainL.load(std::memory_order_relaxed);
+            float gainR = track->gainR.load(std::memory_order_relaxed);
+            for (unsigned int i = 0; i < nFrames; ++i) {
+                for (unsigned int ch = 0; ch < self->m_channels; ++ch) {
+                    float g = (ch % 2 == 0) ? gainL : gainR;
+                    out[i * self->m_channels + ch] += scratch[i * self->m_channels + ch] * g;
                 }
             }
         }
-        self->m_transport.advance(nFrames);
     }
+
+    if (playbackActive) self->m_transport.advance(nFrames);
 
     float outPeakL = 0.0f, outPeakR = 0.0f;
     for (unsigned int i = 0; i < nFrames; ++i) {

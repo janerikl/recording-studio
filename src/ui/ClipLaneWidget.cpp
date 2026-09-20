@@ -19,6 +19,7 @@
 #include "ui/ClipEditMath.h"
 #include "ui/ClipLaneScrollMath.h"
 #include "ui/MediaLibraryPanel.h"
+#include "ui/MidiNoteDisplayMath.h"
 #include "ui/TimelineScaleMath.h"
 #include "ui/WaveformDisplayMath.h"
 #include "waveform/WaveformCache.h"
@@ -135,9 +136,40 @@ std::shared_ptr<Clip> ClipLaneWidget::findClipAt(int64_t sample) const {
     return nullptr;
 }
 
+void ClipLaneWidget::paintMidiNotes(QPainter& painter) {
+    auto notes = m_track->midiClipsSnapshot();
+    if (notes->empty()) {
+        painter.setPen(QColor(120, 120, 120));
+        painter.drawText(rect(), Qt::AlignCenter, "No notes — play the on-screen keyboard while armed+recording");
+        return;
+    }
+
+    for (auto& note : *notes) {
+        int x0 = sampleToX(note->startSample);
+        int x1 = sampleToX(note->startSample + note->lengthSamples);
+        int w = std::max(2, x1 - x0);
+        int y = pitchToY(note->pitch, height() - 8, 36, 96) + 4;
+        int noteH = 6;
+
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(160, 210, 120));
+        painter.drawRect(x0, y - noteH / 2, w, noteH);
+    }
+}
+
 void ClipLaneWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(30, 30, 30));
+
+    if (m_track->kind == TrackKind::Instrument) {
+        paintMidiNotes(painter);
+        if (m_playheadSample >= 0) {
+            int px = sampleToX(m_playheadSample);
+            painter.setPen(QPen(QColor(230, 80, 80), 2));
+            painter.drawLine(px, 0, px, height());
+        }
+        return;
+    }
 
     auto clips = m_track->clipsSnapshot();
     if (clips->empty()) {

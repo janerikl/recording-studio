@@ -26,6 +26,9 @@
 #include "ui/WaveformWidget.h"
 #include "ui/MediaLibraryPanel.h"
 #include "ui/EffectsRackPanel.h"
+#include "ui/InstrumentPanel.h"
+
+#include <unordered_map>
 
 class QCloseEvent;
 
@@ -53,9 +56,12 @@ private slots:
     void onCloseSessionClicked();
     void onSettingsClicked();
     void onAddTrackClicked();
+    void onAddInstrumentTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
     void onEffectsPanelRequested(std::shared_ptr<Track> track);
+    void onInstrumentNoteOn(int pitch, float velocity);
+    void onInstrumentNoteOff(int pitch);
     void onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take);
     void onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void onDeleteClipClicked();
@@ -112,6 +118,13 @@ private:
     bool m_punchRecordingActive = false;
     static constexpr double kPunchPreRollSeconds = 2.0;
     std::shared_ptr<Track> m_trackWithClipSelection;
+    // MIDI note capture while an Instrument track is armed+recording:
+    // GUI-thread-only bookkeeping (pitch -> start sample when the on-screen
+    // key went down), finalized into completed MidiNotes on note-up, then
+    // pushed to the track's midiClips as one undo step on Stop. Deliberately
+    // separate from the RT-thread live-audition NoteEventQueue.
+    std::unordered_map<int, int64_t> m_pendingNoteStarts;
+    std::vector<std::shared_ptr<MidiNote>> m_pendingRecordedNotes;
 
     QAction* m_recordAction = nullptr;
     QAction* m_playAction = nullptr;
@@ -121,6 +134,7 @@ private:
     QAction* m_undoAction = nullptr;
     QAction* m_redoAction = nullptr;
     QAction* m_addTrackAction = nullptr;
+    QAction* m_addInstrumentTrackAction = nullptr;
     QAction* m_removeTrackAction = nullptr;
     QAction* m_zoomInAction = nullptr;
     QAction* m_zoomOutAction = nullptr;
@@ -150,6 +164,8 @@ private:
     MediaLibraryPanel* m_mediaLibrary = nullptr;
     EffectsRackPanel* m_effectsRack = nullptr;
     QDockWidget* m_effectsDock = nullptr;
+    InstrumentPanel* m_instrumentPanel = nullptr;
+    QDockWidget* m_instrumentDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;

@@ -96,6 +96,16 @@ target_include_directories(comp_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(comp_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME CompMathTests COMMAND comp_math_tests)
 
+add_executable(synth_math_tests test_SynthMath.cpp)
+target_include_directories(synth_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(synth_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME SynthMathTests COMMAND synth_math_tests)
+
+add_executable(midi_note_display_math_tests test_MidiNoteDisplayMath.cpp)
+target_include_directories(midi_note_display_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(midi_note_display_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME MidiNoteDisplayMathTests COMMAND midi_note_display_math_tests)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 
