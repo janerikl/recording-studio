@@ -43,6 +43,14 @@ target_include_directories(effect_commands_tests PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(effect_commands_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME EffectCommandsTests COMMAND effect_commands_tests)
 
+add_executable(punch_recording_tests
+    test_PunchRecording.cpp
+    ${CMAKE_SOURCE_DIR}/src/command/CommandStack.cpp
+)
+target_include_directories(punch_recording_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(punch_recording_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PunchRecordingTests COMMAND punch_recording_tests)
+
 add_executable(clip_edit_math_tests test_ClipEditMath.cpp)
 target_include_directories(clip_edit_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(clip_edit_math_tests PRIVATE Qt6::Core Qt6::Test)

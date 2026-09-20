@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QAction>
+#include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QIcon>
 #include <QMainWindow>
 #include <QLabel>
@@ -12,6 +14,7 @@
 #include <vector>
 
 #include "audio/AudioEngine.h"
+#include "audio/PunchRegion.h"
 #include "command/CommandStack.h"
 #include "model/Session.h"
 #include "ui/LevelMeterWidget.h"
@@ -63,6 +66,8 @@ private slots:
     void onZoomInClicked();
     void onZoomOutClicked();
     void onZoomResetClicked();
+    void onPunchRegionEditedOnRuler(PunchRegion region);
+    void onPunchFieldsChanged();
 
 private:
     void updateStatusLabel();
@@ -90,6 +95,11 @@ private:
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
     std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
+    // True while the in-progress recording is punch/loop mode (single target
+    // track, gated to the punch region, one undo entry on stop) rather than
+    // the plain whole-transport recording path.
+    bool m_punchRecordingActive = false;
+    static constexpr double kPunchPreRollSeconds = 2.0;
     std::shared_ptr<Track> m_trackWithClipSelection;
 
     QAction* m_recordAction = nullptr;
@@ -117,6 +127,9 @@ private:
     QTimer* m_meterTimer = nullptr;
     TimelineView* m_timeline = nullptr;
     TimeRulerWidget* m_ruler = nullptr;
+    QCheckBox* m_loopRecordCheckBox = nullptr;
+    QDoubleSpinBox* m_punchInSpin = nullptr;
+    QDoubleSpinBox* m_punchOutSpin = nullptr;
     WaveformWidget* m_masterWaveform = nullptr;
     MediaLibraryPanel* m_mediaLibrary = nullptr;
     EffectsRackPanel* m_effectsRack = nullptr;

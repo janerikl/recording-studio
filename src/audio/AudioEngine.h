@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include "PunchRecorder.h"
 #include "RingBuffer.h"
 #include "TransportClock.h"
 #include "model/Session.h"
@@ -52,6 +53,15 @@ public:
 
     // Track that recorded input should be routed to while state == Recording.
     void setRecordTargetTrack(std::shared_ptr<Track> track) { m_recordTarget = std::move(track); }
+    std::shared_ptr<Track> recordTargetTrack() const { return m_recordTarget; }
+
+    // Punch/loop recording: call prepare() (GUI thread, before arming) once
+    // the punch region and transport's loop settings are set. While
+    // transport().punchLoopEnabled() and the region is valid, the RT
+    // callback captures into the recorder instead of the plain capture ring,
+    // so passes replace each other rather than layering. Call
+    // finalizePunchRecording() after stopping to get the undoable result.
+    PunchRecorder& punchRecorder() { return m_punchRecorder; }
 
     unsigned int sampleRate() const { return m_sampleRate; }
     unsigned int channels() const { return m_channels; }
@@ -81,6 +91,7 @@ private:
     Session* m_session = nullptr;
     TransportClock m_transport;
     RingBuffer<float> m_captureRing{48000 * 2 * 10}; // 10s headroom at 48kHz stereo
+    PunchRecorder m_punchRecorder;
     std::shared_ptr<Track> m_recordTarget;
     // Per-track mixdown scratch space, reused every callback so effect
     // processing never allocates on the audio thread. Sized generously

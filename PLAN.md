@@ -17,7 +17,7 @@ without relying on chat history. Update status as items complete.
 ## Feature order
 
 1. [x] Effects rack per track (EQ, compressor, reverb, delay)
-2. [ ] Punch-in / loop recording
+2. [x] Punch-in / loop recording
 3. [ ] Playlist comping (multiple takes per track, comp best parts)
 4. [ ] Clip-level editing tools (trim/fade/gain handles directly on clips)
 5. [ ] Virtual instruments (basic synth + sampler, MIDI-playable)
@@ -36,6 +36,16 @@ without relying on chat history. Update status as items complete.
       processing, `SessionIO` effect serialization, `EffectsRackPanel` dock UI,
       app-wide dark Fusion theme (`main.cpp`). Tests: `test_Effects.cpp`,
       `test_EffectCommands.cpp`, `SessionIO` effect round-trip test.
+- [x] Punch-in / loop recording: `src/audio/PunchRegion.h`, `PunchRecorder.h`
+      (RT-safe overwrite-per-pass capture), `TransportClock` loop-wrap +
+      pre-roll, `AudioEngine::rtCallback` gates capture to the punch region,
+      `command/PunchRecordingCommand.h` (`buildPunchRecordingCommand` — one
+      `TrackClipsCommand` for the whole multi-pass session), `TimeRulerWidget`
+      right-drag region + paint, `MainWindow` Loop Record checkbox + In/Out
+      spin boxes. Tests: `test_PunchRecording.cpp`. Manual UI verification
+      (drag region, record through loops, confirm playback/undo/pre-roll
+      audibly) still needs to be run by hand — not automatable from this
+      session (no GUI driver for the native Qt app).
 
 ## Notes
 

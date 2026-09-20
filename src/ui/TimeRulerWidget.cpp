@@ -63,6 +63,15 @@ void TimeRulerWidget::paintEvent(QPaintEvent*) {
         painter.drawText(x + 2, height() - 10, label);
     }
 
+    if (m_punchRegion.isValid()) {
+        int xStart = sampleToX(m_punchRegion.startSample);
+        int xEnd = sampleToX(m_punchRegion.endSample);
+        painter.fillRect(xStart, 0, xEnd - xStart, height(), QColor(230, 160, 40, 70));
+        painter.setPen(QPen(QColor(230, 160, 40), 2));
+        painter.drawLine(xStart, 0, xStart, height());
+        painter.drawLine(xEnd, 0, xEnd, height());
+    }
+
     painter.setPen(QPen(QColor(230, 80, 80), 2));
     int px = sampleToX(m_playheadSample);
     painter.drawLine(px, 0, px, height());
@@ -70,16 +79,37 @@ void TimeRulerWidget::paintEvent(QPaintEvent*) {
 
 void TimeRulerWidget::mousePressEvent(QMouseEvent* event) {
     if (event->pos().x() < m_leftMargin) return;
+
+    if (event->button() == Qt::RightButton) {
+        m_definingPunchRegion = true;
+        m_punchDragAnchor = xToSample(event->pos().x());
+        m_punchRegion = {m_punchDragAnchor, m_punchDragAnchor};
+        update();
+        return;
+    }
+
     m_scrubbing = true;
     emit seekRequested(xToSample(event->pos().x()));
 }
 
 void TimeRulerWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (m_definingPunchRegion) {
+        int64_t sample = xToSample(event->pos().x());
+        m_punchRegion = {std::min(m_punchDragAnchor, sample), std::max(m_punchDragAnchor, sample)};
+        emit punchRegionEdited(m_punchRegion);
+        update();
+        return;
+    }
     if (!m_scrubbing) return;
     emit seekRequested(xToSample(event->pos().x()));
 }
 
 void TimeRulerWidget::mouseReleaseEvent(QMouseEvent*) {
+    if (m_definingPunchRegion) {
+        m_definingPunchRegion = false;
+        emit punchRegionEdited(m_punchRegion);
+        return;
+    }
     m_scrubbing = false;
 }
 

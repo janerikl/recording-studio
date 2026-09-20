@@ -31,7 +31,13 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     const TransportState state = self->m_transport.state();
 
     if (state == TransportState::Recording && in) {
-        self->m_captureRing.write(in, static_cast<size_t>(nFrames) * self->m_channels);
+        if (self->m_transport.punchLoopEnabled() && self->m_transport.punchRegion().isValid()) {
+            // Punch/loop mode: capture only within the region, overwriting
+            // each pass in place. Position is read before advance() below.
+            self->m_punchRecorder.process(self->m_transport.positionSamples(), in, nFrames);
+        } else {
+            self->m_captureRing.write(in, static_cast<size_t>(nFrames) * self->m_channels);
+        }
     }
 
     // Measured regardless of transport state so a level meter can show

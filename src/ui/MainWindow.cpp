@@ -20,6 +20,7 @@
 #include <algorithm>
 
 #include "command/EditCommands.h"
+#include "command/PunchRecordingCommand.h"
 #include "io/AudioFileIO.h"
 #include "io/SessionIO.h"
 
@@ -177,6 +178,31 @@ MainWindow::MainWindow(QWidget* parent)
     toolbar->addAction(m_zoomInAction);
     toolbar->addAction(m_zoomOutAction);
     toolbar->addAction(m_zoomResetAction);
+    toolbar->addSeparator();
+
+    m_loopRecordCheckBox = new QCheckBox("Loop Record", this);
+    m_loopRecordCheckBox->setToolTip(
+        "When checked, Record plays 2s pre-roll then loops the punch region "
+        "(right-drag on the ruler, or the In/Out fields) until Stop, "
+        "replacing the take each pass.");
+    toolbar->addWidget(m_loopRecordCheckBox);
+
+    toolbar->addWidget(new QLabel(" In: ", this));
+    m_punchInSpin = new QDoubleSpinBox(this);
+    m_punchInSpin->setRange(0.0, 3600.0);
+    m_punchInSpin->setDecimals(2);
+    m_punchInSpin->setSuffix(" s");
+    toolbar->addWidget(m_punchInSpin);
+
+    toolbar->addWidget(new QLabel(" Out: ", this));
+    m_punchOutSpin = new QDoubleSpinBox(this);
+    m_punchOutSpin->setRange(0.0, 3600.0);
+    m_punchOutSpin->setDecimals(2);
+    m_punchOutSpin->setSuffix(" s");
+    toolbar->addWidget(m_punchOutSpin);
+
+    connect(m_punchInSpin, &QDoubleSpinBox::valueChanged, this, &MainWindow::onPunchFieldsChanged);
+    connect(m_punchOutSpin, &QDoubleSpinBox::valueChanged, this, &MainWindow::onPunchFieldsChanged);
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -195,6 +221,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_ruler = new TimeRulerWidget(central);
     m_ruler->setSampleRate(m_session->sampleRate);
     connect(m_ruler, &TimeRulerWidget::seekRequested, this, &MainWindow::onSeekRequested);
+    connect(m_ruler, &TimeRulerWidget::punchRegionEdited, this,
+            &MainWindow::onPunchRegionEditedOnRuler);
     layout->addWidget(m_ruler);
 
     // Compact summary strip: the mixed-down combination of every track,
@@ -356,6 +384,21 @@ void MainWindow::onDeleteClipClicked() {
     updateUndoRedoButtons();
 }
 
+void MainWindow::onPunchRegionEditedOnRuler(PunchRegion region) {
+    const QSignalBlocker blockIn(m_punchInSpin);
+    const QSignalBlocker blockOut(m_punchOutSpin);
+    double sr = std::max(1, m_session->sampleRate);
+    m_punchInSpin->setValue(static_cast<double>(region.startSample) / sr);
+    m_punchOutSpin->setValue(static_cast<double>(region.endSample) / sr);
+}
+
+void MainWindow::onPunchFieldsChanged() {
+    double sr = std::max(1, m_session->sampleRate);
+    PunchRegion region{static_cast<int64_t>(m_punchInSpin->value() * sr),
+                        static_cast<int64_t>(m_punchOutSpin->value() * sr)};
+    m_ruler->setPunchRegion(region);
+}
+
 void MainWindow::onRecordClicked() {
     // Record-armed tracks are the target; if none are armed, fall back to
     // whichever track is Active so recording still works out of the box.
@@ -371,6 +414,36 @@ void MainWindow::onRecordClicked() {
         return;
     }
 
+    PunchRegion punchRegion = m_ruler->punchRegion();
+    if (m_loopRecordCheckBox->isChecked() && punchRegion.isValid()) {
+        m_punchRecordingActive = true;
+        auto track = m_recordTargetTracks.front();
+        m_recordTargetTracks = {track}; // punch/loop recording targets a single track
+
+        unsigned int channels = static_cast<unsigned int>(m_session->channels);
+        int64_t preRollSamples =
+            static_cast<int64_t>(kPunchPreRollSeconds * m_session->sampleRate);
+
+        m_engine->setRecordTargetTrack(track);
+        m_engine->punchRecorder().prepare(punchRegion, channels);
+        m_engine->transport().setPunchRegion(punchRegion);
+        m_engine->transport().setPreRollSamples(preRollSamples);
+        m_engine->transport().setPunchLoopEnabled(true);
+        m_engine->transport().setPositionSamples(
+            std::max<int64_t>(0, punchRegion.startSample - preRollSamples));
+        m_engine->transport().setState(TransportState::Recording);
+        m_playheadTimer->start();
+
+        m_recordAction->setEnabled(false);
+        m_playAction->setEnabled(false);
+        m_playFromStartAction->setEnabled(false);
+        m_stopAction->setEnabled(true);
+        m_statusLabel->setText("Loop recording into " + track->name + " (punch " +
+                                m_punchInSpin->text() + "-" + m_punchOutSpin->text() + ")...");
+        return;
+    }
+
+    m_punchRecordingActive = false;
     m_activeRecordingClip = std::make_shared<Clip>();
     m_activeRecordingClip->buffer = std::make_shared<AudioBuffer>();
     m_activeRecordingClip->buffer->channels = m_session->channels;
@@ -420,7 +493,22 @@ void MainWindow::onStopClicked() {
     m_ringDrainTimer->stop();
     m_playheadTimer->stop();
 
-    if (wasRecording && m_activeRecordingClip && !m_recordTargetTracks.empty()) {
+    if (wasRecording && m_punchRecordingActive) {
+        m_engine->transport().setPunchLoopEnabled(false);
+        m_punchRecordingActive = false;
+        if (!m_recordTargetTracks.empty()) {
+            auto track = m_recordTargetTracks.front();
+            auto cmd = buildPunchRecordingCommand(track, m_engine->punchRecorder(),
+                                                   static_cast<unsigned int>(m_session->sampleRate));
+            if (cmd) {
+                m_commandStack.push(std::move(cmd));
+                refreshWaveformFor(track);
+            }
+        }
+        m_recordTargetTracks.clear();
+        refreshMasterAndScale();
+        updateUndoRedoButtons();
+    } else if (wasRecording && m_activeRecordingClip && !m_recordTargetTracks.empty()) {
         drainCaptureRing(); // flush any remaining samples
         m_activeRecordingClip->lengthSamples = m_activeRecordingClip->buffer->frameCount();
 
