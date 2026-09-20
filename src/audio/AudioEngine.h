@@ -69,9 +69,6 @@ private:
     static int rtCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
                            double streamTime, RtAudioStreamStatus status, void* userData);
 
-    void mixClipInto(float* out, unsigned int nFrames, int64_t playheadStart, const Clip& clip,
-                      float gainL, float gainR) const;
-
     std::unique_ptr<RtAudio> m_rtAudio;
     unsigned int m_sampleRate = 48000;
     unsigned int m_channels = 2;
@@ -85,6 +82,11 @@ private:
     TransportClock m_transport;
     RingBuffer<float> m_captureRing{48000 * 2 * 10}; // 10s headroom at 48kHz stereo
     std::shared_ptr<Track> m_recordTarget;
+    // Per-track mixdown scratch space, reused every callback so effect
+    // processing never allocates on the audio thread. Sized generously
+    // above any realistic (buffer frames * channels) the stream will open
+    // with (512-frame stereo blocks in practice).
+    std::vector<float> m_trackScratch = std::vector<float>(8192 * 2, 0.0f);
 
     std::atomic<float> m_inputPeakL{0.0f};
     std::atomic<float> m_inputPeakR{0.0f};

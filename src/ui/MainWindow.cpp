@@ -19,6 +19,7 @@
 #include <QWidget>
 #include <algorithm>
 
+#include "command/EditCommands.h"
 #include "io/AudioFileIO.h"
 #include "io/SessionIO.h"
 
@@ -208,8 +209,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_timeline, &TimelineView::clipSelectionChanged, this,
             &MainWindow::onClipSelectionChanged);
     connect(m_timeline, &TimelineView::seekRequested, this, &MainWindow::onSeekRequested);
-    connect(m_timeline, &TimelineView::editStarted, this, &MainWindow::onClipEditStarted);
     connect(m_timeline, &TimelineView::clipMovedToTrack, this, &MainWindow::onClipMovedToTrack);
+    m_timeline->setCommandStack(&m_commandStack);
     connect(m_timeline, &TimelineView::mediaDroppedOnTrack, this,
             &MainWindow::onMediaDroppedOnTrack);
     layout->addWidget(m_timeline, 1);
@@ -223,6 +224,14 @@ MainWindow::MainWindow(QWidget* parent)
     });
     mediaDock->setWidget(m_mediaLibrary);
     addDockWidget(Qt::RightDockWidgetArea, mediaDock);
+
+    auto* effectsDock = new QDockWidget("Effects Rack", this);
+    m_effectsRack = new EffectsRackPanel(effectsDock);
+    m_effectsRack->setCommandStack(&m_commandStack);
+    m_effectsRack->setSampleRate(m_session->sampleRate);
+    effectsDock->setWidget(m_effectsRack);
+    addDockWidget(Qt::RightDockWidgetArea, effectsDock);
+    tabifyDockWidget(mediaDock, effectsDock);
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -297,33 +306,37 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 }
 
 void MainWindow::onAddTrackClicked() {
-    pushUndoSnapshot();
     ++m_trackCounter;
-    auto track = m_session->addTrack(QString("Track %1").arg(m_trackCounter));
+    auto track = std::make_shared<Track>();
+    track->name = QString("Track %1").arg(m_trackCounter);
+    m_commandStack.push(std::make_unique<AddTrackCommand>(m_session.get(), track));
     m_timeline->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
     updateStatusLabel();
     refreshMasterAndScale();
+    updateUndoRedoButtons();
 }
 
 void MainWindow::onRemoveTrackClicked() {
     if (!m_activeTrack) return;
-    pushUndoSnapshot();
     auto idToRemove = m_activeTrack->id;
 
     auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
                             [&](const auto& t) { return t->id == idToRemove; });
     if (it == m_session->tracks.end()) return;
 
+    size_t index = static_cast<size_t>(std::distance(m_session->tracks.begin(), it));
+    m_commandStack.push(std::make_unique<RemoveTrackCommand>(m_session.get(), *it, index));
     m_timeline->removeTrack(idToRemove);
-    m_session->tracks.erase(it);
     m_activeTrack = m_session->tracks.empty() ? nullptr : m_session->tracks.front();
     updateStatusLabel();
     refreshMasterAndScale();
+    updateUndoRedoButtons();
 }
 
 void MainWindow::onTrackSelected(std::shared_ptr<Track> track) {
     m_activeTrack = std::move(track);
+    m_effectsRack->setTrack(m_activeTrack);
 }
 
 void MainWindow::onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection) {
@@ -333,12 +346,14 @@ void MainWindow::onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSe
 
 void MainWindow::onDeleteClipClicked() {
     if (!m_trackWithClipSelection) return;
-    pushUndoSnapshot();
+    // deleteSelectedClipOn() pushes its own undo command (via
+    // ClipLaneWidget::deleteSelected(), which owns the before/after snapshot).
     m_timeline->deleteSelectedClipOn(m_trackWithClipSelection->id);
     m_deleteClipAction->setEnabled(false);
     m_trackWithClipSelection.reset();
     updateStatusLabel();
     refreshMasterAndScale();
+    updateUndoRedoButtons();
 }
 
 void MainWindow::onRecordClicked() {
@@ -406,22 +421,27 @@ void MainWindow::onStopClicked() {
     m_playheadTimer->stop();
 
     if (wasRecording && m_activeRecordingClip && !m_recordTargetTracks.empty()) {
-        pushUndoSnapshot();
         drainCaptureRing(); // flush any remaining samples
         m_activeRecordingClip->lengthSamples = m_activeRecordingClip->buffer->frameCount();
 
         // Every armed track gets its own Clip (so each can be trimmed/moved
         // independently later) but they all share the same recorded
         // AudioBuffer — identical audio, no data duplicated in memory.
+        std::vector<std::unique_ptr<Command>> subCommands;
         for (auto& track : m_recordTargetTracks) {
+            auto before = track->clipsSnapshot();
             auto clip = std::make_shared<Clip>(*m_activeRecordingClip);
             clip->id = QUuid::createUuid();
             track->addClip(clip);
+            subCommands.push_back(
+                std::make_unique<TrackClipsCommand>(track, before, track->clipsSnapshot(), "Record"));
             refreshWaveformFor(track);
         }
+        m_commandStack.push(std::make_unique<CompositeCommand>(std::move(subCommands), "Record"));
         m_activeRecordingClip.reset();
         m_recordTargetTracks.clear();
         refreshMasterAndScale();
+        updateUndoRedoButtons();
     }
 
     m_recordAction->setEnabled(true);
@@ -516,11 +536,14 @@ void MainWindow::onImportClicked() {
     clip->sourceOffsetSamples = 0;
     clip->lengthSamples = buffer->frameCount();
 
-    pushUndoSnapshot();
+    auto before = m_activeTrack->clipsSnapshot();
     m_activeTrack->addClip(clip);
+    m_commandStack.push(
+        std::make_unique<TrackClipsCommand>(m_activeTrack, before, m_activeTrack->clipsSnapshot(), "Import"));
     updateStatusLabel();
     refreshWaveformFor(m_activeTrack);
     refreshMasterAndScale();
+    updateUndoRedoButtons();
 }
 
 void MainWindow::onExportClicked() {
@@ -610,9 +633,9 @@ bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessag
         return false;
     }
 
-    m_undoStack.clear();
-    m_redoStack.clear();
+    m_commandStack.clear();
     updateUndoRedoButtons();
+    m_effectsRack->setSampleRate(m_session->sampleRate);
 
     m_mediaLibrary->resetLibrary();
     for (auto& entry : libraryEntries) {
@@ -636,8 +659,7 @@ void MainWindow::onCloseSessionClicked() {
     onStopClicked(); // stop any playback/recording before discarding session state
 
     m_session->tracks.clear();
-    m_undoStack.clear();
-    m_redoStack.clear();
+    m_commandStack.clear();
     updateUndoRedoButtons();
     m_trackCounter = 0;
     m_mediaLibrary->resetLibrary();
@@ -691,18 +713,10 @@ void MainWindow::rebuildTimelineFromSession() {
     updateStatusLabel();
     refreshMasterAndScale();
     updatePlayhead();
-}
-
-void MainWindow::onClipEditStarted() {
-    pushUndoSnapshot();
+    m_effectsRack->setTrack(m_activeTrack);
 }
 
 void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId) {
-    // The undo snapshot for this whole gesture was already captured in
-    // onClipEditStarted (fired at mousePressEvent, before either the local
-    // horizontal move or this track-reassignment step). No extra undo work
-    // needed here — captureSnapshot()/restoreSnapshot() serialize clips per
-    // track by id, so undo correctly restores the clip to its original track.
     auto findTrack = [&](const QUuid& id) -> std::shared_ptr<Track> {
         for (auto& t : m_session->tracks) {
             if (t->id == id) return t;
@@ -719,13 +733,24 @@ void MainWindow::onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid des
     }
     if (!movedClip) return;
 
+    auto sourceBefore = sourceTrack->clipsSnapshot();
+    auto destBefore = destTrack->clipsSnapshot();
+
     destTrack->addClip(std::make_shared<Clip>(*movedClip));
     sourceTrack->removeClip(clipId);
     m_timeline->clearSelectionOn(sourceTrackId);
 
+    std::vector<std::unique_ptr<Command>> subCommands;
+    subCommands.push_back(std::make_unique<TrackClipsCommand>(
+        sourceTrack, sourceBefore, sourceTrack->clipsSnapshot(), "Move Clip"));
+    subCommands.push_back(
+        std::make_unique<TrackClipsCommand>(destTrack, destBefore, destTrack->clipsSnapshot(), "Move Clip"));
+    m_commandStack.push(std::make_unique<CompositeCommand>(std::move(subCommands), "Move Clip"));
+
     refreshWaveformFor(sourceTrack);
     refreshWaveformFor(destTrack);
     refreshMasterAndScale();
+    updateUndoRedoButtons();
 }
 
 void MainWindow::onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample) {
@@ -738,8 +763,6 @@ void MainWindow::onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t 
     auto buffer = m_mediaLibrary->bufferAt(libraryIndex);
     if (!buffer) return;
 
-    pushUndoSnapshot();
-
     auto clip = std::make_shared<Clip>();
     clip->buffer = buffer;
     clip->name = m_mediaLibrary->nameAt(libraryIndex);
@@ -747,97 +770,34 @@ void MainWindow::onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t 
     clip->sourceOffsetSamples = 0;
     clip->lengthSamples = buffer->frameCount();
 
+    auto before = targetTrack->clipsSnapshot();
     targetTrack->addClip(clip);
+    m_commandStack.push(std::make_unique<TrackClipsCommand>(
+        targetTrack, before, targetTrack->clipsSnapshot(), "Drop Media"));
     refreshWaveformFor(targetTrack);
     refreshMasterAndScale();
-}
-
-SessionSnapshot MainWindow::captureSnapshot() const {
-    SessionSnapshot snapshot;
-    for (auto& track : m_session->tracks) {
-        TrackSnapshot ts;
-        ts.id = track->id;
-        ts.name = track->name;
-        ts.gainL = track->gainL.load();
-        ts.gainR = track->gainR.load();
-        ts.muted = track->muted.load();
-        ts.soloed = track->soloed.load();
-        ts.recordArmed = track->recordArmed.load();
-        for (auto& clip : *track->clipsSnapshot()) {
-            ClipSnapshot cs;
-            cs.id = clip->id;
-            cs.buffer = clip->buffer; // shared, immutable sample data — not deep-copied
-            cs.sessionStartSample = clip->sessionStartSample;
-            cs.sourceOffsetSamples = clip->sourceOffsetSamples;
-            cs.lengthSamples = clip->lengthSamples;
-            cs.name = clip->name;
-            cs.muted = clip->muted;
-            ts.clips.push_back(std::move(cs));
-        }
-        snapshot.push_back(std::move(ts));
-    }
-    return snapshot;
-}
-
-void MainWindow::restoreSnapshot(const SessionSnapshot& snapshot) {
-    m_session->tracks.clear();
-    for (auto& ts : snapshot) {
-        auto track = std::make_shared<Track>();
-        track->id = ts.id;
-        track->name = ts.name;
-        track->gainL.store(ts.gainL);
-        track->gainR.store(ts.gainR);
-        track->muted.store(ts.muted);
-        track->soloed.store(ts.soloed);
-        track->recordArmed.store(ts.recordArmed);
-        for (auto& cs : ts.clips) {
-            auto clip = std::make_shared<Clip>();
-            clip->id = cs.id;
-            clip->buffer = cs.buffer;
-            clip->sessionStartSample = cs.sessionStartSample;
-            clip->sourceOffsetSamples = cs.sourceOffsetSamples;
-            clip->lengthSamples = cs.lengthSamples;
-            clip->name = cs.name;
-            clip->muted = cs.muted;
-            track->addClip(clip);
-        }
-        m_session->tracks.push_back(track);
-    }
-    rebuildTimelineFromSession();
-}
-
-void MainWindow::pushUndoSnapshot() {
-    m_undoStack.push_back(captureSnapshot());
-    if (m_undoStack.size() > kMaxUndoDepth) m_undoStack.erase(m_undoStack.begin());
-    m_redoStack.clear(); // a fresh edit invalidates any redo history
     updateUndoRedoButtons();
 }
 
 void MainWindow::onUndoClicked() {
-    if (m_undoStack.empty()) return;
+    if (!m_commandStack.canUndo()) return;
     onStopClicked(); // don't mutate session state while the audio thread is reading it
-
-    m_redoStack.push_back(captureSnapshot());
-    SessionSnapshot snapshot = m_undoStack.back();
-    m_undoStack.pop_back();
-    restoreSnapshot(snapshot);
+    m_commandStack.undo();
+    rebuildTimelineFromSession();
     updateUndoRedoButtons();
 }
 
 void MainWindow::onRedoClicked() {
-    if (m_redoStack.empty()) return;
+    if (!m_commandStack.canRedo()) return;
     onStopClicked();
-
-    m_undoStack.push_back(captureSnapshot());
-    SessionSnapshot snapshot = m_redoStack.back();
-    m_redoStack.pop_back();
-    restoreSnapshot(snapshot);
+    m_commandStack.redo();
+    rebuildTimelineFromSession();
     updateUndoRedoButtons();
 }
 
 void MainWindow::updateUndoRedoButtons() {
-    m_undoAction->setEnabled(!m_undoStack.empty());
-    m_redoAction->setEnabled(!m_redoStack.empty());
+    m_undoAction->setEnabled(m_commandStack.canUndo());
+    m_redoAction->setEnabled(m_commandStack.canRedo());
 }
 
 std::shared_ptr<AudioBuffer> MainWindow::renderTrackToBuffer(const Track& track) const {

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "audio/AudioEngine.h"
+#include "command/CommandStack.h"
 #include "model/Session.h"
 #include "ui/LevelMeterWidget.h"
 #include "ui/TimelineView.h"
@@ -19,35 +20,11 @@
 #include "ui/SettingsDialog.h"
 #include "ui/WaveformWidget.h"
 #include "ui/MediaLibraryPanel.h"
+#include "ui/EffectsRackPanel.h"
 
 class QCloseEvent;
 
 namespace rsd {
-
-// Lightweight snapshot of editable session state (not audio sample data,
-// which is immutable and shared by pointer) used for undo/redo.
-struct ClipSnapshot {
-    QUuid id;
-    std::shared_ptr<AudioBuffer> buffer;
-    int64_t sessionStartSample = 0;
-    int64_t sourceOffsetSamples = 0;
-    int64_t lengthSamples = 0;
-    QString name;
-    bool muted = false;
-};
-
-struct TrackSnapshot {
-    QUuid id;
-    QString name;
-    float gainL = 1.0f;
-    float gainR = 1.0f;
-    bool muted = false;
-    bool soloed = false;
-    bool recordArmed = false;
-    std::vector<ClipSnapshot> clips;
-};
-
-using SessionSnapshot = std::vector<TrackSnapshot>;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -76,7 +53,6 @@ private slots:
     void onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void onDeleteClipClicked();
     void onSeekRequested(int64_t sample);
-    void onClipEditStarted();
     void onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
     void onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
     void onUndoClicked();
@@ -98,9 +74,6 @@ private:
     bool loadSessionFromPath(const QString& path, bool showSuccessMessage = true);
     void addToRecentSessions(const QString& path);
     void rebuildRecentSessionsMenu();
-    SessionSnapshot captureSnapshot() const;
-    void restoreSnapshot(const SessionSnapshot& snapshot);
-    void pushUndoSnapshot();
     void updateUndoRedoButtons();
     static QIcon recordIcon();
     std::shared_ptr<AudioBuffer> renderTrackToBuffer(const Track& track) const;
@@ -137,9 +110,7 @@ private:
     float m_zoomFactor = 1.0f;
     static constexpr float kMinZoom = 0.25f;
     static constexpr float kMaxZoom = 8.0f;
-    std::vector<SessionSnapshot> m_undoStack;
-    std::vector<SessionSnapshot> m_redoStack;
-    static constexpr size_t kMaxUndoDepth = 50;
+    CommandStack m_commandStack;
     QLabel* m_statusLabel = nullptr;
     QTimer* m_ringDrainTimer = nullptr;
     QTimer* m_playheadTimer = nullptr;
@@ -148,6 +119,7 @@ private:
     TimeRulerWidget* m_ruler = nullptr;
     WaveformWidget* m_masterWaveform = nullptr;
     MediaLibraryPanel* m_mediaLibrary = nullptr;
+    EffectsRackPanel* m_effectsRack = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;

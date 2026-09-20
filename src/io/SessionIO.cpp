@@ -9,13 +9,120 @@
 #include <QJsonObject>
 #include <iostream>
 
+#include "audio/Effects.h"
 #include "io/AudioFileIO.h"
 
 namespace rsd {
 
+static QString effectTypeToString(EffectType t) {
+    switch (t) {
+        case EffectType::EQ: return "eq";
+        case EffectType::Compressor: return "compressor";
+        case EffectType::Delay: return "delay";
+        case EffectType::Reverb: return "reverb";
+    }
+    return "eq";
+}
+
+static QJsonObject effectToJson(const Effect& effect) {
+    QJsonObject json;
+    json["id"] = effect.id.toString();
+    json["type"] = effectTypeToString(effect.type());
+    json["bypassed"] = effect.bypassed.load();
+
+    switch (effect.type()) {
+        case EffectType::EQ: {
+            auto& eq = static_cast<const EqEffect&>(effect);
+            json["lowGainDb"] = eq.lowGainDb.load();
+            json["lowFreqHz"] = eq.lowFreqHz.load();
+            json["midGainDb"] = eq.midGainDb.load();
+            json["midFreqHz"] = eq.midFreqHz.load();
+            json["midQ"] = eq.midQ.load();
+            json["highGainDb"] = eq.highGainDb.load();
+            json["highFreqHz"] = eq.highFreqHz.load();
+            break;
+        }
+        case EffectType::Compressor: {
+            auto& comp = static_cast<const CompressorEffect&>(effect);
+            json["thresholdDb"] = comp.thresholdDb.load();
+            json["ratio"] = comp.ratio.load();
+            json["attackMs"] = comp.attackMs.load();
+            json["releaseMs"] = comp.releaseMs.load();
+            json["makeupDb"] = comp.makeupDb.load();
+            break;
+        }
+        case EffectType::Delay: {
+            auto& delay = static_cast<const DelayEffect&>(effect);
+            json["delayMs"] = delay.delayMs.load();
+            json["feedback"] = delay.feedback.load();
+            json["mix"] = delay.mix.load();
+            break;
+        }
+        case EffectType::Reverb: {
+            auto& reverb = static_cast<const ReverbEffect&>(effect);
+            json["roomSize"] = reverb.roomSize.load();
+            json["damping"] = reverb.damping.load();
+            json["mix"] = reverb.mix.load();
+            break;
+        }
+    }
+    return json;
+}
+
+// `sampleRate` prepares the effect's internal DSP state (filter/delay/
+// reverb buffers) so it's ready to process as soon as it's attached to a
+// live track, matching how a freshly-added effect is prepared in the UI.
+static std::shared_ptr<Effect> effectFromJson(const QJsonObject& json, double sampleRate) {
+    QString typeStr = json["type"].toString();
+    std::shared_ptr<Effect> effect;
+
+    if (typeStr == "eq") {
+        auto eq = std::make_shared<EqEffect>();
+        eq->lowGainDb.store(static_cast<float>(json["lowGainDb"].toDouble(0.0)));
+        eq->lowFreqHz.store(static_cast<float>(json["lowFreqHz"].toDouble(120.0)));
+        eq->midGainDb.store(static_cast<float>(json["midGainDb"].toDouble(0.0)));
+        eq->midFreqHz.store(static_cast<float>(json["midFreqHz"].toDouble(1000.0)));
+        eq->midQ.store(static_cast<float>(json["midQ"].toDouble(0.7)));
+        eq->highGainDb.store(static_cast<float>(json["highGainDb"].toDouble(0.0)));
+        eq->highFreqHz.store(static_cast<float>(json["highFreqHz"].toDouble(8000.0)));
+        effect = eq;
+    } else if (typeStr == "compressor") {
+        auto comp = std::make_shared<CompressorEffect>();
+        comp->thresholdDb.store(static_cast<float>(json["thresholdDb"].toDouble(-18.0)));
+        comp->ratio.store(static_cast<float>(json["ratio"].toDouble(4.0)));
+        comp->attackMs.store(static_cast<float>(json["attackMs"].toDouble(10.0)));
+        comp->releaseMs.store(static_cast<float>(json["releaseMs"].toDouble(100.0)));
+        comp->makeupDb.store(static_cast<float>(json["makeupDb"].toDouble(0.0)));
+        effect = comp;
+    } else if (typeStr == "delay") {
+        auto delay = std::make_shared<DelayEffect>();
+        delay->delayMs.store(static_cast<float>(json["delayMs"].toDouble(300.0)));
+        delay->feedback.store(static_cast<float>(json["feedback"].toDouble(0.35)));
+        delay->mix.store(static_cast<float>(json["mix"].toDouble(0.3)));
+        effect = delay;
+    } else if (typeStr == "reverb") {
+        auto reverb = std::make_shared<ReverbEffect>();
+        reverb->roomSize.store(static_cast<float>(json["roomSize"].toDouble(0.5)));
+        reverb->damping.store(static_cast<float>(json["damping"].toDouble(0.5)));
+        reverb->mix.store(static_cast<float>(json["mix"].toDouble(0.25)));
+        effect = reverb;
+    } else {
+        return nullptr;
+    }
+
+    effect->id = QUuid(json["id"].toString());
+    effect->bypassed.store(json["bypassed"].toBool(false));
+    effect->prepare(sampleRate);
+    return effect;
+}
+
 static QString audioFilesDirFor(const QString& projectPath) {
     QFileInfo info(projectPath);
     return info.absolutePath() + "/" + info.completeBaseName() + "_audiofiles";
+}
+
+static FadeCurve parseFadeCurve(const QString& s) {
+    return s == "equalPower" ? FadeCurve::EqualPower : FadeCurve::Linear;
 }
 
 bool SessionIO::saveSession(const QString& projectPath, const Session& session,
@@ -68,10 +175,22 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
             clipJson["sourceOffsetSamples"] = QString::number(clip->sourceOffsetSamples);
             clipJson["lengthSamples"] = QString::number(clip->lengthSamples);
             clipJson["muted"] = clip->muted;
+            clipJson["gain"] = clip->gain;
+            clipJson["fadeInSamples"] = QString::number(clip->fadeInSamples);
+            clipJson["fadeOutSamples"] = QString::number(clip->fadeOutSamples);
+            clipJson["fadeInCurve"] = clip->fadeInCurve == FadeCurve::EqualPower ? "equalPower" : "linear";
+            clipJson["fadeOutCurve"] = clip->fadeOutCurve == FadeCurve::EqualPower ? "equalPower" : "linear";
             clipsJson.append(clipJson);
         }
 
         trackJson["clips"] = clipsJson;
+
+        QJsonArray effectsJson;
+        for (auto& effect : *track->effectsSnapshot()) {
+            effectsJson.append(effectToJson(*effect));
+        }
+        trackJson["effects"] = effectsJson;
+
         tracksJson.append(trackJson);
     }
     root["tracks"] = tracksJson;
@@ -177,8 +296,18 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
             clip->sourceOffsetSamples = clipJson["sourceOffsetSamples"].toString().toLongLong();
             clip->lengthSamples = clipJson["lengthSamples"].toString().toLongLong();
             clip->muted = clipJson["muted"].toBool(false);
+            clip->gain = static_cast<float>(clipJson["gain"].toDouble(1.0));
+            clip->fadeInSamples = clipJson["fadeInSamples"].toString().toLongLong();
+            clip->fadeOutSamples = clipJson["fadeOutSamples"].toString().toLongLong();
+            clip->fadeInCurve = parseFadeCurve(clipJson["fadeInCurve"].toString());
+            clip->fadeOutCurve = parseFadeCurve(clipJson["fadeOutCurve"].toString());
 
             track->addClip(clip);
+        }
+
+        for (const auto& effectVal : trackJson["effects"].toArray()) {
+            auto effect = effectFromJson(effectVal.toObject(), outSession.sampleRate);
+            if (effect) track->addEffect(effect);
         }
 
         outSession.tracks.push_back(track);

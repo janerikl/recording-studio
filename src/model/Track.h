@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Clip.h"
+#include "audio/Effects.h"
 
 namespace rsd {
 
@@ -29,7 +30,10 @@ public:
     std::atomic<float> gainL{1.0f};
     std::atomic<float> gainR{1.0f};
 
-    Track() { m_clips.store(std::make_shared<const ClipList>()); }
+    Track() {
+        m_clips.store(std::make_shared<const ClipList>());
+        m_effects.store(std::make_shared<const EffectChain>());
+    }
 
     // GUI thread only.
     void addClip(std::shared_ptr<Clip> clip) {
@@ -104,8 +108,56 @@ public:
     // RT-safe read: audio callback calls this once per buffer.
     std::shared_ptr<const ClipList> clipsSnapshot() const { return m_clips.load(); }
 
+    // GUI thread only. Restores a previously captured snapshot in a single
+    // atomic swap — the basis for undoing any clip-list edit (add/remove/
+    // move/trim/split) without inverting each mutation's arithmetic.
+    void restoreClips(std::shared_ptr<const ClipList> snapshot) { m_clips.store(std::move(snapshot)); }
+
+    // Effect chain: same copy-on-write + atomic-swap pattern as the clip
+    // list, since it's read lock-free by the audio thread every callback.
+    // Structural edits (add/remove/reorder) go through these; per-effect
+    // parameter tweaks mutate the effect's own atomics directly instead
+    // (see Effects.h) so DSP state isn't lost mid-stream.
+    std::shared_ptr<const EffectChain> effectsSnapshot() const { return m_effects.load(); }
+    void restoreEffects(std::shared_ptr<const EffectChain> snapshot) {
+        m_effects.store(std::move(snapshot));
+    }
+
+    // GUI thread only.
+    void addEffect(std::shared_ptr<Effect> effect) {
+        auto current = m_effects.load();
+        auto updated = std::make_shared<EffectChain>(*current);
+        updated->push_back(std::move(effect));
+        m_effects.store(std::const_pointer_cast<const EffectChain>(updated));
+    }
+
+    void removeEffect(const QUuid& effectId) {
+        auto current = m_effects.load();
+        auto updated = std::make_shared<EffectChain>(*current);
+        updated->erase(std::remove_if(updated->begin(), updated->end(),
+                                       [&](const auto& e) { return e->id == effectId; }),
+                        updated->end());
+        m_effects.store(std::const_pointer_cast<const EffectChain>(updated));
+    }
+
+    // Moves the effect with matching id to `newIndex` in the chain (clamped
+    // to the valid range), preserving all other effects' relative order.
+    void moveEffect(const QUuid& effectId, int newIndex) {
+        auto current = m_effects.load();
+        auto updated = std::make_shared<EffectChain>(*current);
+        auto it = std::find_if(updated->begin(), updated->end(),
+                                [&](const auto& e) { return e->id == effectId; });
+        if (it == updated->end()) return;
+        auto effect = *it;
+        updated->erase(it);
+        newIndex = std::clamp(newIndex, 0, static_cast<int>(updated->size()));
+        updated->insert(updated->begin() + newIndex, effect);
+        m_effects.store(std::const_pointer_cast<const EffectChain>(updated));
+    }
+
 private:
     std::atomic<std::shared_ptr<const ClipList>> m_clips;
+    std::atomic<std::shared_ptr<const EffectChain>> m_effects;
 };
 
 } // namespace rsd

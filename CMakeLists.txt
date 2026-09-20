@@ -17,6 +17,7 @@ add_executable(recording_studio
     src/main.cpp
     src/audio/AudioEngine.cpp
     src/audio/Mixer.cpp
+    src/audio/Effects.cpp
     src/command/CommandStack.cpp
     src/io/AudioFileIO.cpp
     src/io/SessionIO.cpp
@@ -30,6 +31,7 @@ add_executable(recording_studio
     src/ui/LevelMeterWidget.cpp
     src/ui/SettingsDialog.cpp
     src/ui/MediaLibraryPanel.cpp
+    src/ui/EffectsRackPanel.cpp
 )
 
 target_include_directories(recording_studio PRIVATE src)
