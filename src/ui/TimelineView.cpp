@@ -30,6 +30,7 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     connect(row->clipLane(), &ClipLaneWidget::clipDropped, this, &TimelineView::onClipDropped);
     connect(row->clipLane(), &ClipLaneWidget::mediaDropped, this, &TimelineView::onMediaDropped);
     connect(row, &TrackRowWidget::effectsPanelRequested, this, &TimelineView::effectsPanelRequested);
+    connect(row, &TrackRowWidget::takeSelected, this, &TimelineView::takeSelected);
     connect(row, &TrackRowWidget::syncScrollToAllRequested, this, [this, row](int64_t samples) {
         for (auto& [id, other] : m_rows) {
             if (other != row) other->setLaneScrollOffset(samples);
@@ -79,6 +80,12 @@ void TimelineView::refreshTrackEffectsButton(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;
     it->second->refreshEffectsButton();
+}
+
+void TimelineView::refreshTrackTakeLanes(const QUuid& trackId) {
+    auto it = m_rows.find(trackId.toString());
+    if (it == m_rows.end()) return;
+    it->second->refreshTakeLanes();
 }
 
 void TimelineView::deleteSelectedClipOn(const QUuid& trackId) {

@@ -40,6 +40,7 @@ public:
     Track() {
         m_clips.store(std::make_shared<const ClipList>());
         m_effects.store(std::make_shared<const EffectChain>());
+        m_takeLanes.store(std::make_shared<const ClipList>());
     }
 
     // GUI thread only.
@@ -120,6 +121,16 @@ public:
     // move/trim/split) without inverting each mutation's arithmetic.
     void restoreClips(std::shared_ptr<const ClipList> snapshot) { m_clips.store(std::move(snapshot)); }
 
+    // Alternate takes for comping: the passes captured by the most recent
+    // punch/loop recording, separate from the active comp (`clips` above).
+    // Same copy-on-write/atomic-swap pattern; a new punch/loop recording
+    // replaces the whole set (v1 scope: one take group per track at a time).
+    std::shared_ptr<const ClipList> takesSnapshot() const { return m_takeLanes.load(); }
+    void restoreTakes(std::shared_ptr<const ClipList> snapshot) { m_takeLanes.store(std::move(snapshot)); }
+    void setTakes(ClipList takes) {
+        m_takeLanes.store(std::make_shared<const ClipList>(std::move(takes)));
+    }
+
     // Effect chain: same copy-on-write + atomic-swap pattern as the clip
     // list, since it's read lock-free by the audio thread every callback.
     // Structural edits (add/remove/reorder) go through these; per-effect
@@ -165,6 +176,7 @@ public:
 private:
     std::atomic<std::shared_ptr<const ClipList>> m_clips;
     std::atomic<std::shared_ptr<const EffectChain>> m_effects;
+    std::atomic<std::shared_ptr<const ClipList>> m_takeLanes;
 };
 
 } // namespace rsd

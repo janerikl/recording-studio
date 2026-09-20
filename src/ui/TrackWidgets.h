@@ -11,12 +11,16 @@
 #include <memory>
 #include <optional>
 
+#include <vector>
+
 #include "command/CommandStack.h"
 #include "command/EditCommands.h"
 #include "model/Track.h"
 #include "ui/ClipLaneWidget.h"
+#include "ui/TakeLaneWidget.h"
 
 class QScrollBar;
+class QVBoxLayout;
 
 namespace rsd {
 
@@ -41,6 +45,10 @@ public:
     // request (used by TimelineView to apply another row's Shift-synced
     // scroll to this one).
     void setLaneScrollOffset(int64_t sampleOffset);
+    // Re-reads the track's take lanes (set by the most recent punch/loop
+    // recording) and rebuilds the expandable take-lane widgets. Call after
+    // any punch/loop recording finishes or is undone/redone.
+    void refreshTakeLanes();
 
 signals:
     void selected(std::shared_ptr<Track> track);
@@ -51,8 +59,13 @@ signals:
     // This row's lane was scrolled with Shift held: TimelineView should
     // apply the same absolute sample offset to every other row.
     void syncScrollToAllRequested(int64_t sampleOffset);
+    // A take lane was clicked: promote it to the active comp for its region.
+    void takeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take);
 
 private:
+    void rebuildTakeLanes();
+
+
     std::shared_ptr<Track> m_track;
     QRadioButton* m_selectButton = nullptr;
     QCheckBox* m_muteBox = nullptr;
@@ -65,6 +78,10 @@ private:
     QSlider* m_gainRSlider = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
     QScrollBar* m_laneScrollBar = nullptr;
+    QPushButton* m_takesToggleButton = nullptr;
+    QWidget* m_takeLanesContainer = nullptr;
+    QVBoxLayout* m_takeLanesLayout = nullptr;
+    std::vector<TakeLaneWidget*> m_takeLaneWidgets;
     CommandStack* m_commandStack = nullptr;
     // Captured on press for the pan dial / gain sliders so a whole drag
     // gesture becomes one undo step instead of one per intermediate value.

@@ -16,7 +16,7 @@ namespace {
 // Header is laid out as a compact 3-row grid so the whole row can be as
 // short as the waveform lane (kLaneHeight in ClipLaneWidget.cpp) instead of
 // the tall single-column stack this used to be.
-constexpr int kHeaderWidth = 300;
+constexpr int kHeaderWidth = 360;
 } // namespace
 
 TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
@@ -56,6 +56,18 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
         emit effectsPanelRequested(m_track);
     });
     headerLayout->addWidget(m_effectsButton, 0, 4);
+
+    // Shows/hides the stacked take lanes captured by the most recent
+    // punch/loop recording (see rebuildTakeLanes()). Disabled when the
+    // track has no takes.
+    m_takesToggleButton = new QPushButton("Takes", header);
+    m_takesToggleButton->setToolTip("Show/hide takes from the last punch/loop recording");
+    m_takesToggleButton->setCheckable(true);
+    m_takesToggleButton->setEnabled(false);
+    connect(m_takesToggleButton, &QPushButton::toggled, this, [this](bool checked) {
+        if (m_takeLanesContainer) m_takeLanesContainer->setVisible(checked);
+    });
+    headerLayout->addWidget(m_takesToggleButton, 0, 5);
 
     m_muteBox = new QCheckBox("Mute", header);
     connect(m_muteBox, &QCheckBox::toggled, this, [this](bool checked) {
@@ -216,7 +228,26 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     connect(m_clipLane, &ClipLaneWidget::syncScrollToAllRequested, this,
             [this](int64_t samples) { emit syncScrollToAllRequested(samples); });
 
+    // Stacked take lanes, hidden until toggled on. Kept in sync with the
+    // main lane's scale/scroll via the same signals used for the scrollbar.
+    m_takeLanesContainer = new QWidget(laneContainer);
+    m_takeLanesLayout = new QVBoxLayout(m_takeLanesContainer);
+    m_takeLanesLayout->setContentsMargins(0, 1, 0, 0);
+    m_takeLanesLayout->setSpacing(1);
+    m_takeLanesContainer->setVisible(false);
+    laneLayout->addWidget(m_takeLanesContainer);
+
+    auto syncTakeLaneScale = [this]() {
+        int64_t visible = m_clipLane->visibleLengthSamples();
+        int64_t offset = m_clipLane->currentScrollOffsetSamples();
+        for (auto* w : m_takeLaneWidgets) w->setScale(visible, offset);
+    };
+    connect(m_clipLane, &ClipLaneWidget::scrollOffsetChanged, this, syncTakeLaneScale);
+    connect(m_clipLane, &ClipLaneWidget::scrollRangeChanged, this, syncTakeLaneScale);
+
     rowLayout->addWidget(laneContainer, 1);
+
+    rebuildTakeLanes();
 }
 
 void TrackRowWidget::setDropHighlight(bool on) {
@@ -235,6 +266,41 @@ void TrackRowWidget::refreshEffectsButton() {
 
 void TrackRowWidget::setLaneScrollOffset(int64_t sampleOffset) {
     m_clipLane->setScrollOffsetSamples(sampleOffset);
+}
+
+void TrackRowWidget::refreshTakeLanes() { rebuildTakeLanes(); }
+
+void TrackRowWidget::rebuildTakeLanes() {
+    for (auto* w : m_takeLaneWidgets) {
+        m_takeLanesLayout->removeWidget(w);
+        w->deleteLater();
+    }
+    m_takeLaneWidgets.clear();
+
+    auto takes = m_track->takesSnapshot();
+    m_takesToggleButton->setEnabled(!takes->empty());
+    if (takes->empty()) {
+        m_takesToggleButton->setChecked(false);
+        return;
+    }
+
+    auto activeClips = m_track->clipsSnapshot();
+    int64_t visible = m_clipLane->visibleLengthSamples();
+    int64_t offset = m_clipLane->currentScrollOffsetSamples();
+
+    int takeNumber = 1;
+    for (auto& take : *takes) {
+        bool active = std::any_of(activeClips->begin(), activeClips->end(),
+                                   [&](auto& c) { return c->buffer == take->buffer; });
+        auto* w = new TakeLaneWidget(take, takeNumber, m_takeLanesContainer);
+        w->setActive(active);
+        w->setScale(visible, offset);
+        connect(w, &TakeLaneWidget::takeClicked, this,
+                [this](std::shared_ptr<Clip> t) { emit takeSelected(m_track, t); });
+        m_takeLanesLayout->addWidget(w);
+        m_takeLaneWidgets.push_back(w);
+        ++takeNumber;
+    }
 }
 
 } // namespace rsd

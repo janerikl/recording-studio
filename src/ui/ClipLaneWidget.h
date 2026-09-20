@@ -51,6 +51,7 @@ public:
     void setScrollOffsetSamples(int64_t samples);
     int64_t maxScrollOffsetSamples() const;
     int64_t visibleLengthSamples() const { return effectiveTimelineLength(); }
+    int64_t currentScrollOffsetSamples() const { return m_scrollOffsetSamples; }
 
 signals:
     void selectionChanged(bool hasSelection);

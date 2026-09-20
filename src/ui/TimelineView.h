@@ -27,6 +27,7 @@ public:
     void clear(); // remove all rows, e.g. before loading a new session
     void refreshTrackWaveform(const QUuid& trackId);
     void refreshTrackEffectsButton(const QUuid& trackId);
+    void refreshTrackTakeLanes(const QUuid& trackId);
     void deleteSelectedClipOn(const QUuid& trackId);
     void setSharedTimelineLength(int64_t samples);
     void setContentExtentSamples(int64_t samples);
@@ -45,6 +46,8 @@ signals:
     void mediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
     // The inline "FX" button on a track row was clicked.
     void effectsPanelRequested(std::shared_ptr<Track> track);
+    // A take lane was clicked: promote it to the active comp for its region.
+    void takeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take);
 
 private:
     TrackRowWidget* rowForClipLane(QObject* clipLaneSender) const;

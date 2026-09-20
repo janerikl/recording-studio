@@ -55,6 +55,27 @@ private:
     QString m_text;
 };
 
+// Covers replacing a track's whole take-lane set (a new punch/loop
+// recording session): mirrors TrackClipsCommand exactly, since takeLanes is
+// the same kind of atomically-swappable snapshot (Track::restoreTakes).
+class TrackTakeLanesCommand : public Command {
+public:
+    TrackTakeLanesCommand(std::shared_ptr<Track> track, std::shared_ptr<const Track::ClipList> before,
+                           std::shared_ptr<const Track::ClipList> after, QString text = "Edit Takes")
+        : m_track(std::move(track)), m_before(std::move(before)), m_after(std::move(after)),
+          m_text(std::move(text)) {}
+
+    void redo() override { m_track->restoreTakes(m_after); }
+    void undo() override { m_track->restoreTakes(m_before); }
+    QString text() const override { return m_text; }
+
+private:
+    std::shared_ptr<Track> m_track;
+    std::shared_ptr<const Track::ClipList> m_before;
+    std::shared_ptr<const Track::ClipList> m_after;
+    QString m_text;
+};
+
 // Scalar mixer/transport state for one track (gain, mute, solo, arm). Fader
 // drags and pan-dial moves should capture `before` on press and push one of
 // these on release, not on every intermediate value.

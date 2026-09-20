@@ -26,6 +26,7 @@ add_executable(recording_studio
     src/ui/WaveformWidget.cpp
     src/ui/ClipLaneWidget.cpp
     src/ui/TrackWidgets.cpp
+    src/ui/TakeLaneWidget.cpp
     src/ui/TimelineView.cpp
     src/ui/TimeRulerWidget.cpp
     src/ui/LevelMeterWidget.cpp

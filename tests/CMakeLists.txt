@@ -86,6 +86,16 @@ target_include_directories(clip_lane_scroll_math_tests PRIVATE ${CMAKE_SOURCE_DI
 target_link_libraries(clip_lane_scroll_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME ClipLaneScrollMathTests COMMAND clip_lane_scroll_math_tests)
 
+add_executable(punch_take_math_tests test_PunchTakeMath.cpp)
+target_include_directories(punch_take_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(punch_take_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PunchTakeMathTests COMMAND punch_take_math_tests)
+
+add_executable(comp_math_tests test_CompMath.cpp)
+target_include_directories(comp_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(comp_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME CompMathTests COMMAND comp_math_tests)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 

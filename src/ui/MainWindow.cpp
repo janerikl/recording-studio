@@ -24,6 +24,7 @@
 #include "command/PunchRecordingCommand.h"
 #include "io/AudioFileIO.h"
 #include "io/SessionIO.h"
+#include "model/CompMath.h"
 #include "ui/TimelineScaleMath.h"
 
 namespace rsd {
@@ -251,6 +252,7 @@ MainWindow::MainWindow(QWidget* parent)
             &MainWindow::onMediaDroppedOnTrack);
     connect(m_timeline, &TimelineView::effectsPanelRequested, this,
             &MainWindow::onEffectsPanelRequested);
+    connect(m_timeline, &TimelineView::takeSelected, this, &MainWindow::onTakeSelected);
     layout->addWidget(m_timeline, 1);
 
     setCentralWidget(central);
@@ -386,6 +388,24 @@ void MainWindow::onEffectsPanelRequested(std::shared_ptr<Track>) {
     // button (TrackRowWidget checks it before emitting this signal); just
     // bring the (possibly tabbed-behind) effects dock to the front.
     m_effectsDock->raise();
+}
+
+void MainWindow::onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take) {
+    if (!track || !take) return;
+
+    int64_t regionStart = take->sessionStartSample;
+    int64_t regionEnd = regionStart + take->lengthSamples;
+
+    auto before = track->clipsSnapshot();
+    auto updated = promoteTakeToComp(*before, take, regionStart, regionEnd);
+    track->restoreClips(std::make_shared<const Track::ClipList>(std::move(updated)));
+    auto after = track->clipsSnapshot();
+
+    m_commandStack.push(std::make_unique<TrackClipsCommand>(track, before, after, "Comp Take"));
+    updateUndoRedoButtons();
+    refreshWaveformFor(track);
+    m_timeline->refreshTrackTakeLanes(track->id); // updates which take shows as "(active)"
+    refreshMasterAndScale();
 }
 
 void MainWindow::onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection) {
@@ -552,11 +572,19 @@ void MainWindow::onStopClicked() {
         m_punchRecordingActive = false;
         if (!m_recordTargetTracks.empty()) {
             auto track = m_recordTargetTracks.front();
+            if (m_engine->punchRecorder().takesCapExceeded()) {
+                QMessageBox::information(
+                    this, "Take Limit Reached",
+                    QString("Only the last %1 takes are kept for comping; earlier passes in this "
+                            "recording were discarded.")
+                        .arg(PunchRecorder::kMaxTakes));
+            }
             auto cmd = buildPunchRecordingCommand(track, m_engine->punchRecorder(),
                                                    static_cast<unsigned int>(m_session->sampleRate));
             if (cmd) {
                 m_commandStack.push(std::move(cmd));
                 refreshWaveformFor(track);
+                m_timeline->refreshTrackTakeLanes(track->id);
             }
         }
         m_recordTargetTracks.clear();

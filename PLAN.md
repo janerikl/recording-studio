@@ -18,7 +18,7 @@ without relying on chat history. Update status as items complete.
 
 1. [x] Effects rack per track (EQ, compressor, reverb, delay)
 2. [x] Punch-in / loop recording
-3. [ ] Playlist comping (multiple takes per track, comp best parts)
+3. [x] Playlist comping (multiple takes per track, comp best parts) — v1: whole-take comping only, see below
 4. [ ] Clip-level editing tools (trim/fade/gain handles directly on clips)
 5. [ ] Virtual instruments (basic synth + sampler, MIDI-playable)
 6. [ ] MIDI piano-roll editor
@@ -27,6 +27,9 @@ without relying on chat history. Update status as items complete.
 9. [ ] Loop/sample library browser
 10. [ ] Export/bounce with format + stems options
 11. [x] Multi-source input: mic + system audio (loopback) recorded to separate tracks (Linux/PulseAudio)
+12. [ ] Mixer view: dockable strip at the bottom with a vertical fader, pan,
+    mute/solo, and effect slots per track (Pro Tools/Ableton-style), toggled
+    via a new View menu
 
 ## Completed: Multi-source input (mic + system audio)
 
@@ -190,6 +193,50 @@ Verification plan (approved):
       Shift+scroll (wheel or scrollbar drag) moves all tracks together;
       confirm ruler/master strip stay fixed; confirm dragging a clip while
       scrolled away from sample 0 still doesn't jump.
+
+## Completed: Playlist comping (whole-take, v1 scope)
+
+Goal (feature #3): comp between multiple takes of a punch/loop recording.
+Scoped down from full sub-region comping (approved) — v1 is **whole-take**
+comping: expand a track to see every captured pass as a stacked take lane,
+click one to make it the active comp for the whole punch region. Sub-region
+picking (different bits of the region from different takes) is a possible
+future extension, not built here.
+
+Design (approved):
+- [x] `PunchRecorder`: pre-allocate 8 separate pass buffers at `prepare()`
+      (RT-safe, no allocation during capture). A 9th+ pass overwrites the
+      8th slot; `takesCapExceeded()` flags this for a UI warning.
+      `audio/PunchTakeMath.h::takeBufferIndexForPass()` (pure, tested) picks
+      the slot.
+- [x] `Track` gains a `takeLanes` list (same copy-on-write/atomic-swap
+      pattern as `clips`/`effects`) — alternate takes from the most recent
+      punch/loop recording. A new punch/loop recording replaces the
+      previous take set (v1: one take group per track, not stacked
+      per-region history).
+- [x] `command/EditCommands.h::TrackTakeLanesCommand` mirrors
+      `TrackClipsCommand`. Punch recording finalization pushes a
+      `CompositeCommand` of the comp-clip update (unchanged behavior) +
+      the take-lanes update, so one undo reverts both.
+- [x] `model/CompMath.h::promoteTakeToComp()` (pure, tested): given the
+      track's existing clips + a chosen take, returns the clip list with
+      that region's clips removed/trimmed and the take promoted in.
+- [x] UI: "Takes" toggle button per track row (next to FX) reveals stacked
+      take-lane widgets (`ui/TakeLaneWidget`) when takes exist; clicking one
+      promotes it to the active comp (undoable, `MainWindow::onTakeSelected`).
+
+Verification plan (approved):
+- [x] Automated: `tests/test_PunchTakeMath.cpp`, `tests/test_CompMath.cpp`.
+      Full suite (16/16) passes (existing `test_PunchRecording.cpp`
+      assertions on `buffer()`/`passCount()` still hold — "last pass"
+      semantics preserved).
+- [x] Smoke-tested: app launches and renders cleanly with the new "Takes"
+      button (correctly disabled when a track has no takes yet).
+- [ ] Full manual: record a punch/loop pass 3 times with different content
+      each pass; confirm all 3 show up as take lanes; confirm clicking each
+      swaps the active comp audibly and visibly; confirm undo/redo works;
+      confirm a 9th pass warns instead of crashing. (Needs a live mic input
+      to test — not done from this session.)
 
 ## Notes
 

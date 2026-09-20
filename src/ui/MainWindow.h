@@ -56,6 +56,7 @@ private slots:
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
     void onEffectsPanelRequested(std::shared_ptr<Track> track);
+    void onTakeSelected(std::shared_ptr<Track> track, std::shared_ptr<Clip> take);
     void onClipSelectionChanged(std::shared_ptr<Track> track, bool hasSelection);
     void onDeleteClipClicked();
     void onSeekRequested(int64_t sample);
