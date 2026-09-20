@@ -327,6 +327,16 @@ Verification plan (approved):
       track, record a short phrase, confirm note rectangles appear and play
       back correctly positioned; confirm undo/redo of a recorded phrase.
 
+## Completed: View menu with dock toggles
+
+Small addition after the virtual instruments feature: a "View" menu was
+added to the menu bar with checkable entries (via each `QDockWidget`'s
+built-in `toggleViewAction()`, so they stay in sync with manual dock
+closes too) for Media Library, Effects Rack, and Instrument — so the synth
+panel (and the other docks) can be shown/hidden on demand instead of always
+taking up screen space. Verified live: menu shows all three checkable
+entries correctly.
+
 ## Notes
 
 - Each feature gets a verification plan proposed and approved before

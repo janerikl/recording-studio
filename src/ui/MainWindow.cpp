@@ -293,6 +293,14 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::RightDockWidgetArea, m_instrumentDock);
     tabifyDockWidget(mediaDock, m_instrumentDock);
 
+    // Each dock's built-in toggleViewAction stays in sync automatically
+    // (checked/unchecked) whether it's hidden from here or via the dock's
+    // own close button, so no extra state tracking is needed.
+    auto* viewMenu = menuBar()->addMenu("&View");
+    viewMenu->addAction(mediaDock->toggleViewAction());
+    viewMenu->addAction(m_effectsDock->toggleViewAction());
+    viewMenu->addAction(m_instrumentDock->toggleViewAction());
+
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
     connect(m_ringDrainTimer, &QTimer::timeout, this, &MainWindow::drainCaptureRing);
