@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "AutomationLane.h"
 #include "Clip.h"
 #include "MidiNote.h"
 #include "audio/Effects.h"
@@ -33,6 +34,7 @@ class Track {
 public:
     using ClipList = std::vector<std::shared_ptr<Clip>>;
     using MidiNoteList = std::vector<std::shared_ptr<MidiNote>>;
+    using AutomationLaneList = std::vector<std::shared_ptr<AutomationLane>>;
 
     QUuid id = QUuid::createUuid();
     QString name;
@@ -41,11 +43,12 @@ public:
     std::atomic<bool> soloed{false};
     std::atomic<bool> recordArmed{false};
     std::atomic<AudioSource> inputSource{AudioSource::Mic};
-    // Per-channel gain, not a single scalar: lets the mixer apply independent
-    // left/right levels. A pan control is a UI convenience that derives both
-    // of these via a linear pan law rather than being stored separately.
-    std::atomic<float> gainL{1.0f};
-    std::atomic<float> gainR{1.0f};
+    // Volume/pan are the source of truth for the mixer; gainL/gainR are
+    // derived from them each block via PanLawMath::panToGains (by
+    // AudioEngine, using an automation curve's current value when one
+    // exists for that target, falling back to these static atomics).
+    std::atomic<float> volume{1.0f};
+    std::atomic<float> pan{0.0f};
 
     // Instrument-track only, but harmless to carry on every track. Params
     // are live-tweaked atomics (see Effects.h's Effect for the same
@@ -61,6 +64,7 @@ public:
         m_effects.store(std::make_shared<const EffectChain>());
         m_takeLanes.store(std::make_shared<const ClipList>());
         m_midiNotes.store(std::make_shared<const MidiNoteList>());
+        m_automationLanes.store(std::make_shared<const AutomationLaneList>());
     }
 
     // GUI thread only.
@@ -192,6 +196,35 @@ public:
         m_midiNotes.store(std::const_pointer_cast<const MidiNoteList>(updated));
     }
 
+    // Automation curves for Volume/Pan: same copy-on-write/atomic-swap
+    // pattern as `clips`/`midiClips`. At most one lane per AutomationTarget;
+    // AudioEngine reads this snapshot each block and, for a target with no
+    // lane (or an empty one), falls back to the static volume/pan atomics.
+    std::shared_ptr<const AutomationLaneList> automationLanesSnapshot() const {
+        return m_automationLanes.load();
+    }
+    void restoreAutomationLanes(std::shared_ptr<const AutomationLaneList> snapshot) {
+        m_automationLanes.store(std::move(snapshot));
+    }
+
+    // Replaces the lane for `newLane->target` if one exists, else appends
+    // it. Used both for live-drag feedback (mutate on every mouse move) and
+    // for adding a lane's very first point.
+    void replaceAutomationLane(std::shared_ptr<AutomationLane> newLane) {
+        auto current = m_automationLanes.load();
+        auto updated = std::make_shared<AutomationLaneList>(*current);
+        bool found = false;
+        for (auto& lane : *updated) {
+            if (lane->target == newLane->target) {
+                lane = newLane;
+                found = true;
+                break;
+            }
+        }
+        if (!found) updated->push_back(std::move(newLane));
+        m_automationLanes.store(std::const_pointer_cast<const AutomationLaneList>(updated));
+    }
+
     // Effect chain: same copy-on-write + atomic-swap pattern as the clip
     // list, since it's read lock-free by the audio thread every callback.
     // Structural edits (add/remove/reorder) go through these; per-effect
@@ -239,6 +272,7 @@ private:
     std::atomic<std::shared_ptr<const EffectChain>> m_effects;
     std::atomic<std::shared_ptr<const ClipList>> m_takeLanes;
     std::atomic<std::shared_ptr<const MidiNoteList>> m_midiNotes;
+    std::atomic<std::shared_ptr<const AutomationLaneList>> m_automationLanes;
 };
 
 } // namespace rsd

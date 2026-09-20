@@ -23,7 +23,8 @@ without relying on chat history. Update status as items complete.
 5. [x] Virtual instruments (basic synth + sampler, MIDI-playable) — v1: synth only, on-screen keyboard only, see below
 6. [x] MIDI piano-roll editor — v1: move/resize/draw/delete notes + velocity
     lane, no full manual pass yet, see below
-7. [ ] Automation lanes (volume/pan/filter over time)
+7. [x] Automation lanes (volume/pan over time) — v1 scope, no full manual
+    pass yet, see below
 8. [ ] Bus routing / sends (aux tracks, submixes)
 9. [ ] Loop/sample library browser
 10. [ ] Export/bounce with format + stems options
@@ -380,6 +381,64 @@ Verification plan (approved):
 - [ ] Full manual (needs real interaction, not done from this session):
       draw/move/resize/delete notes, drag velocity, undo/redo, snap-size
       changes, edited notes play back correctly.
+
+## In progress: Automation lanes (volume/pan)
+
+Goal (feature #7): draggable breakpoint curves per track for volume and pan,
+played back with per-sample ramping (no zipper noise). Scoped to
+volume+pan only for v1 (approved) — effect-parameter automation (e.g. a
+filter cutoff) is a possible future extension, not built here.
+
+Design (approved) — this replaced the existing `Track::gainL`/`gainR` model:
+- [x] `audio/PanLawMath.h` (pure, tested first): `panToGains(volume, pan)`
+      extracted from the pan dial's existing linear pan law so both manual
+      mixing and automation playback share it.
+- [x] `audio/AutomationMath.h` (pure, tested first): curve evaluation
+      (linear interpolation between the two nearest breakpoints, clamped to
+      the endpoint value outside the curve's range), point hit-test/insert
+      math (same style as `PianoRollEditMath`).
+- [x] `Track`: `gainL`/`gainR` atomics replaced by `volume` (0..2, default
+      1.0) and `pan` (-1..1, default 0) atomics. New `AutomationPoint
+      {sample, value}`, `AutomationTarget {Volume, Pan}`,
+      `AutomationLane {target, points}` (`model/AutomationLane.h`); `Track`
+      gains `automationLanes` with the same atomic copy-on-write pattern as
+      `clips`/`midiClips`. **This removed the existing independent
+      Gain-L/Gain-R sliders** (approved tradeoff).
+- [x] `command/EditCommands.h`: new `TrackAutomationCommand` (mirrors
+      `TrackMidiCommand`); `TrackState`/`TrackStateCommand` migrated from
+      gainL/gainR to volume/pan.
+- [x] `AudioEngine::rtCallback`: per block, if a track has a Volume/Pan
+      automation lane, evaluates it at the block's start and end sample,
+      converts to gainL/gainR via `panToGains`, and linearly ramps
+      per-sample across the block (closes the "no smoothing exists" gap
+      found in research — avoids clicks on fast automation moves). Falls
+      back to the static volume/pan atomics when a target has no lane, so
+      manual mixing is unaffected.
+- [x] `ui/AutomationLaneWidget` (new, mirrors `TakeLaneWidget`): line-graph
+      curve with draggable breakpoints, a Volume/Pan target dropdown,
+      click-empty-space-to-add-point, Delete/Backspace to remove selected
+      point. `TrackRowWidget` gained an "Auto" toggle button (next to
+      Takes/FX) to show/hide it.
+- [x] `TrackWidgets.cpp`: Gain-L/Gain-R sliders replaced by a single Volume
+      slider; pan dial now writes `pan` directly instead of deriving
+      gainL/gainR itself.
+- [x] `SessionIO`: serializes `volume`/`pan`/`automationLanes` per track
+      (replaces `gainL`/`gainR` keys — no migration shim for old save
+      files, per standing no-speculative-compat preference).
+
+Verification plan (approved):
+- [x] Automated: `tests/test_PanLawMath.cpp` (7 cases) and
+      `tests/test_AutomationMath.cpp` (10 cases) written before their
+      implementations. Existing `test_EditCommands.cpp` updated from
+      gainL to volume. Full suite (21/21 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran for full timeout
+      under a real X display, no crash/error output). Track header shows a
+      Volume slider + pan dial (no more L/R sliders), "Auto" toggle added
+      next to Takes/FX.
+- [ ] Full manual (needs real interaction, not done from this session):
+      record/play, automate a volume fade and a pan sweep, confirm
+      audibly click-free; undo/redo of automation edits; save/reload
+      preserves curves.
 
 ## Notes
 

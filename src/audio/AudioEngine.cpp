@@ -5,8 +5,10 @@
 #include <cstring>
 #include <iostream>
 
+#include "AutomationMath.h"
 #include "Effects.h"
 #include "Mixer.h"
+#include "PanLawMath.h"
 
 namespace rsd {
 
@@ -128,9 +130,34 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
             auto effects = track->effectsSnapshot();
             processEffectChain(*effects, scratch, nFrames, self->m_channels);
 
-            float gainL = track->gainL.load(std::memory_order_relaxed);
-            float gainR = track->gainR.load(std::memory_order_relaxed);
+            // Volume/pan for this block: an automation curve (if present for
+            // that target) is evaluated at the block's start and end sample
+            // and linearly ramped per-sample across the block, so fast
+            // automation moves don't produce zipper noise. A target with no
+            // lane falls back to the track's static atomic for both ends
+            // (i.e. no ramp — same as before automation existed).
+            float staticVolume = track->volume.load(std::memory_order_relaxed);
+            float staticPan = track->pan.load(std::memory_order_relaxed);
+            auto lanes = track->automationLanesSnapshot();
+            float volumeStart = staticVolume, volumeEnd = staticVolume;
+            float panStart = staticPan, panEnd = staticPan;
+            for (auto& lane : *lanes) {
+                if (lane->points.empty()) continue;
+                if (lane->target == AutomationTarget::Volume) {
+                    volumeStart = evaluateAutomation(lane->points, pos, staticVolume);
+                    volumeEnd = evaluateAutomation(lane->points, pos + nFrames, staticVolume);
+                } else if (lane->target == AutomationTarget::Pan) {
+                    panStart = evaluateAutomation(lane->points, pos, staticPan);
+                    panEnd = evaluateAutomation(lane->points, pos + nFrames, staticPan);
+                }
+            }
+            auto [gainLStart, gainRStart] = panToGains(volumeStart, panStart);
+            auto [gainLEnd, gainREnd] = panToGains(volumeEnd, panEnd);
+
             for (unsigned int i = 0; i < nFrames; ++i) {
+                float t = nFrames > 1 ? static_cast<float>(i) / static_cast<float>(nFrames - 1) : 0.0f;
+                float gainL = gainLStart + t * (gainLEnd - gainLStart);
+                float gainR = gainRStart + t * (gainREnd - gainRStart);
                 for (unsigned int ch = 0; ch < self->m_channels; ++ch) {
                     float g = (ch % 2 == 0) ? gainL : gainR;
                     out[i * self->m_channels + ch] += scratch[i * self->m_channels + ch] * g;

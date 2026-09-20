@@ -97,20 +97,43 @@ private:
     QString m_text;
 };
 
-// Scalar mixer/transport state for one track (gain, mute, solo, arm). Fader
-// drags and pan-dial moves should capture `before` on press and push one of
-// these on release, not on every intermediate value.
+// Mirrors TrackClipsCommand/TrackMidiCommand exactly, for the automation
+// lane editor's live-drag feedback (mutate on every mouse move, one
+// command pushed with before/after snapshots on release).
+class TrackAutomationCommand : public Command {
+public:
+    TrackAutomationCommand(std::shared_ptr<Track> track,
+                            std::shared_ptr<const Track::AutomationLaneList> before,
+                            std::shared_ptr<const Track::AutomationLaneList> after,
+                            QString text = "Edit Automation")
+        : m_track(std::move(track)), m_before(std::move(before)), m_after(std::move(after)),
+          m_text(std::move(text)) {}
+
+    void redo() override { m_track->restoreAutomationLanes(m_after); }
+    void undo() override { m_track->restoreAutomationLanes(m_before); }
+    QString text() const override { return m_text; }
+
+private:
+    std::shared_ptr<Track> m_track;
+    std::shared_ptr<const Track::AutomationLaneList> m_before;
+    std::shared_ptr<const Track::AutomationLaneList> m_after;
+    QString m_text;
+};
+
+// Scalar mixer/transport state for one track (volume, pan, mute, solo,
+// arm). Fader drags and pan-dial moves should capture `before` on press
+// and push one of these on release, not on every intermediate value.
 struct TrackState {
-    float gainL = 1.0f;
-    float gainR = 1.0f;
+    float volume = 1.0f;
+    float pan = 0.0f;
     bool muted = false;
     bool soloed = false;
     bool recordArmed = false;
     AudioSource inputSource = AudioSource::Mic;
 
     static TrackState capture(const Track& t) {
-        return {t.gainL.load(),      t.gainR.load(),        t.muted.load(),
-                t.soloed.load(),     t.recordArmed.load(),  t.inputSource.load()};
+        return {t.volume.load(),      t.pan.load(),          t.muted.load(),
+                t.soloed.load(),      t.recordArmed.load(),  t.inputSource.load()};
     }
 };
 
@@ -126,8 +149,8 @@ public:
 
 private:
     void apply(const TrackState& s) {
-        m_track->gainL.store(s.gainL);
-        m_track->gainR.store(s.gainR);
+        m_track->volume.store(s.volume);
+        m_track->pan.store(s.pan);
         m_track->muted.store(s.muted);
         m_track->soloed.store(s.soloed);
         m_track->recordArmed.store(s.recordArmed);

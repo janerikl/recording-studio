@@ -54,21 +54,21 @@ private slots:
         auto track = std::make_shared<Track>();
         TrackState before = TrackState::capture(*track);
 
-        track->gainL.store(0.5f);
+        track->volume.store(0.5f);
         track->muted.store(true);
         TrackState after = TrackState::capture(*track);
 
         CommandStack stack;
         stack.push(std::make_unique<TrackStateCommand>(track, before, after));
-        QCOMPARE(track->gainL.load(), 0.5f);
+        QCOMPARE(track->volume.load(), 0.5f);
         QVERIFY(track->muted.load());
 
         stack.undo();
-        QCOMPARE(track->gainL.load(), 1.0f);
+        QCOMPARE(track->volume.load(), 1.0f);
         QVERIFY(!track->muted.load());
 
         stack.redo();
-        QCOMPARE(track->gainL.load(), 0.5f);
+        QCOMPARE(track->volume.load(), 0.5f);
         QVERIFY(track->muted.load());
     }
 

@@ -19,6 +19,7 @@
 #include <QWidget>
 #include <algorithm>
 
+#include "audio/PanLawMath.h"
 #include "audio/RecordRouting.h"
 #include "command/EditCommands.h"
 #include "command/PunchRecordingCommand.h"
@@ -1163,8 +1164,10 @@ std::shared_ptr<AudioBuffer> MainWindow::renderSessionToBuffer() const {
         bool audible = anySoloed ? soloed : !muted;
         if (!audible) continue;
 
-        float gainL = track->gainL.load();
-        float gainR = track->gainR.load();
+        // Static volume/pan only — this offline render predates automation
+        // and isn't part of its v1 scope (see PLAN.md); playback via the RT
+        // engine is where automation curves actually apply.
+        auto [gainL, gainR] = panToGains(track->volume.load(), track->pan.load());
 
         for (auto& clip : *track->clipsSnapshot()) {
             if (clip->muted || !clip->buffer) continue;

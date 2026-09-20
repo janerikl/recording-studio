@@ -69,6 +69,15 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     });
     headerLayout->addWidget(m_takesToggleButton, 0, 5);
 
+    // Shows/hides this track's automation curve lane (volume/pan), always
+    // available (unlike Takes, not gated on any prior recording).
+    m_automationToggleButton = new QPushButton("Auto", header);
+    m_automationToggleButton->setToolTip("Show/hide the volume/pan automation lane");
+    m_automationToggleButton->setCheckable(true);
+    connect(m_automationToggleButton, &QPushButton::toggled, this,
+            [this](bool checked) { m_automationLane->setVisible(checked); });
+    headerLayout->addWidget(m_automationToggleButton, 0, 6);
+
     m_muteBox = new QCheckBox("Mute", header);
     connect(m_muteBox, &QCheckBox::toggled, this, [this](bool checked) {
         TrackState before = TrackState::capture(*m_track);
@@ -118,27 +127,18 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     });
     headerLayout->addWidget(m_sourceCombo, 1, 3);
 
-    // Pan is a convenience gesture, not a stored value: moving it derives and
-    // writes both gainL/gainR via a simple linear pan law. The two gain
-    // sliders are the actual source of truth read by the mixer, so adjusting
-    // one directly doesn't move the dial back (not every L/R pair has a
-    // matching symmetric pan angle).
+    // Pan and volume are both stored directly on Track now (source of truth
+    // for the mixer and for automation curves to target); no more deriving
+    // gainL/gainR from a pan-only gesture.
     m_panDial = new QDial(header);
     m_panDial->setRange(-100, 100);
-    m_panDial->setValue(0);
+    m_panDial->setValue(static_cast<int>(m_track->pan.load() * 100));
     m_panDial->setToolTip("Pan");
     m_panDial->setFixedSize(28, 28);
     connect(m_panDial, &QDial::sliderPressed, this,
             [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
-    connect(m_panDial, &QDial::valueChanged, this, [this](int v) {
-        float p = v / 100.0f;
-        float gl = p <= 0 ? 1.0f : 1.0f - p;
-        float gr = p >= 0 ? 1.0f : 1.0f + p;
-        m_track->gainL.store(gl, std::memory_order_relaxed);
-        m_track->gainR.store(gr, std::memory_order_relaxed);
-        if (m_gainLSlider) m_gainLSlider->setValue(static_cast<int>(gl * 100));
-        if (m_gainRSlider) m_gainRSlider->setValue(static_cast<int>(gr * 100));
-    });
+    connect(m_panDial, &QDial::valueChanged, this,
+            [this](int v) { m_track->pan.store(v / 100.0f, std::memory_order_relaxed); });
     connect(m_panDial, &QDial::sliderReleased, this, [this]() {
         if (m_commandStack && m_dragBeforeState) {
             m_commandStack->push(std::make_unique<TrackStateCommand>(
@@ -148,41 +148,23 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     });
     headerLayout->addWidget(m_panDial, 2, 0);
 
-    m_gainLSlider = new QSlider(Qt::Horizontal, header);
-    m_gainLSlider->setRange(0, 200);
-    m_gainLSlider->setValue(static_cast<int>(m_track->gainL.load() * 100));
-    m_gainLSlider->setToolTip("Gain L");
-    m_gainLSlider->setFixedHeight(16);
-    connect(m_gainLSlider, &QSlider::sliderPressed, this,
+    m_volumeSlider = new QSlider(Qt::Horizontal, header);
+    m_volumeSlider->setRange(0, 200);
+    m_volumeSlider->setValue(static_cast<int>(m_track->volume.load() * 100));
+    m_volumeSlider->setToolTip("Volume");
+    m_volumeSlider->setFixedHeight(16);
+    connect(m_volumeSlider, &QSlider::sliderPressed, this,
             [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
-    connect(m_gainLSlider, &QSlider::valueChanged, this,
-            [this](int v) { m_track->gainL.store(v / 100.0f, std::memory_order_relaxed); });
-    connect(m_gainLSlider, &QSlider::sliderReleased, this, [this]() {
+    connect(m_volumeSlider, &QSlider::valueChanged, this,
+            [this](int v) { m_track->volume.store(v / 100.0f, std::memory_order_relaxed); });
+    connect(m_volumeSlider, &QSlider::sliderReleased, this, [this]() {
         if (m_commandStack && m_dragBeforeState) {
             m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Gain L"));
+                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Volume"));
         }
         m_dragBeforeState.reset();
     });
-    headerLayout->addWidget(m_gainLSlider, 2, 1, 1, 3);
-
-    m_gainRSlider = new QSlider(Qt::Horizontal, header);
-    m_gainRSlider->setRange(0, 200);
-    m_gainRSlider->setValue(static_cast<int>(m_track->gainR.load() * 100));
-    m_gainRSlider->setToolTip("Gain R");
-    m_gainRSlider->setFixedHeight(16);
-    connect(m_gainRSlider, &QSlider::sliderPressed, this,
-            [this]() { m_dragBeforeState = TrackState::capture(*m_track); });
-    connect(m_gainRSlider, &QSlider::valueChanged, this,
-            [this](int v) { m_track->gainR.store(v / 100.0f, std::memory_order_relaxed); });
-    connect(m_gainRSlider, &QSlider::sliderReleased, this, [this]() {
-        if (m_commandStack && m_dragBeforeState) {
-            m_commandStack->push(std::make_unique<TrackStateCommand>(
-                m_track, *m_dragBeforeState, TrackState::capture(*m_track), "Gain R"));
-        }
-        m_dragBeforeState.reset();
-    });
-    headerLayout->addWidget(m_gainRSlider, 3, 1, 1, 3);
+    headerLayout->addWidget(m_volumeSlider, 2, 1, 1, 3);
 
     rowLayout->addWidget(header);
 
@@ -245,6 +227,18 @@ TrackRowWidget::TrackRowWidget(std::shared_ptr<Track> track, QWidget* parent)
     connect(m_clipLane, &ClipLaneWidget::scrollOffsetChanged, this, syncTakeLaneScale);
     connect(m_clipLane, &ClipLaneWidget::scrollRangeChanged, this, syncTakeLaneScale);
 
+    // Automation lane, hidden until toggled on. Kept in sync with the main
+    // lane's scale/scroll the same way the take lanes are.
+    m_automationLane = new AutomationLaneWidget(m_track, laneContainer);
+    m_automationLane->setVisible(false);
+    laneLayout->addWidget(m_automationLane);
+    auto syncAutomationLaneScale = [this]() {
+        m_automationLane->setScale(m_clipLane->visibleLengthSamples(),
+                                    m_clipLane->currentScrollOffsetSamples());
+    };
+    connect(m_clipLane, &ClipLaneWidget::scrollOffsetChanged, this, syncAutomationLaneScale);
+    connect(m_clipLane, &ClipLaneWidget::scrollRangeChanged, this, syncAutomationLaneScale);
+
     rowLayout->addWidget(laneContainer, 1);
 
     rebuildTakeLanes();
@@ -257,6 +251,7 @@ void TrackRowWidget::setDropHighlight(bool on) {
 void TrackRowWidget::setCommandStack(CommandStack* stack) {
     m_commandStack = stack;
     m_clipLane->setCommandStack(stack);
+    m_automationLane->setCommandStack(stack);
 }
 
 void TrackRowWidget::refreshEffectsButton() {

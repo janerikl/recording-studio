@@ -16,6 +16,7 @@
 #include "command/CommandStack.h"
 #include "command/EditCommands.h"
 #include "model/Track.h"
+#include "ui/AutomationLaneWidget.h"
 #include "ui/ClipLaneWidget.h"
 #include "ui/TakeLaneWidget.h"
 
@@ -74,16 +75,17 @@ private:
     QComboBox* m_sourceCombo = nullptr;
     QPushButton* m_effectsButton = nullptr;
     QDial* m_panDial = nullptr;
-    QSlider* m_gainLSlider = nullptr;
-    QSlider* m_gainRSlider = nullptr;
+    QSlider* m_volumeSlider = nullptr;
     ClipLaneWidget* m_clipLane = nullptr;
     QScrollBar* m_laneScrollBar = nullptr;
     QPushButton* m_takesToggleButton = nullptr;
     QWidget* m_takeLanesContainer = nullptr;
     QVBoxLayout* m_takeLanesLayout = nullptr;
     std::vector<TakeLaneWidget*> m_takeLaneWidgets;
+    QPushButton* m_automationToggleButton = nullptr;
+    AutomationLaneWidget* m_automationLane = nullptr;
     CommandStack* m_commandStack = nullptr;
-    // Captured on press for the pan dial / gain sliders so a whole drag
+    // Captured on press for the pan dial / volume slider so a whole drag
     // gesture becomes one undo step instead of one per intermediate value.
     std::optional<TrackState> m_dragBeforeState;
 };

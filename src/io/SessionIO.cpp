@@ -144,10 +144,26 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
         QJsonObject trackJson;
         trackJson["id"] = track->id.toString();
         trackJson["name"] = track->name;
-        trackJson["gainL"] = track->gainL.load();
-        trackJson["gainR"] = track->gainR.load();
+        trackJson["volume"] = track->volume.load();
+        trackJson["pan"] = track->pan.load();
         trackJson["muted"] = track->muted.load();
         trackJson["soloed"] = track->soloed.load();
+
+        QJsonArray automationLanesJson;
+        for (auto& lane : *track->automationLanesSnapshot()) {
+            QJsonObject laneJson;
+            laneJson["target"] = lane->target == AutomationTarget::Volume ? "volume" : "pan";
+            QJsonArray pointsJson;
+            for (auto& point : lane->points) {
+                QJsonObject pointJson;
+                pointJson["sample"] = QString::number(point.sample);
+                pointJson["value"] = point.value;
+                pointsJson.append(pointJson);
+            }
+            laneJson["points"] = pointsJson;
+            automationLanesJson.append(laneJson);
+        }
+        trackJson["automationLanes"] = automationLanesJson;
 
         QJsonArray clipsJson;
         for (auto& clip : *track->clipsSnapshot()) {
@@ -266,10 +282,27 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
         auto track = std::make_shared<Track>();
         track->id = QUuid(trackJson["id"].toString());
         track->name = trackJson["name"].toString();
-        track->gainL.store(static_cast<float>(trackJson["gainL"].toDouble(1.0)));
-        track->gainR.store(static_cast<float>(trackJson["gainR"].toDouble(1.0)));
+        track->volume.store(static_cast<float>(trackJson["volume"].toDouble(1.0)));
+        track->pan.store(static_cast<float>(trackJson["pan"].toDouble(0.0)));
         track->muted.store(trackJson["muted"].toBool(false));
         track->soloed.store(trackJson["soloed"].toBool(false));
+
+        Track::AutomationLaneList automationLanes;
+        for (const auto& laneVal : trackJson["automationLanes"].toArray()) {
+            QJsonObject laneJson = laneVal.toObject();
+            auto lane = std::make_shared<AutomationLane>();
+            lane->target =
+                laneJson["target"].toString() == "pan" ? AutomationTarget::Pan : AutomationTarget::Volume;
+            for (const auto& pointVal : laneJson["points"].toArray()) {
+                QJsonObject pointJson = pointVal.toObject();
+                lane->points.push_back(
+                    {pointJson["sample"].toString().toLongLong(),
+                     static_cast<float>(pointJson["value"].toDouble())});
+            }
+            automationLanes.push_back(std::move(lane));
+        }
+        track->restoreAutomationLanes(
+            std::make_shared<const Track::AutomationLaneList>(std::move(automationLanes)));
 
         for (const auto& clipVal : trackJson["clips"].toArray()) {
             QJsonObject clipJson = clipVal.toObject();

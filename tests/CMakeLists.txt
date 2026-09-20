@@ -111,6 +111,16 @@ target_include_directories(piano_roll_edit_math_tests PRIVATE ${CMAKE_SOURCE_DIR
 target_link_libraries(piano_roll_edit_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME PianoRollEditMathTests COMMAND piano_roll_edit_math_tests)
 
+add_executable(pan_law_math_tests test_PanLawMath.cpp)
+target_include_directories(pan_law_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(pan_law_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PanLawMathTests COMMAND pan_law_math_tests)
+
+add_executable(automation_math_tests test_AutomationMath.cpp)
+target_include_directories(automation_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(automation_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME AutomationMathTests COMMAND automation_math_tests)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
 
