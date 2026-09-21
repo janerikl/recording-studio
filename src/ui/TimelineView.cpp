@@ -66,6 +66,12 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
     row->clipLane()->setPlayheadSample(m_lastPlayheadSample);
 }
 
+void TimelineView::setActiveTrack(const QUuid& trackId) {
+    auto it = m_rows.find(trackId.toString());
+    if (it == m_rows.end()) return;
+    it->second->selectButton()->setChecked(true);
+}
+
 void TimelineView::removeTrack(const QUuid& trackId) {
     auto it = m_rows.find(trackId.toString());
     if (it == m_rows.end()) return;

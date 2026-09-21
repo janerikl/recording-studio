@@ -35,6 +35,9 @@ public:
     void setContentExtentSamples(int64_t samples);
     void setPlayheadSample(int64_t sample);
     void clearSelectionOn(const QUuid& trackId);
+    // Checks the given row's "Active" radio button, e.g. for a keyboard
+    // track-select shortcut that bypasses the row's own click handler.
+    void setActiveTrack(const QUuid& trackId);
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);

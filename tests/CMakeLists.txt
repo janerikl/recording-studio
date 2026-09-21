@@ -51,6 +51,11 @@ target_include_directories(punch_recording_tests PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(punch_recording_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME PunchRecordingTests COMMAND punch_recording_tests)
 
+add_executable(playback_loop_tests test_PlaybackLoop.cpp)
+target_include_directories(playback_loop_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(playback_loop_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PlaybackLoopTests COMMAND playback_loop_tests)
+
 add_executable(record_routing_tests test_RecordRouting.cpp)
 target_include_directories(record_routing_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(record_routing_tests PRIVATE Qt6::Core Qt6::Test)

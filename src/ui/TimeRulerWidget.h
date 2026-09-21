@@ -33,10 +33,26 @@ public:
     // Numbered bookmarks (slot -> sample position), drawn as small flags.
     void setMarkers(const std::map<int, int64_t>& markers) { m_markers = markers; update(); }
 
+    // Playback loop region: drawn as a highlighted band when enabled,
+    // independent of the punch-recording region above. Set externally (e.g.
+    // on session load) or driven internally by a Ctrl+drag on this ruler,
+    // which reports the finished region via loopRegionSet.
+    void setLoopRegion(bool enabled, int64_t startSample, int64_t endSample) {
+        m_loopEnabled = enabled;
+        m_loopStart = startSample;
+        m_loopEnd = endSample;
+        update();
+    }
+
 signals:
     void seekRequested(int64_t sample);
     // Emitted continuously while right-dragging and once more on release.
     void punchRegionEdited(PunchRegion region);
+
+    // Emitted once a Ctrl+left-drag on the ruler finishes: a real drag
+    // (endSample > startSample) enables the loop over that region; a plain
+    // Ctrl+click (no movement) disables it.
+    void loopRegionSet(int64_t startSample, int64_t endSample, bool enable);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -59,7 +75,14 @@ private:
     bool m_definingPunchRegion = false;
     int64_t m_punchDragAnchor = 0;
 
+    bool m_definingLoopRegion = false;
+    int64_t m_loopDragAnchor = 0;
+
     std::map<int, int64_t> m_markers;
+
+    bool m_loopEnabled = false;
+    int64_t m_loopStart = 0;
+    int64_t m_loopEnd = 0;
 };
 
 } // namespace rsd

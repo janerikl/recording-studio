@@ -56,6 +56,15 @@ void TimeRulerWidget::paintEvent(QPaintEvent*) {
         painter.drawText(x + 2, height() - 10, label);
     }
 
+    if (m_loopEnabled && m_loopEnd > m_loopStart) {
+        int xStart = sampleToX(m_loopStart);
+        int xEnd = sampleToX(m_loopEnd);
+        painter.fillRect(xStart, 0, xEnd - xStart, height(), QColor(90, 190, 230, 60));
+        painter.setPen(QPen(QColor(90, 190, 230), 2));
+        painter.drawLine(xStart, 0, xStart, height());
+        painter.drawLine(xEnd, 0, xEnd, height());
+    }
+
     if (m_punchRegion.isValid()) {
         int xStart = sampleToX(m_punchRegion.startSample);
         int xEnd = sampleToX(m_punchRegion.endSample);
@@ -81,6 +90,15 @@ void TimeRulerWidget::paintEvent(QPaintEvent*) {
 void TimeRulerWidget::mousePressEvent(QMouseEvent* event) {
     if (event->pos().x() < m_leftMargin) return;
 
+    if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::ControlModifier)) {
+        m_definingLoopRegion = true;
+        m_loopDragAnchor = xToSample(event->pos().x());
+        m_loopStart = m_loopDragAnchor;
+        m_loopEnd = m_loopDragAnchor;
+        update();
+        return;
+    }
+
     if (event->button() == Qt::RightButton) {
         m_definingPunchRegion = true;
         m_punchDragAnchor = xToSample(event->pos().x());
@@ -94,6 +112,14 @@ void TimeRulerWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimeRulerWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (m_definingLoopRegion) {
+        int64_t sample = xToSample(event->pos().x());
+        m_loopStart = std::min(m_loopDragAnchor, sample);
+        m_loopEnd = std::max(m_loopDragAnchor, sample);
+        m_loopEnabled = m_loopEnd > m_loopStart;
+        update();
+        return;
+    }
     if (m_definingPunchRegion) {
         int64_t sample = xToSample(event->pos().x());
         m_punchRegion = {std::min(m_punchDragAnchor, sample), std::max(m_punchDragAnchor, sample)};
@@ -106,6 +132,14 @@ void TimeRulerWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TimeRulerWidget::mouseReleaseEvent(QMouseEvent*) {
+    if (m_definingLoopRegion) {
+        m_definingLoopRegion = false;
+        bool enable = m_loopEnd > m_loopStart; // plain Ctrl+click (no drag) disables
+        m_loopEnabled = enable;
+        update();
+        emit loopRegionSet(m_loopStart, m_loopEnd, enable);
+        return;
+    }
     if (m_definingPunchRegion) {
         m_definingPunchRegion = false;
         emit punchRegionEdited(m_punchRegion);

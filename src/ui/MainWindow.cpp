@@ -257,6 +257,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_ruler, &TimeRulerWidget::seekRequested, this, &MainWindow::onSeekRequested);
     connect(m_ruler, &TimeRulerWidget::punchRegionEdited, this,
             &MainWindow::onPunchRegionEditedOnRuler);
+    connect(m_ruler, &TimeRulerWidget::loopRegionSet, this, &MainWindow::onLoopRegionSet);
     layout->addWidget(m_ruler);
 
     // Compact summary strip: the mixed-down combination of every track,
@@ -413,6 +414,16 @@ MainWindow::MainWindow(QWidget* parent)
 
         auto* jumpShortcut = new QShortcut(QKeySequence(Qt::CTRL | (Qt::Key_0 + i)), this);
         connect(jumpShortcut, &QShortcut::activated, this, [this, i]() { onJumpToMarker(i); });
+    }
+
+    // Ctrl+Alt+1-9 selects (focuses) the corresponding track, same as
+    // clicking it. Plain Alt+1-9 is commonly captured by the desktop
+    // environment (workspace switching etc.) before it reaches the app.
+    for (int i = 1; i <= 9; ++i) {
+        auto* selectTrackShortcut =
+            new QShortcut(QKeySequence(Qt::CTRL | Qt::ALT | (Qt::Key_0 + i)), this);
+        connect(selectTrackShortcut, &QShortcut::activated, this,
+                [this, i]() { onSelectTrackByIndex(i - 1); });
     }
 
     // Restore window size/position and dock layout from last run, if any.
@@ -708,6 +719,21 @@ void MainWindow::onJumpToMarker(int slot) {
     if (it == m_session->markers.end()) return;
     m_engine->transport().setPositionSamples(it->second);
     m_masterWaveform->setPlayheadSample(it->second);
+}
+
+void MainWindow::onLoopRegionSet(int64_t startSample, int64_t endSample, bool enable) {
+    m_engine->transport().setPlaybackLoop(startSample, endSample);
+    m_engine->transport().setPlaybackLoopEnabled(enable);
+    m_ruler->setLoopRegion(enable, startSample, endSample);
+}
+
+void MainWindow::onSelectTrackByIndex(int index) {
+    if (index < 0 || static_cast<size_t>(index) >= m_session->tracks.size()) return;
+    // Checking the row's radio button drives onTrackSelected via the same
+    // signal path a mouse click on it would (TrackRowWidget::selected ->
+    // TimelineView::trackSelected), so the row's "Active" indicator and the
+    // instrument/piano-roll panels stay in sync however selection happens.
+    m_timeline->setActiveTrack(m_session->tracks[static_cast<size_t>(index)]->id);
 }
 
 void MainWindow::startPlayback() {
@@ -1356,7 +1382,7 @@ void MainWindow::refreshMasterAndScale(bool recaptureZoomBaseline) {
     m_mediaLibrary->refresh(*m_session);
 }
 
-int64_t MainWindow::refreshTimelineScale(bool recaptureZoomBaseline) {
+int64_t MainWindow::sessionContentEndSamples() const {
     int64_t maxEnd = 0;
     for (auto& track : m_session->tracks) {
         auto clips = track->clipsSnapshot();
@@ -1364,6 +1390,11 @@ int64_t MainWindow::refreshTimelineScale(bool recaptureZoomBaseline) {
             maxEnd = std::max(maxEnd, clip->sessionStartSample + clip->lengthSamples);
         }
     }
+    return maxEnd;
+}
+
+int64_t MainWindow::refreshTimelineScale(bool recaptureZoomBaseline) {
+    int64_t maxEnd = sessionContentEndSamples();
     // Same fixed floor + headroom policy as ClipLaneWidget used to compute
     // locally — now computed once here so every lane and the ruler agree.
     int64_t floor = static_cast<int64_t>(m_session->sampleRate) * 30;

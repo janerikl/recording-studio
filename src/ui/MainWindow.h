@@ -66,6 +66,8 @@ private slots:
     void onTrackSelected(std::shared_ptr<Track> track);
     void onSetMarker(int slot);
     void onJumpToMarker(int slot);
+    void onLoopRegionSet(int64_t startSample, int64_t endSample, bool enable);
+    void onSelectTrackByIndex(int index);
     void onEffectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect);
     void onMasterEffectsPanelRequested(QRect globalAnchorRect);
     void onInstrumentNoteOn(int pitch, float velocity);
@@ -93,6 +95,7 @@ private:
     void updateStatusLabel();
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
     int64_t refreshTimelineScale(bool recaptureZoomBaseline = false);
+    int64_t sessionContentEndSamples() const;
     void refreshMasterAndScale(bool recaptureZoomBaseline = false);
     void startPlayback();
     void rebuildTimelineFromSession();
