@@ -12,7 +12,12 @@
 
 namespace rsd {
 
-AudioEngine::AudioEngine() : m_rtAudio(std::make_unique<RtAudio>()) {}
+// Explicitly request ALSA rather than letting RtAudio pick its default API.
+// RtAudio's default selection resolves to the pulse backend here, and pulse's
+// duplex (simultaneous input+output) streams never invoke the audio callback
+// in this environment — the stream reports itself as running, but playback
+// and recording both silently stall. ALSA's duplex path works correctly.
+AudioEngine::AudioEngine() : m_rtAudio(std::make_unique<RtAudio>(RtAudio::LINUX_ALSA)) {}
 
 void AudioEngine::previewSample(std::shared_ptr<AudioBuffer> buffer) {
     if (!buffer) return;
@@ -141,7 +146,7 @@ bool AudioEngine::startSystemAudioStream() {
     if (m_systemAudioRunning) return true;
     if (m_preferredSystemAudioDevice == kNoInputDevice) return false;
 
-    m_rtAudioSys = std::make_unique<RtAudio>();
+    m_rtAudioSys = std::make_unique<RtAudio>(RtAudio::LINUX_ALSA);
     if (m_rtAudioSys->getDeviceCount() < 1) return false;
 
     RtAudio::StreamParameters inParams;
