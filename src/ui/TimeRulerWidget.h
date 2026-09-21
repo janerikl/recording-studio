@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <cstdint>
+#include <map>
 
 #include "audio/PunchRegion.h"
 
@@ -29,6 +30,9 @@ public:
     void setPunchRegion(PunchRegion region) { m_punchRegion = region; update(); }
     PunchRegion punchRegion() const { return m_punchRegion; }
 
+    // Numbered bookmarks (slot -> sample position), drawn as small flags.
+    void setMarkers(const std::map<int, int64_t>& markers) { m_markers = markers; update(); }
+
 signals:
     void seekRequested(int64_t sample);
     // Emitted continuously while right-dragging and once more on release.
@@ -54,6 +58,8 @@ private:
     PunchRegion m_punchRegion;
     bool m_definingPunchRegion = false;
     int64_t m_punchDragAnchor = 0;
+
+    std::map<int, int64_t> m_markers;
 };
 
 } // namespace rsd

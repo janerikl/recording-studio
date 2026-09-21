@@ -218,6 +218,15 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
     }
     root["tracks"] = tracksJson;
 
+    QJsonArray markersJson;
+    for (auto& [slot, position] : session.markers) {
+        QJsonObject markerJson;
+        markerJson["slot"] = slot;
+        markerJson["position"] = QString::number(position);
+        markersJson.append(markerJson);
+    }
+    root["markers"] = markersJson;
+
     root["masterVolume"] = session.masterBus.volume.load();
     QJsonArray masterEffectsJson;
     for (auto& effect : *session.masterBus.effectsSnapshot()) {
@@ -284,6 +293,13 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
     outSession.channels = root["channels"].toInt(outSession.channels);
     outSession.bpm = root["bpm"].toDouble(outSession.bpm);
     outSession.tracks.clear();
+    outSession.markers.clear();
+    for (const auto& markerVal : root["markers"].toArray()) {
+        QJsonObject markerJson = markerVal.toObject();
+        int slot = markerJson["slot"].toInt();
+        int64_t position = markerJson["position"].toString().toLongLong();
+        outSession.markers[slot] = position;
+    }
 
     // Share one AudioBuffer per unique audio file across all clips that
     // reference it, instead of reloading it from disk for each clip.

@@ -55,6 +55,27 @@ private slots:
         QCOMPARE(loadedClip->fadeOutCurve, FadeCurve::Linear);
     }
 
+    void roundTripsMarkers() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        session.markers[1] = 48000;
+        session.markers[9] = 960000;
+
+        QVector<LibraryEntry> emptyLibrary;
+        QVERIFY(SessionIO::saveSession(path, session, emptyLibrary));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loaded.markers.size(), size_t(2));
+        QCOMPARE(loaded.markers.at(1), int64_t(48000));
+        QCOMPARE(loaded.markers.at(9), int64_t(960000));
+    }
+
     void loadingSessionWithoutNewFieldsUsesDefaults() {
         // Simulates an old .rsdproj saved before gain/fade/volume/pan
         // existed: those keys are simply absent from the JSON.

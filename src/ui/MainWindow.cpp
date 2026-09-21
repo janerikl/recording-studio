@@ -394,6 +394,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     // Delete/Undo/Redo shortcuts already live on their QActions above; only
     // Backspace (an alias for delete-clip) and R need their own QShortcut.
+    auto* playFromStartShortcut = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Space), this);
+    connect(playFromStartShortcut, &QShortcut::activated, this, &MainWindow::onPlayFromStartClicked);
+
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     connect(backspaceShortcut, &QShortcut::activated, this, &MainWindow::onDeleteClipClicked);
 
@@ -401,6 +404,16 @@ MainWindow::MainWindow(QWidget* parent)
     connect(recordShortcut, &QShortcut::activated, this, [this]() {
         if (m_engine->transport().state() == TransportState::Stopped) onRecordClicked();
     });
+
+    // Bookmarks: Ctrl+Shift+N sets marker N at the playhead, Ctrl+N jumps to it.
+    for (int i = 1; i <= 9; ++i) {
+        auto* setShortcut =
+            new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | (Qt::Key_0 + i)), this);
+        connect(setShortcut, &QShortcut::activated, this, [this, i]() { onSetMarker(i); });
+
+        auto* jumpShortcut = new QShortcut(QKeySequence(Qt::CTRL | (Qt::Key_0 + i)), this);
+        connect(jumpShortcut, &QShortcut::activated, this, [this, i]() { onJumpToMarker(i); });
+    }
 
     // Restore window size/position and dock layout from last run, if any.
     QSettings settings("RecordingStudio", "RecordingStudio");
@@ -683,6 +696,18 @@ void MainWindow::onPlayClicked() {
 void MainWindow::onPlayFromStartClicked() {
     m_engine->transport().setPositionSamples(0);
     startPlayback();
+}
+
+void MainWindow::onSetMarker(int slot) {
+    m_session->markers[slot] = m_engine->transport().positionSamples();
+    m_ruler->setMarkers(m_session->markers);
+}
+
+void MainWindow::onJumpToMarker(int slot) {
+    auto it = m_session->markers.find(slot);
+    if (it == m_session->markers.end()) return;
+    m_engine->transport().setPositionSamples(it->second);
+    m_masterWaveform->setPlayheadSample(it->second);
 }
 
 void MainWindow::startPlayback() {
@@ -1045,6 +1070,7 @@ bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessag
     updateUndoRedoButtons();
     m_effectsPopover->setSampleRate(m_session->sampleRate);
     m_ruler->setSampleRate(m_session->sampleRate);
+    m_ruler->setMarkers(m_session->markers);
     m_masterWaveform->setSampleRate(m_session->sampleRate);
     m_timeline->setSampleRate(m_session->sampleRate);
 

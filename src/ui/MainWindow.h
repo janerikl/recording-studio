@@ -64,6 +64,8 @@ private slots:
     void onAddBusTrackClicked();
     void onRemoveTrackClicked();
     void onTrackSelected(std::shared_ptr<Track> track);
+    void onSetMarker(int slot);
+    void onJumpToMarker(int slot);
     void onEffectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect);
     void onMasterEffectsPanelRequested(QRect globalAnchorRect);
     void onInstrumentNoteOn(int pitch, float velocity);

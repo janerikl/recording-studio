@@ -2,6 +2,8 @@
 
 #include <QString>
 #include <algorithm>
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -19,6 +21,9 @@ public:
     MasterBus masterBus;
     QString filePath;
     bool dirty = false;
+
+    // Numbered bookmarks (slots 1-9), set/jumped via Ctrl+Shift+N / Ctrl+N.
+    std::map<int, int64_t> markers;
 
     std::shared_ptr<Track> addTrack(const QString& name) {
         auto track = std::make_shared<Track>();

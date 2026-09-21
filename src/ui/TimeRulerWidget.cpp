@@ -68,6 +68,14 @@ void TimeRulerWidget::paintEvent(QPaintEvent*) {
     painter.setPen(QPen(QColor(230, 80, 80), 2));
     int px = sampleToX(m_playheadSample);
     painter.drawLine(px, 0, px, height());
+
+    // Bookmarks: a small numbered flag at each marker's position.
+    painter.setPen(QPen(QColor(90, 190, 230), 2));
+    for (auto& [slot, sample] : m_markers) {
+        int mx = sampleToX(sample);
+        painter.drawLine(mx, 0, mx, 10);
+        painter.drawText(mx + 2, 10, QString::number(slot));
+    }
 }
 
 void TimeRulerWidget::mousePressEvent(QMouseEvent* event) {
