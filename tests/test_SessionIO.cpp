@@ -76,6 +76,26 @@ private slots:
         QCOMPARE(loaded.markers.at(9), int64_t(960000));
     }
 
+    void roundTripsBpmAndMetronome() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        session.bpm = 90.0;
+        session.metronomeEnabled = true;
+
+        QVector<LibraryEntry> emptyLibrary;
+        QVERIFY(SessionIO::saveSession(path, session, emptyLibrary));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loaded.bpm, 90.0);
+        QCOMPARE(loaded.metronomeEnabled, true);
+    }
+
     void loadingSessionWithoutNewFieldsUsesDefaults() {
         // Simulates an old .rsdproj saved before gain/fade/volume/pan
         // existed: those keys are simply absent from the JSON.

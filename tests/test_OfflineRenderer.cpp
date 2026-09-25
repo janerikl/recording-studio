@@ -52,6 +52,26 @@ private slots:
         QCOMPARE(sessionContentLengthSamples(session), int64_t(0));
     }
 
+    void trackContentLengthIsLatestClipOrNoteEndForThatTrackOnly() {
+        auto track = makeTrackWithClip(0.1f, 500);
+        auto note = std::make_shared<MidiNote>();
+        note->startSample = 700;
+        note->lengthSamples = 100; // ends at 800, past the clip
+        track->addMidiNote(note);
+
+        // A second track with a much longer clip must not affect the first
+        // track's own content length.
+        auto other = makeTrackWithClip(0.2f, 5000);
+
+        QCOMPARE(trackContentLengthSamples(*track), int64_t(800));
+        QCOMPARE(trackContentLengthSamples(*other), int64_t(5000));
+    }
+
+    void trackContentLengthIsZeroForEmptyTrack() {
+        Track track;
+        QCOMPARE(trackContentLengthSamples(track), int64_t(0));
+    }
+
     void mixdownSpansMultipleInternalBlocksCorrectly() {
         // 2000 samples, well past the renderer's internal 1024-frame block
         // size, so this exercises the boundary between two blocks.

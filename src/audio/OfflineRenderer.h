@@ -13,6 +13,12 @@ namespace rsd {
 // simpler offline render already had).
 int64_t sessionContentLengthSamples(const Session& session);
 
+// Same as sessionContentLengthSamples but for a single track — the latest
+// end of that track's own clips/MIDI notes only. Used to size a per-track
+// render (e.g. a stem, or saving an Instrument track's roll to the loop
+// browser) without pulling in other tracks' content length.
+int64_t trackContentLengthSamples(const Track& track);
+
 // Renders the full session mixdown (tracks -> bus sends -> master, via
 // mixSessionBlock — the exact same mixing live playback uses) to an
 // in-memory buffer, block by block, with no audio device involved. Caller

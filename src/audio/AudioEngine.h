@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "Metronome.h"
 #include "PunchRecorder.h"
 #include "RingBuffer.h"
 #include "SessionMixer.h"
@@ -148,6 +149,13 @@ private:
     // means no preview active.
     std::atomic<std::shared_ptr<const Clip>> m_previewClip{nullptr};
     std::atomic<int64_t> m_previewPosition{0};
+
+    // Click track, mixed straight onto the final output (post
+    // mixSessionBlock/preview, same spot as the loop-browser audition)
+    // during playback/recording — RT-thread-only, same trust model as a
+    // Track's SynthEngine. Deliberately not part of mixSessionBlock() so
+    // OfflineRenderer/export never bakes it into a bounce.
+    Metronome m_metronome;
 
     std::atomic<float> m_inputPeakL{0.0f};
     std::atomic<float> m_inputPeakR{0.0f};

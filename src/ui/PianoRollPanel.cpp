@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
 
@@ -35,6 +36,10 @@ PianoRollPanel::PianoRollPanel(QWidget* parent) : QWidget(parent) {
     m_snapCombo->setCurrentIndex(3); // 1/16 default
     toolbarLayout->addWidget(m_snapCombo);
     toolbarLayout->addStretch();
+    m_saveToLoopBrowserButton = new QPushButton("Save to Loop Browser");
+    connect(m_saveToLoopBrowserButton, &QPushButton::clicked, this,
+            [this]() { emit saveToLoopBrowserRequested(m_track); });
+    toolbarLayout->addWidget(m_saveToLoopBrowserButton);
     outer->addWidget(toolbar);
 
     m_grid = new PianoRollGridWidget;
@@ -56,6 +61,7 @@ void PianoRollPanel::setTrack(std::shared_ptr<Track> track) {
     m_trackNameLabel->setText(isInstrument ? (m_track->name.isEmpty() ? "Instrument Track" : m_track->name)
                                             : "No instrument track selected");
     m_snapCombo->setEnabled(isInstrument);
+    m_saveToLoopBrowserButton->setEnabled(isInstrument);
     m_grid->setEnabled(isInstrument);
     m_grid->setTrack(isInstrument ? m_track : nullptr);
 }

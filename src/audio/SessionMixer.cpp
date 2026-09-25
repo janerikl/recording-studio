@@ -20,12 +20,13 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
     bool isInstrument = track.kind == TrackKind::Instrument;
 
     if (isInstrument) {
+        bool isDrumKit = track.synthParams.isDrumKit.load(std::memory_order_relaxed);
         NoteEvent ev;
         while (track.liveNoteEvents.pop(ev)) {
             if (ev.noteOn) {
-                track.synthEngine.noteOn(ev.pitch, ev.velocity, static_cast<float>(sampleRate));
+                track.synthEngine.noteOn(ev.pitch, ev.velocity, static_cast<float>(sampleRate), isDrumKit);
             } else {
-                track.synthEngine.noteOff(ev.pitch);
+                track.synthEngine.noteOff(ev.pitch, isDrumKit);
             }
         }
         if (playbackActive) {
@@ -37,10 +38,10 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
                 int64_t noteEnd = note->startSample + note->lengthSamples;
                 if (note->startSample >= pos && note->startSample < blockEnd) {
                     track.synthEngine.noteOn(note->pitch, note->velocity,
-                                              static_cast<float>(sampleRate));
+                                              static_cast<float>(sampleRate), isDrumKit);
                 }
                 if (noteEnd >= pos && noteEnd < blockEnd) {
-                    track.synthEngine.noteOff(note->pitch);
+                    track.synthEngine.noteOff(note->pitch, isDrumKit);
                 }
             }
         }

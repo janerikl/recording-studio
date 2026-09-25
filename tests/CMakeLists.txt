@@ -1,4 +1,6 @@
 find_package(Qt6 COMPONENTS Core Gui Test REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FLUIDSYNTH REQUIRED IMPORTED_TARGET fluidsynth)
 
 # Model/command tests are pure Core (no Widgets/RtAudio/sndfile needed), so
 # they build fast and don't require a display to run.
@@ -15,7 +17,8 @@ add_executable(edit_commands_tests
     ${CMAKE_SOURCE_DIR}/src/command/CommandStack.cpp
 )
 target_include_directories(edit_commands_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(edit_commands_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(edit_commands_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(edit_commands_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME EditCommandsTests COMMAND edit_commands_tests)
 
 add_executable(mixer_tests
@@ -40,7 +43,8 @@ add_executable(effect_commands_tests
     ${CMAKE_SOURCE_DIR}/src/audio/Effects.cpp
 )
 target_include_directories(effect_commands_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(effect_commands_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(effect_commands_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(effect_commands_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME EffectCommandsTests COMMAND effect_commands_tests)
 
 add_executable(punch_recording_tests
@@ -48,7 +52,8 @@ add_executable(punch_recording_tests
     ${CMAKE_SOURCE_DIR}/src/command/CommandStack.cpp
 )
 target_include_directories(punch_recording_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(punch_recording_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(punch_recording_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(punch_recording_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME PunchRecordingTests COMMAND punch_recording_tests)
 
 add_executable(playback_loop_tests test_PlaybackLoop.cpp)
@@ -58,7 +63,8 @@ add_test(NAME PlaybackLoopTests COMMAND playback_loop_tests)
 
 add_executable(record_routing_tests test_RecordRouting.cpp)
 target_include_directories(record_routing_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(record_routing_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(record_routing_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(record_routing_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME RecordRoutingTests COMMAND record_routing_tests)
 
 add_executable(system_audio_loopback_tests test_SystemAudioLoopback.cpp)
@@ -111,10 +117,51 @@ target_include_directories(comp_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(comp_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME CompMathTests COMMAND comp_math_tests)
 
-add_executable(synth_math_tests test_SynthMath.cpp)
-target_include_directories(synth_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(synth_math_tests PRIVATE Qt6::Core Qt6::Test)
-add_test(NAME SynthMathTests COMMAND synth_math_tests)
+add_executable(piano_key_map_tests test_PianoKeyMap.cpp)
+target_include_directories(piano_key_map_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(piano_key_map_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PianoKeyMapTests COMMAND piano_key_map_tests)
+
+add_executable(note_naming_tests test_NoteNaming.cpp)
+target_include_directories(note_naming_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(note_naming_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME NoteNamingTests COMMAND note_naming_tests)
+
+add_executable(metronome_math_tests test_MetronomeMath.cpp)
+target_include_directories(metronome_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(metronome_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME MetronomeMathTests COMMAND metronome_math_tests)
+
+add_executable(metronome_tests test_Metronome.cpp)
+target_include_directories(metronome_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(metronome_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME MetronomeTests COMMAND metronome_tests)
+
+add_executable(practice_exercise_tests test_PracticeExercise.cpp)
+target_include_directories(practice_exercise_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(practice_exercise_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PracticeExerciseTests COMMAND practice_exercise_tests)
+
+add_executable(practice_math_tests test_PracticeMath.cpp)
+target_include_directories(practice_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(practice_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME PracticeMathTests COMMAND practice_math_tests)
+
+add_executable(gm_instruments_tests test_GMInstruments.cpp)
+target_include_directories(gm_instruments_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(gm_instruments_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME GMInstrumentsTests COMMAND gm_instruments_tests)
+
+add_executable(gm_drum_map_tests test_GMDrumMap.cpp)
+target_include_directories(gm_drum_map_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(gm_drum_map_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME GMDrumMapTests COMMAND gm_drum_map_tests)
+
+add_executable(synth_tests test_Synth.cpp)
+target_include_directories(synth_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(synth_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(synth_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
+add_test(NAME SynthTests COMMAND synth_tests)
 
 add_executable(midi_note_display_math_tests test_MidiNoteDisplayMath.cpp)
 target_include_directories(midi_note_display_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -153,7 +200,8 @@ add_executable(session_mixer_tests
     ${CMAKE_SOURCE_DIR}/src/audio/Mixer.cpp
 )
 target_include_directories(session_mixer_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(session_mixer_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(session_mixer_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(session_mixer_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME SessionMixerTests COMMAND session_mixer_tests)
 
 add_executable(offline_renderer_tests
@@ -164,12 +212,14 @@ add_executable(offline_renderer_tests
     ${CMAKE_SOURCE_DIR}/src/audio/Mixer.cpp
 )
 target_include_directories(offline_renderer_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(offline_renderer_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(offline_renderer_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(offline_renderer_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME OfflineRendererTests COMMAND offline_renderer_tests)
 
 add_executable(track_kind_color_tests test_TrackKindColor.cpp)
 target_include_directories(track_kind_color_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(track_kind_color_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+target_compile_definitions(track_kind_color_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(track_kind_color_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME TrackKindColorTests COMMAND track_kind_color_tests)
 
 find_package(PkgConfig REQUIRED)
@@ -182,5 +232,11 @@ add_executable(session_io_tests
     ${CMAKE_SOURCE_DIR}/src/audio/Effects.cpp
 )
 target_include_directories(session_io_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(session_io_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::SNDFILE)
+target_compile_definitions(session_io_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(session_io_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::SNDFILE PkgConfig::FLUIDSYNTH)
 add_test(NAME SessionIOTests COMMAND session_io_tests)
+
+add_executable(media_preview_toggle_math_tests test_MediaPreviewToggleMath.cpp)
+target_include_directories(media_preview_toggle_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(media_preview_toggle_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME MediaPreviewToggleMathTests COMMAND media_preview_toggle_math_tests)

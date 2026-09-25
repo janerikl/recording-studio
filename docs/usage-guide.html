@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Recording Studio — Usage Guide</title>
+<style>
+  :root {
+    --bg: #1e1e22;
+    --panel: #2a2a30;
+    --text: #e8e8ec;
+    --muted: #a0a0aa;
+    --accent: #6aa9ff;
+    --border: #3a3a42;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .layout { display: flex; min-height: 100vh; }
+  nav {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px 12px;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  nav h1 { font-size: 16px; margin: 0 0 16px 8px; }
+  nav a {
+    display: block;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  nav a:hover { background: var(--border); color: var(--text); }
+  main { flex: 1; padding: 32px 48px; max-width: 860px; }
+  h2 {
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-top: 48px;
+    scroll-margin-top: 20px;
+  }
+  h2:first-of-type { margin-top: 0; }
+  .feature { margin: 20px 0; padding: 14px 18px; background: var(--panel); border-radius: 8px; border: 1px solid var(--border); }
+  .feature h3 { margin: 0 0 6px 0; font-size: 15px; }
+  .feature p { margin: 4px 0; }
+  .howto { color: var(--muted); font-size: 13.5px; }
+  .howto b { color: var(--text); font-weight: 600; }
+  kbd {
+    background: #111114;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: monospace;
+    font-size: 12px;
+  }
+  .video-slot {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+  }
+  .intro { color: var(--muted); margin-bottom: 32px; }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <h1>Recording Studio</h1>
+  <a href="#project-basics">Project Basics</a>
+  <a href="#transport">Transport &amp; Playback</a>
+  <a href="#recording">Recording</a>
+  <a href="#punch-loop">Punch / Loop Recording</a>
+  <a href="#clip-editing">Clip Editing</a>
+  <a href="#track-management">Track Management</a>
+  <a href="#mixer">Mixer Controls</a>
+  <a href="#sends">Sends &amp; Bus Routing</a>
+  <a href="#effects">Effects</a>
+  <a href="#automation">Automation</a>
+  <a href="#midi">MIDI / Instrument Editing</a>
+  <a href="#takes">Recording Takes</a>
+  <a href="#waveform">Waveform Display</a>
+  <a href="#media">Media Management</a>
+  <a href="#loop-browser">Loop Browser</a>
+  <a href="#import-export">Import / Export</a>
+  <a href="#zoom-nav">Zoom &amp; Navigation</a>
+  <a href="#bookmarks">Bookmarks</a>
+  <a href="#playback-loop">Playback Loop</a>
+  <a href="#settings">Settings</a>
+  <a href="#undo-redo">Undo &amp; Redo</a>
+  <a href="#view-panels">View &amp; Panels</a>
+  <a href="#status-meters">Status &amp; Meters</a>
+</nav>
+<main>
+  <p class="intro">A feature-by-feature guide to Recording Studio, in the order you'd naturally
+  encounter them: starting a project, playing and recording audio, editing clips, mixing, adding
+  effects, and exporting your work.</p>
+
+  <h2 id="project-basics">Project Basics</h2>
+
+  <div class="feature">
+    <h3>Starting a project</h3>
+    <p>When you launch the app, you get one blank audio track ready to record — no setup needed.</p>
+    <p class="howto"><b>How:</b> just open the app. If "Load Most Recent Session on Startup" is
+    checked (File menu), your last project reopens instead.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Save Session</h3>
+    <p>Saves your whole project — every track, clip, effect, and automation curve — to a project file.</p>
+    <p class="howto"><b>How:</b> File → Save Session, or <kbd>Ctrl+S</kbd>. The first save asks
+    where to put the file; after that it saves to the same place automatically.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Load Session</h3>
+    <p>Opens a previously saved project.</p>
+    <p class="howto"><b>How:</b> File → Load Session, then pick a <code>.rsdproj</code> file.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Open Recent</h3>
+    <p>Quick access to your last 5 projects without browsing for the file.</p>
+    <p class="howto"><b>How:</b> File → Open Recent → pick from the list.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Load Most Recent Session on Startup</h3>
+    <p>Skips the blank-project screen and reopens your last project automatically when you launch the app.</p>
+    <p class="howto"><b>How:</b> File menu → check "Load Most Recent Session on Startup".</p>
+  </div>
+
+  <div class="feature">
+    <h3>Close Session</h3>
+    <p>Closes the current project and clears the workspace.</p>
+    <p class="howto"><b>How:</b> File → Close Session.</p>
+  </div>
+
+  <h2 id="transport">Transport &amp; Playback</h2>
+
+  <div class="feature">
+    <h3>Play</h3>
+    <p>Resumes playback from wherever the playhead currently is.</p>
+    <p class="howto"><b>How:</b> Toolbar Play button, or <kbd>Space</kbd>.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Play from Start</h3>
+    <p>Jumps to the very beginning of the project and starts playing.</p>
+    <p class="howto"><b>How:</b> Toolbar button, or <kbd>Shift+Space</kbd>.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Stop</h3>
+    <p>Stops playback or recording. If you were recording, it finalizes whatever you captured as a new clip.</p>
+    <p class="howto"><b>How:</b> Toolbar Stop button, or <kbd>Space</kbd> while playing.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Seek by clicking the ruler</h3>
+    <p>Jump the playhead instantly to any point in time.</p>
+    <p class="howto"><b>How:</b> Click anywhere on the time ruler at the top of the timeline.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Scrub by dragging the ruler</h3>
+    <p>Drag through the timeline while hearing audio continuously, like scrubbing tape.</p>
+    <p class="howto"><b>How:</b> Left-click and drag along the ruler.</p>
+  </div>
+
+  <h2 id="recording">Recording</h2>
+
+  <div class="feature">
+    <h3>Record</h3>
+    <p>Captures audio into whichever tracks are armed.</p>
+    <p class="howto"><b>How:</b> Arm a track (Rec/Arm checkbox on its mixer strip), then press
+    <kbd>R</kbd> or the Record button. Press Stop or <kbd>Space</kbd> when done.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Multi-source recording</h3>
+    <p>Record your microphone and your computer's audio (e.g. music, a call) at the same time onto separate tracks.</p>
+    <p class="howto"><b>How:</b> Arm one track set to "Mic" and another set to "System Audio" on
+    their mixer strips, then Record as normal.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Choosing an input source per track</h3>
+    <p>Each track can record from a microphone or from your system's audio output — set independently per track.</p>
+    <p class="howto"><b>How:</b> On the track's mixer strip, use the source dropdown (Mic / Sys).</p>
+  </div>
+
+  <h2 id="punch-loop">Punch / Loop Recording</h2>
+
+  <div class="feature">
+    <h3>Punch region</h3>
+    <p>Restrict recording to just a section of the timeline, so you only re-record the part that needs fixing.</p>
+    <p class="howto"><b>How:</b> Right-click-drag on the ruler to draw the region, or type exact
+    start/end times into the In/Out fields on the toolbar.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Loop Record</h3>
+    <p>Repeatedly records over the punch region on every pass (with a short pre-roll before each pass), so you can try a part multiple times without stopping.</p>
+    <p class="howto"><b>How:</b> Check "Loop Record" on the toolbar, define a punch region, arm a
+    track, then press Record. Press Stop to end the loop. Every pass is kept as a "take" you can
+    pick between later (see Recording Takes).</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <h2 id="clip-editing">Clip Editing</h2>
+
+  <div class="feature">
+    <h3>Select a clip</h3>
+    <p>Click a clip to select it before editing, deleting, or moving it.</p>
+    <p class="howto"><b>How:</b> Click the clip in its track's lane.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Move a clip</h3>
+    <p>Reposition a clip in time, or move it to a different track.</p>
+    <p class="howto"><b>How:</b> Drag the middle of the clip (not its edges) left/right, or into another track's lane.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Trim start / end</h3>
+    <p>Shorten a clip from either end without deleting it entirely.</p>
+    <p class="howto"><b>How:</b> Drag the left or right edge of the clip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Fade in / fade out</h3>
+    <p>Smoothly ramp a clip's volume up at the start or down at the end, instead of a hard cut.</p>
+    <p class="howto"><b>How:</b> Drag from the top-left corner of a clip for a fade-in, or the
+    top-right corner for a fade-out.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Adjust clip gain</h3>
+    <p>Change the volume of a single clip, independent of the track's overall volume.</p>
+    <p class="howto"><b>How:</b> Drag the horizontal line running through the middle of the clip up or down.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Split a clip</h3>
+    <p>Cut a clip into two separate pieces at a specific point — handy for removing an unwanted section.</p>
+    <p class="howto"><b>How:</b> Position the playhead where you want the cut, then double-click the clip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Delete a clip</h3>
+    <p>Removes the selected clip from the track entirely.</p>
+    <p class="howto"><b>How:</b> Select the clip, then press <kbd>Delete</kbd> or <kbd>Backspace</kbd>.</p>
+  </div>
+
+  <h2 id="track-management">Track Management</h2>
+
+  <div class="feature">
+    <h3>Add Audio Track</h3>
+    <p>Adds a new track for recording or holding imported audio.</p>
+    <p class="howto"><b>How:</b> Toolbar "Add Track" button.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Add Instrument Track</h3>
+    <p>Adds a track with a built-in synthesizer you can play via an on-screen keyboard and record as MIDI.</p>
+    <p class="howto"><b>How:</b> Toolbar "Add Instrument Track" button.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Add Bus Track</h3>
+    <p>Adds an auxiliary bus other tracks can send audio to — useful for grouping tracks under a shared effect like reverb.</p>
+    <p class="howto"><b>How:</b> Toolbar "Add Bus Track" button.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Remove Track</h3>
+    <p>Deletes the selected track and all its clips.</p>
+    <p class="howto"><b>How:</b> Select the track, then click "Remove Track".</p>
+  </div>
+
+  <div class="feature">
+    <h3>Select (activate) a track</h3>
+    <p>Marks a track as the active one — new imports and effect edits target it.</p>
+    <p class="howto"><b>How:</b> Click the "Active" radio button on the track's header, or press
+    <kbd>Ctrl+Alt+1</kbd> through <kbd>Ctrl+Alt+9</kbd> for tracks 1–9.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Rename a track</h3>
+    <p>Give a track a more descriptive name than "Track 1".</p>
+    <p class="howto"><b>How:</b> Double-click the track name and type a new one.</p>
+  </div>
+
+  <h2 id="mixer">Mixer Controls</h2>
+
+  <div class="feature">
+    <h3>Mixer panel</h3>
+    <p>A dedicated view showing every track as a vertical channel strip, side by side — like a hardware mixing console.</p>
+    <p class="howto"><b>How:</b> View menu → Mixer, to show/hide the docked panel at the bottom of the window.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Mute</h3>
+    <p>Silences a track so you can hear the rest of the mix without it.</p>
+    <p class="howto"><b>How:</b> Mute checkbox on the track's mixer strip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Solo</h3>
+    <p>Mutes every other track so you can hear this one in isolation.</p>
+    <p class="howto"><b>How:</b> Solo checkbox on the track's mixer strip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Arm for recording</h3>
+    <p>Marks a track to receive audio the next time you press Record.</p>
+    <p class="howto"><b>How:</b> Arm/Rec checkbox on the mixer strip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Volume</h3>
+    <p>Sets how loud a track plays in the overall mix.</p>
+    <p class="howto"><b>How:</b> Vertical fader on the track's mixer strip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Pan</h3>
+    <p>Positions a track's sound between the left and right speakers.</p>
+    <p class="howto"><b>How:</b> Pan dial on the track's mixer strip.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Peak meter</h3>
+    <p>Shows a track's real-time signal level, so you can spot clipping.</p>
+    <p class="howto"><b>How:</b> Watch the vertical meter bar next to each mixer strip's fader.</p>
+  </div>
+
+  <h2 id="sends">Sends &amp; Bus Routing</h2>
+
+  <div class="feature">
+    <h3>Send to a bus</h3>
+    <p>Routes a copy of a track's audio to a bus track (for example, sending several vocal tracks to one shared reverb bus).</p>
+    <p class="howto"><b>How:</b> On the track's mixer strip, choose a destination in the send-bus
+    dropdown and set the send level.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Master volume</h3>
+    <p>Controls the overall output level of the entire mix.</p>
+    <p class="howto"><b>How:</b> Master volume fader on the toolbar or mixer panel.</p>
+  </div>
+
+  <h2 id="effects">Effects</h2>
+
+  <div class="feature">
+    <h3>Add an effect</h3>
+    <p>Inserts an EQ, Compressor, Delay, or Reverb into a track's (or the master bus's) signal chain.</p>
+    <p class="howto"><b>How:</b> Click the "FX" button on a mixer strip (or "Master FX" for the
+    overall mix), then choose an effect type to add.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Adjust effect parameters</h3>
+    <p>Fine-tune how an effect sounds.</p>
+    <p class="howto"><b>How:</b> Open the FX popover — each added effect shows its controls immediately, no separate dialog needed.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Bypass an effect</h3>
+    <p>Temporarily disables an effect without deleting it, so you can A/B compare with and without it.</p>
+    <p class="howto"><b>How:</b> Toggle the checkbox next to the effect's name in the FX popover.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Reorder effects</h3>
+    <p>Changes the order effects are applied in, which changes the resulting sound.</p>
+    <p class="howto"><b>How:</b> Drag an effect up or down within the FX popover.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Remove an effect</h3>
+    <p>Deletes an effect from the chain.</p>
+    <p class="howto"><b>How:</b> Click the remove icon next to the effect in the FX popover.</p>
+  </div>
+
+  <div class="feature">
+    <h3>3-Band EQ</h3>
+    <p>Boosts or cuts low, mid, and high frequencies to shape a track's tone.</p>
+    <p class="howto"><b>How:</b> Add "EQ", then adjust the Low/Mid/High gain and frequency controls.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Compressor</h3>
+    <p>Evens out volume by reducing loud peaks, so quiet and loud parts sit closer together.</p>
+    <p class="howto"><b>How:</b> Add "Compressor", then set Threshold, Ratio, Attack, Release, and Makeup Gain.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Delay</h3>
+    <p>Adds an echo effect that repeats the sound after a set amount of time.</p>
+    <p class="howto"><b>How:</b> Add "Delay", then set Delay Time, Feedback, and Mix.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Reverb</h3>
+    <p>Simulates the sound of a physical space (room, hall) around the track.</p>
+    <p class="howto"><b>How:</b> Add "Reverb", then set Room Size, Damping, and Mix.</p>
+  </div>
+
+  <h2 id="automation">Automation</h2>
+
+  <div class="feature">
+    <h3>Automation lane</h3>
+    <p>Lets a track's volume, pan, or send level change over time automatically instead of staying fixed — for example, fading a track out gradually.</p>
+    <p class="howto"><b>How:</b> Click the "Auto" toggle on a track row to reveal its automation
+    lane, then choose Volume, Pan, or Send Level as the target.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Add / move / delete automation points</h3>
+    <p>Shapes the automation curve by placing control points at specific times and values.</p>
+    <p class="howto"><b>How:</b> Click on the automation lane to add a point, drag a point to
+    reshape the curve, or select a point and press <kbd>Delete</kbd> to remove it.</p>
+  </div>
+
+  <h2 id="midi">MIDI / Instrument Editing</h2>
+
+  <div class="feature">
+    <h3>Piano Roll</h3>
+    <p>A grid for viewing and editing the MIDI notes on an Instrument track.</p>
+    <p class="howto"><b>How:</b> Select an Instrument track, then open the Piano Roll panel (View menu, if hidden).</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Draw, move, resize, delete notes</h3>
+    <p>Directly edit a MIDI performance without re-recording it.</p>
+    <p class="howto"><b>How:</b> Click-drag in an empty area to draw a new note; drag an existing
+    note to move it; drag its right edge to resize; select and press <kbd>Delete</kbd> to remove it.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Adjust note velocity</h3>
+    <p>Controls how hard each note is "struck," which affects its loudness/tone from the synth.</p>
+    <p class="howto"><b>How:</b> Drag in the velocity lane beneath the main piano-roll grid.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Snap to grid</h3>
+    <p>Aligns notes to musical beat subdivisions so they land precisely on the beat.</p>
+    <p class="howto"><b>How:</b> Choose a snap setting (off, 1/4, 1/8, 1/16, 1/32) from the Piano Roll panel's dropdown.</p>
+  </div>
+
+  <div class="feature">
+    <h3>On-screen keyboard &amp; synth controls</h3>
+    <p>Play and shape the built-in synthesizer's sound — waveform shape, ADSR envelope, and filter cutoff.</p>
+    <p class="howto"><b>How:</b> Select an Instrument track, then use the on-screen keyboard and
+    the Instrument panel's Waveform / ADSR / Filter controls.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Record MIDI</h3>
+    <p>Captures notes you play on the on-screen keyboard as an editable MIDI performance.</p>
+    <p class="howto"><b>How:</b> Select and arm an Instrument track, press Record, play notes on
+    the on-screen keyboard, then Stop.</p>
+  </div>
+
+  <h2 id="takes">Recording Takes</h2>
+
+  <div class="feature">
+    <h3>Take lanes</h3>
+    <p>Every pass of a loop recording is kept as a separate "take," so you can compare them and pick the best one.</p>
+    <p class="howto"><b>How:</b> Click the "Takes" toggle on a track row to reveal all takes stacked below the main clip lane.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Promote a take</h3>
+    <p>Makes a specific take the one that actually plays back, replacing whatever was there before.</p>
+    <p class="howto"><b>How:</b> Click the take lane you want to use.</p>
+  </div>
+
+  <h2 id="waveform">Waveform Display</h2>
+
+  <div class="feature">
+    <h3>Track &amp; master waveforms</h3>
+    <p>Visualizes audio as a waveform so you can see where sound is loud, quiet, or silent — useful for aligning edits by eye.</p>
+    <p class="howto"><b>How:</b> Waveforms draw automatically in each track's lane; the strip
+    below the ruler shows the combined mix of all audible tracks.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Playhead indicator</h3>
+    <p>A vertical line showing exactly where playback or recording currently is.</p>
+    <p class="howto"><b>How:</b> Always visible; moves automatically during playback/recording, or jump it by clicking the ruler.</p>
+  </div>
+
+  <h2 id="media">Media Management</h2>
+
+  <div class="feature">
+    <h3>Media Library</h3>
+    <p>Lists every audio file used in the session, so you can drag it onto a track again without re-importing.</p>
+    <p class="howto"><b>How:</b> Open via the right-side panel tabs; drag an item onto a track lane to place it.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Import Audio File</h3>
+    <p>Brings an external audio file (WAV, FLAC, OGG, AIFF) into the active track.</p>
+    <p class="howto"><b>How:</b> File → Import, then choose a file.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Drag &amp; drop from your file manager</h3>
+    <p>Import a file just by dragging it from your desktop's file browser onto a track.</p>
+    <p class="howto"><b>How:</b> Drag the file onto a track lane; it's placed at the drop position.</p>
+  </div>
+
+  <h2 id="loop-browser">Loop Browser</h2>
+
+  <div class="feature">
+    <h3>Browse a sample folder</h3>
+    <p>Lets you audition audio files from any folder on disk (like a sample pack) before adding them to your project.</p>
+    <p class="howto"><b>How:</b> Open the Loop Browser panel tab, click "Choose Folder", and pick a directory.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Filter, preview, and drop loops</h3>
+    <p>Quickly find and try a sound before committing it to a track.</p>
+    <p class="howto"><b>How:</b> Type in the filter box to narrow the list; click a file to
+    preview it (click again or hit Stop to stop); drag it onto a track to place it.</p>
+  </div>
+
+  <h2 id="import-export">Import / Export</h2>
+
+  <div class="feature">
+    <h3>Export mixdown</h3>
+    <p>Renders your whole project down to a single finished audio file.</p>
+    <p class="howto"><b>How:</b> File → Export, choose 32-bit float or 16-bit PCM WAV, then pick where to save.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <div class="feature">
+    <h3>Export stems</h3>
+    <p>Also saves each track as its own separate audio file alongside the full mixdown — useful for sending to a collaborator or another studio.</p>
+    <p class="howto"><b>How:</b> In the Export dialog, check "Also export stems" before exporting.</p>
+  </div>
+
+  <h2 id="zoom-nav">Zoom &amp; Navigation</h2>
+
+  <div class="feature">
+    <h3>Zoom in / out / reset</h3>
+    <p>Controls how much timeline detail is visible — zoom in to edit precisely, zoom out to see the whole project.</p>
+    <p class="howto"><b>How:</b> Toolbar zoom buttons, <kbd>Ctrl+=</kbd> / <kbd>Ctrl+-</kbd>, or hold <kbd>Ctrl</kbd> and scroll over the timeline.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Scrolling</h3>
+    <p>Move around the timeline when zoomed in, or scroll to see more tracks.</p>
+    <p class="howto"><b>How:</b> Use each track's scrollbar, or hold <kbd>Shift</kbd> and scroll to move all tracks together.</p>
+  </div>
+
+  <h2 id="bookmarks">Bookmarks</h2>
+
+  <div class="feature">
+    <h3>Set a numbered bookmark</h3>
+    <p>Marks a position in time so you can jump straight back to it later — great for marking a verse, chorus, or a spot that needs fixing.</p>
+    <p class="howto"><b>How:</b> Position the playhead, then press <kbd>Ctrl+Shift+1</kbd> through <kbd>Ctrl+Shift+9</kbd>.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Jump to a bookmark</h3>
+    <p>Instantly moves the playhead to a saved bookmark.</p>
+    <p class="howto"><b>How:</b> Press <kbd>Ctrl+1</kbd> through <kbd>Ctrl+9</kbd>.</p>
+  </div>
+
+  <h2 id="playback-loop">Playback Loop</h2>
+
+  <div class="feature">
+    <h3>Loop a section during playback</h3>
+    <p>Repeats a section of the timeline continuously during playback, so you can listen to a passage over and over without restarting it manually.</p>
+    <p class="howto"><b>How:</b> Hold <kbd>Ctrl</kbd> and drag on the ruler to define the loop
+    region. Hold <kbd>Ctrl</kbd> and click (without dragging) to turn the loop off again.</p>
+    <div class="video-slot"><!-- TODO: add GIF --></div>
+  </div>
+
+  <h2 id="settings">Settings</h2>
+
+  <div class="feature">
+    <h3>Audio Settings</h3>
+    <p>Choose which speaker/interface plays audio, which microphone records, which system-audio source captures desktop sound, and the sample rate.</p>
+    <p class="howto"><b>How:</b> File → Settings.</p>
+  </div>
+
+  <h2 id="undo-redo">Undo &amp; Redo</h2>
+
+  <div class="feature">
+    <h3>Undo / Redo</h3>
+    <p>Reverts or reapplies your last action — recordings, edits, effect changes, track add/remove, and more. Up to 50 steps are kept.</p>
+    <p class="howto"><b>How:</b> <kbd>Ctrl+Z</kbd> to undo, <kbd>Ctrl+Y</kbd> to redo.</p>
+  </div>
+
+  <h2 id="view-panels">View &amp; Panels</h2>
+
+  <div class="feature">
+    <h3>Show/hide panels</h3>
+    <p>Toggle which panels (Media Library, Instrument, Piano Roll, Loop Browser, Mixer) are visible, so you can focus on what you're working on.</p>
+    <p class="howto"><b>How:</b> View menu → check/uncheck a panel.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Window layout is remembered</h3>
+    <p>Your window size, position, and panel arrangement are saved automatically and restored the next time you open the app.</p>
+    <p class="howto"><b>How:</b> Nothing to do — it's automatic.</p>
+  </div>
+
+  <h2 id="status-meters">Status &amp; Meters</h2>
+
+  <div class="feature">
+    <h3>Status label</h3>
+    <p>Shows whether you're stopped, playing, or recording, plus a quick summary of the session.</p>
+    <p class="howto"><b>How:</b> Read it at the top of the window — updates automatically.</p>
+  </div>
+
+  <div class="feature">
+    <h3>Input / output meters</h3>
+    <p>Real-time level meters for your microphone input and the final mixed output, so you can watch for clipping.</p>
+    <p class="howto"><b>How:</b> Always visible at the top of the window.</p>
+  </div>
+
+</main>
+</div>
+</body>
+</html>

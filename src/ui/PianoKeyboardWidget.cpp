@@ -1,7 +1,11 @@
 #include "PianoKeyboardWidget.h"
 
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+
+#include "PianoKeyMap.h"
+#include "audio/NoteNaming.h"
 
 namespace rsd {
 
@@ -25,6 +29,7 @@ int whiteKeyCount(int lowPitch, int highPitch) {
 PianoKeyboardWidget::PianoKeyboardWidget(QWidget* parent) : QWidget(parent) {
     setFixedHeight(90);
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 int PianoKeyboardWidget::pitchAtX(int x) const {
@@ -77,6 +82,36 @@ void PianoKeyboardWidget::mouseReleaseEvent(QMouseEvent*) { setHeldPitch(std::nu
 
 void PianoKeyboardWidget::leaveEvent(QEvent*) { setHeldPitch(std::nullopt); }
 
+void PianoKeyboardWidget::setExpectedPitch(std::optional<int> pitch) {
+    if (m_expectedPitch == pitch) return;
+    m_expectedPitch = pitch;
+    update();
+}
+
+void PianoKeyboardWidget::keyPressEvent(QKeyEvent* event) {
+    if (event->isAutoRepeat()) return;
+    auto pitch = pitchForComputerKey(event->key());
+    if (!pitch || m_keyboardHeldPitches.count(*pitch)) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    m_keyboardHeldPitches.insert(*pitch);
+    emit noteOn(*pitch, 0.9f);
+    update();
+}
+
+void PianoKeyboardWidget::keyReleaseEvent(QKeyEvent* event) {
+    if (event->isAutoRepeat()) return;
+    auto pitch = pitchForComputerKey(event->key());
+    if (!pitch || !m_keyboardHeldPitches.count(*pitch)) {
+        QWidget::keyReleaseEvent(event);
+        return;
+    }
+    m_keyboardHeldPitches.erase(*pitch);
+    emit noteOff(*pitch);
+    update();
+}
+
 void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(20, 20, 20));
@@ -89,10 +124,22 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
     for (int p = kLowPitch; p <= kHighPitch; ++p) {
         if (!isWhiteKey(p)) continue;
         float left = static_cast<float>(whiteIndex) * keyW;
-        bool held = m_heldPitch && *m_heldPitch == p;
+        bool held = (m_heldPitch && *m_heldPitch == p) || m_keyboardHeldPitches.count(p);
+        bool expected = m_expectedPitch && *m_expectedPitch == p;
         painter.setPen(QColor(60, 60, 60));
-        painter.setBrush(held ? QColor(160, 210, 255) : QColor(235, 235, 235));
-        painter.drawRect(QRectF(left, 0, keyW, height()));
+        painter.setBrush(held         ? QColor(160, 210, 255)
+                          : expected  ? QColor(150, 235, 160)
+                                      : QColor(235, 235, 235));
+        QRectF keyRect(left, 0, keyW, height());
+        painter.drawRect(keyRect);
+
+        painter.setPen(QColor(90, 90, 90));
+        painter.drawText(keyRect.adjusted(0, 0, 0, -18), Qt::AlignBottom | Qt::AlignHCenter,
+                          midiNoteName(p));
+        QString label = computerKeyLabelForPitch(p);
+        if (!label.isEmpty()) {
+            painter.drawText(keyRect.adjusted(0, 0, 0, -6), Qt::AlignBottom | Qt::AlignHCenter, label);
+        }
         ++whiteIndex;
     }
 
@@ -105,10 +152,21 @@ void PianoKeyboardWidget::paintEvent(QPaintEvent*) {
             continue;
         }
         float centerX = static_cast<float>(whiteIndex) * keyW;
-        bool held = m_heldPitch && *m_heldPitch == p;
+        bool held = (m_heldPitch && *m_heldPitch == p) || m_keyboardHeldPitches.count(p);
+        bool expected = m_expectedPitch && *m_expectedPitch == p;
         painter.setPen(Qt::NoPen);
-        painter.setBrush(held ? QColor(90, 150, 220) : QColor(25, 25, 25));
-        painter.drawRect(QRectF(centerX - blackW / 2.0f, 0, blackW, blackH));
+        painter.setBrush(held        ? QColor(90, 150, 220)
+                          : expected ? QColor(70, 160, 90)
+                                     : QColor(25, 25, 25));
+        QRectF keyRect(centerX - blackW / 2.0f, 0, blackW, blackH);
+        painter.drawRect(keyRect);
+
+        painter.setPen(QColor(200, 200, 200));
+        QString label = computerKeyLabelForPitch(p);
+        if (!label.isEmpty()) {
+            painter.drawText(keyRect.adjusted(0, 0, 0, -14), Qt::AlignBottom | Qt::AlignHCenter, label);
+        }
+        painter.drawText(keyRect.adjusted(0, 0, 0, -2), Qt::AlignBottom | Qt::AlignHCenter, midiNoteName(p));
     }
 }
 

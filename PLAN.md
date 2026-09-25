@@ -812,6 +812,336 @@ into a 2x2 grid (Name/Active on row 1, Takes/Auto on row 2) and shrank
   (25/25 binaries) still passes. Smoke-tested: app builds and launches
   cleanly.
 
+## Completed: SoundFont instruments (piano, drums, full GM set) replacing the waveform synth
+
+Goal: replace the v1 oscillator-based synth (4 waveforms + ADSR + filter)
+with real SoundFont sample playback via FluidSynth, so Instrument tracks
+can be a piano, a drum kit, or any other General MIDI instrument instead
+of a generic tone. Approved: full replacement (not additive), FluidSynth
+as the new dependency, a bundled General MIDI SoundFont, on-screen
+keyboard/drum-pads only (no hardware MIDI input — same v1 scope as
+before).
+
+Design (approved):
+- [x] New system dependency: `libfluidsynth-dev` (build) / `libfluidsynth3`
+      (runtime), linked via `pkg_check_modules(FLUIDSYNTH ... fluidsynth)`
+      in both `CMakeLists.txt` and `tests/CMakeLists.txt`.
+- [x] Bundled `assets/soundfonts/TimGM6mb.sf2` (TimGM6mb, ~5.7MB, free/
+      open-license General MIDI soundfont) — chosen over the larger
+      FluidR3_GM (~140MB) specifically to keep it small enough to commit
+      to the repo.
+- [x] `audio/Synth.h` rewritten: `SynthParams` now holds
+      `instrumentProgram` (GM program 0-127) and `isDrumKit` (bool)
+      instead of waveform/ADSR/filter atomics. `SynthEngine` wraps a
+      `fluid_synth_t`/`fluid_settings_t` pair (reverb/chorus off, fixed
+      48kHz, `synth.threadsafe-api` off since it's only ever driven from
+      the RT thread, same trust model as before) instead of the 8-voice
+      oscillator pool — FluidSynth handles its own internal polyphony.
+      Melodic notes go to MIDI channel 0 (program-changed on the fly when
+      `instrumentProgram` changes); drum notes go to channel 9/bank 128
+      (GM percussion). `render()` calls `fluid_synth_write_float` into a
+      scratch stereo buffer and adds it into the track's output buffer
+      (additive, matching the previous engine's contract). `noteOn`/
+      `noteOff` gained an `isDrumKit` parameter so `SessionMixer` can
+      route to the right channel.
+- [x] `reset()` (used before an offline export render) switched from
+      `fluid_synth_system_reset` to `fluid_synth_all_sounds_off` per
+      channel — discovered during testing that `system_reset` only
+      triggers a normal note-off with an audible release tail (not
+      deterministic-enough silence for "export starts from silence"),
+      while `all_sounds_off` mutes immediately.
+- [x] Deleted `audio/SynthMath.h` (oscillator/ADSR/filter math, no longer
+      used by anything) and its test.
+- [x] New `audio/GMInstruments.h` (128 GM program names, pure data) and
+      `audio/GMDrumMap.h` (10-pad GM percussion map: Kick/Snare/Hi-Hats/
+      Crash/Ride/Toms/Clap), both tested first.
+- [x] New `ui/DrumPadWidget` (grid of pad buttons, mirrors
+      `PianoKeyboardWidget`'s noteOn/noteOff signal shape).
+      `InstrumentPanel` reworked: waveform/ADSR/filter sliders replaced by
+      an "Instrument" combo (128 GM names) + a "Drum Kit" checkbox; a
+      `QStackedWidget` swaps between the piano keyboard and the drum pads
+      depending on the checkbox.
+- Known v1 limitation (not asked, flagging for review): instrument
+  selection (`instrumentProgram`/`isDrumKit`) is not persisted in
+  `SessionIO`, matching the pre-existing gap where the old waveform/ADSR
+  params also weren't saved — every Instrument track reopens as Acoustic
+  Grand Piano. Worth fixing in a follow-up if instrument choice turns out
+  to matter across sessions.
+
+Verification plan (approved):
+- [x] Automated (written first): `tests/test_GMInstruments.cpp` (4
+      cases), `tests/test_GMDrumMap.cpp` (4 cases). `tests/test_Synth.cpp`
+      (6 cases, integration-level against the real bundled SoundFont —
+      same style as `SessionMixer`'s tests): silence before any note,
+      audio on note-on, silence again after note-off + release tail,
+      immediate silence after `reset()`, drum-kit note also produces
+      audio. Every test target that transitively includes `model/Track.h`
+      (it directly owns a `SynthEngine`) needed `PkgConfig::FLUIDSYNTH`
+      + `RSD_SOURCE_DIR` added so the real soundfont loads during tests.
+      Full suite (31/31 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran under a real X
+      display briefly, no crash/error output beyond the pre-existing ALSA
+      probe warning).
+- [ ] Full manual (needs real interaction/listening, not done from this
+      session): select Piano on an Instrument track, play the on-screen
+      keyboard, confirm it's audibly a piano (not a synth tone); check
+      "Drum Kit", confirm the keyboard swaps for drum pads and each pad
+      sounds like its label (kick/snare/hi-hat/etc.); switch the
+      instrument combo to a few other GM programs (e.g. a guitar, a
+      string patch) and confirm the sound changes; record a short phrase
+      through the piano-roll/instrument-record path and confirm playback
+      still sounds correct; confirm undo/redo and existing effects/
+      automation on an Instrument track still work.
+
+## Completed: Computer-keyboard shortcuts for the on-screen piano
+
+Goal: play the on-screen piano keyboard using the computer keyboard
+(Nordic layout), not just the mouse — asdfghjklöä for white keys,
+qwertyuiopå for black keys. Clarified with the user (asked first): use
+the standard staggered "typing keyboard" layout (white keys on the home
+row, black keys on the row above aligned over the gaps between white
+keys), not a naive 1:1 sequential mapping — matches conventions like
+GarageBand's Musical Typing / VMPK. There's no black key above the E-F or
+B-C gaps, so Q, R, I, and Å are intentionally unmapped.
+
+Design (approved):
+- [x] New `ui/PianoKeyMap.h::pitchForComputerKey(int qtKey)` (pure,
+      tested first): A-Ä → C3-F4 (11 white notes, MIDI 48-65), W E T Y U
+      O P → the 7 black notes in that range (MIDI 49,51,54,56,58,61,63),
+      everything else → `nullopt`.
+- [x] `PianoKeyboardWidget`: `Qt::StrongFocus` (needs a click on the
+      widget first to receive key events — same as any keyboard-driven
+      widget); `keyPressEvent`/`keyReleaseEvent` look up
+      `pitchForComputerKey`, ignore `isAutoRepeat()` events (so holding a
+      key doesn't retrigger), and track currently-down keys in a
+      `std::set<int>` — polyphonic, unlike the mouse's single-note glide,
+      so chords can be played by holding multiple keys. Held keyboard
+      notes highlight on the keyboard the same as a mouse-held note.
+
+Verification plan (approved):
+- [x] Automated (written first): `tests/test_PianoKeyMap.cpp` (5 cases:
+      full white-row mapping, full black-row mapping, the 4 unmapped gap
+      keys, an unrelated key). Full suite (32/32 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly.
+- [ ] Full manual (needs real interaction, not done from this session):
+      click the piano keyboard to focus it, play asdfghjklöä and
+      qwertyuiopå, confirm the right notes sound and highlight; hold two
+      keys at once and confirm both notes sound (polyphony); confirm
+      holding a key down doesn't retrigger/stutter the note.
+
+Follow-up: labeled each key with its shortcut letter directly on the
+piano widget (so the mapping doesn't have to be memorized). New
+`PianoKeyMap.h::computerKeyLabelForPitch()` (inverse of
+`pitchForComputerKey`, tested first — 2 more cases). `paintEvent` draws
+the label near the bottom of each white/black key that has one; keys
+with no shortcut (outside C3-F4, or a black-key gap) are left unlabeled.
+Full suite (32/32 binaries, 8/8 in `PianoKeyMapTests`) passes.
+
+## Completed: Learn-to-play aids (note names, practice mode, metronome)
+
+Goal: help a user learning piano — asked what to add, proposed note
+names on keys / a follow-along practice mode / a metronome, user said do
+all three. Clarified scope first (asked): practice mode ships with
+built-in scales/songs (not user-authored), highlight-and-wait mechanics
+(not Synthesia-style falling notes), and the metronome is a general
+transport feature (not scoped to practice mode only).
+
+Design (approved):
+- [x] New `audio/NoteNaming.h::midiNoteName(int)` (pure, tested first) —
+      scientific pitch notation (MIDI 60 = C4). `PianoKeyboardWidget`
+      draws the note name on every key (not just the ones with a
+      computer-keyboard shortcut), above the shortcut letter.
+- [x] `PianoKeyboardWidget` gained `setExpectedPitch()`: highlights a key
+      green (distinct from the blue held-note highlight) — used by the
+      new practice mode to show the next expected note.
+- [x] New `model/PracticeExercise.h` (pure data, tested first): built-in
+      exercises (C Major Scale, Twinkle Twinkle Little Star's opening
+      phrase). New `model/PracticeMath.h::practiceAdvance()`/
+      `practiceComplete()` (pure, tested first): highlight-and-wait
+      logic — only advances past the expected note if the pitch played
+      matches it.
+- [x] New `ui/PracticePanel` (exercise combo + Start button + progress
+      label), embedded in `InstrumentPanel` above the keyboard. Wired to
+      the keyboard's `noteOn` (checks progress) and back to the
+      keyboard's `setExpectedPitch` (shows what's next). Hidden when the
+      track is in Drum Kit mode — exercises are melodic (scales/songs),
+      not meaningful for a drum kit.
+- [x] New `audio/MetronomeMath.h::beatDurationSamples()`/
+      `firstClickOffsetInBlock()` (pure, tested first — block-level
+      granularity, same simplification already used for MIDI-note
+      timing in `SessionMixer`) and `audio/Metronome.h` (RT-safe click
+      generator: a short decaying 1kHz blip at each beat, envelope state
+      carried across render calls like `SynthVoice` so a click begun
+      near a block boundary isn't cut off).
+- [x] `Session` gained `bpm`-adjacent `metronomeEnabled` (bool,
+      persisted in `SessionIO` alongside `bpm`, which was previously
+      write-only from the app's own perspective — there was no UI to
+      *set* it before this, only the piano-roll grid read it). New BPM
+      spinbox + "Metronome" checkbox on the main toolbar, wired directly
+      to `Session::bpm`/`metronomeEnabled` (same pattern as the existing
+      punch-in/out spinboxes) and synced on session load/new.
+- [x] `AudioEngine`: new `Metronome m_metronome` member, rendered
+      straight onto the final output in `rtCallback` (same spot as the
+      loop-browser preview audition) when `playbackActive &&
+      session->metronomeEnabled` — deliberately *not* part of
+      `mixSessionBlock()`/`SessionMixer`, so `OfflineRenderer`/export
+      never bakes the click into a bounce (matches the existing preview-
+      audition precedent, which is AudioEngine-only for the same
+      "shouldn't color the real mix" reason).
+
+Verification plan (approved):
+- [x] Automated (written first): `tests/test_NoteNaming.cpp` (4 cases),
+      `tests/test_MetronomeMath.cpp` (5 cases), `tests/test_Metronome.cpp`
+      (4 cases, integration-level RT-class test, same style as
+      `test_Synth.cpp`), `tests/test_PracticeExercise.cpp` (3 cases),
+      `tests/test_PracticeMath.cpp` (5 cases), plus a new
+      `roundTripsBpmAndMetronome` case in `test_SessionIO.cpp`. Full
+      suite (37/37 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly.
+- [ ] Full manual (needs real interaction/listening, not done from this
+      session): confirm every piano key shows its note name; select "C
+      Major Scale" in the Practice panel, press Start, confirm the
+      correct key highlights green and playing the right note (mouse,
+      keyboard shortcut, or both) advances it, playing a wrong note
+      doesn't, and it says "Done!" after the last note; check the
+      Metronome toolbar checkbox during playback/recording and confirm
+      an audible click at the BPM shown, with no click when unchecked or
+      stopped; confirm changing BPM updates both the click tempo and the
+      piano-roll grid snapping; confirm a session save/reload keeps the
+      BPM and metronome checkbox state; confirm exporting a mix with the
+      metronome checked does *not* include the click in the WAV.
+
+## In progress: Media Library click-to-preview
+
+Goal: `MediaLibraryPanel` should audition a sample on click, same as
+`LoopBrowserPanel` already does — currently it only supports drag-to-track
+and has no preview wiring.
+
+Design (approved):
+- [x] `MediaLibraryPanel` gains `previewRequested(int index)` signal, wired
+      to `itemClicked`, same toggle logic as `LoopBrowserPanel`
+      (`m_previewingRow`): click a different row → emit that row's index;
+      click the currently-previewing row again → clear and emit `-1`.
+      Emits an index (not a path) since the panel already holds buffers
+      in-memory (`bufferAt(int)`) — no reason to reload from disk like the
+      Loop Browser does for filesystem-only entries.
+- [x] `MainWindow::onMediaPreviewRequested(int index)`: `index < 0` →
+      `m_engine->stopPreview()`; else `m_engine->previewSample(m_mediaLibrary->bufferAt(index))`.
+      Connected next to the existing `LoopBrowserPanel::previewRequested`
+      wiring.
+- Deviation from the originally-approved test target: rather than a
+  `QListWidget`-driving QTest (no existing test in this project links
+  `Qt6::Widgets`/constructs a `QApplication` — the established pattern is
+  extracting pure math instead, e.g. `PreviewPlaybackMath`), the toggle
+  logic was extracted into `ui/MediaPreviewToggleMath.h::nextPreviewIndex()`
+  and tested directly; `MediaLibraryPanel`'s click handler is now a thin
+  wrapper calling it.
+
+Verification plan (approved, test target adjusted per above):
+- [x] Automated (written first): `tests/test_MediaPreviewToggleMath.cpp` (3
+      cases: new row starts preview, same row stops it, different row
+      switches it). Full suite (38/38 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly, no errors.
+- [ ] Full manual (needs real interaction/listening, not done from this
+      session): add/drop a couple of entries into the Media Library, click
+      one and confirm audio plays, click again to confirm it stops, click
+      a different entry to confirm it switches.
+
+## In progress: Help menu + usage guide
+
+Goal: a Help menu (top menu bar) with a "Usage Guide" action that opens a
+static HTML page documenting every feature in plain English, in logical
+workflow order. No video/GIF content this pass (explicitly descoped,
+approved) — placeholder comments left per section for a future pass.
+
+Design (approved):
+- [ ] New `Help` menu (`menuBar()->addMenu("&Help")`, after the existing
+      File/Edit/View menus) with a "Usage Guide" `QAction`.
+- [ ] `docs/usage-guide.html`: single self-contained static page (no
+      external deps/build step), sections in this order: Project Basics,
+      Transport/Playback, Recording, Punch/Loop Recording, Clip Editing,
+      Track Management, Mixer Controls, Sends, Effects, Automation,
+      MIDI/Instrument Editing, Recording Takes, Waveform Display, Media
+      Management, Loop Browser, Import/Export, Zoom/Navigation, Bookmarks,
+      Playback Loop, Settings, Undo/Redo, View/Panels, Status/Meters.
+      Each entry: one-line plain-English description + how-to-use steps.
+      `<!-- TODO: add GIF -->` placeholder comment per section.
+- [ ] Help action opens the HTML file via `QDesktopServices::openUrl()`,
+      resolved relative to the app's install/resource location (works from
+      both build dir and installed layout).
+
+Verification plan (approved):
+- [ ] Build the app, confirm it compiles cleanly.
+- [ ] Launch, click Help → Usage Guide, confirm the HTML opens in the
+      default browser with correct formatting.
+- [ ] Spot-check 5-6 documented entries against actual app behavior
+      (e.g. trigger a bookmark shortcut, toggle loop record).
+- No automated tests planned — this is UI wiring + static content with no
+  new testable logic; verification is manual build + click-through only.
+
+## In progress: Instrument Roll rename + save-to-loop-browser + track-lane fix
+
+Goal: rename "Piano Roll" to "Instrument Roll" (UI label only), let the user
+save a rendered instrument track's notes as a loop-browser entry, and fix
+the instrument track's lane visualization (was sparse fixed-size 6px ticks
+from `ClipLaneWidget::paintMidiNotes`, not a coherent shape).
+
+Design (approved), corrected mid-build (asked first): "loop browser" turned
+out to mean the actual folder-backed `LoopBrowserPanel` (feature #9), not
+the session-scoped `MediaLibraryPanel` — confirmed with the user before
+wiring it up.
+
+- [x] Rename: "Piano Roll" dock title (`MainWindow.cpp:344`) → "Instrument
+      Roll". No class/file renames (`PianoRollPanel`/`PianoRollGridWidget`
+      etc. stay as-is) — confirmed no other user-facing "Piano Roll"
+      strings existed.
+- [x] Save to Loop Browser: `PianoRollPanel` gained a "Save to Loop
+      Browser" button (enabled only when an Instrument track is selected),
+      emitting `saveToLoopBrowserRequested(track)`.
+      `MainWindow::onSaveToLoopBrowserRequested()` renders the track's
+      notes to an `AudioBuffer` via the existing `renderTrackStem()` (same
+      path per-track stem export uses — resets the track's `SynthEngine`
+      first, stops live playback to avoid concurrent RT access), writes it
+      as a WAV into `LoopBrowserPanel`'s currently-chosen folder, then
+      calls its new `refresh()` so the new file shows up immediately.
+      New pure helper `audio/OfflineRenderer.h::trackContentLengthSamples()`
+      (extracted from `sessionContentLengthSamples`'s per-track loop body)
+      sizes the render to just that track's own content.
+      `LoopBrowserPanel` gained public `folderPath()`/`refresh()` (the
+      latter just exposes the existing private `rescan()`).
+- [x] Track-lane fix: `ClipLaneWidget::paintMidiNotes()` now draws each
+      note as a rectangle spanning `startSample`→`startSample+lengthSamples`
+      (unchanged — it already did this) with height from new
+      `ui/MidiNoteDisplayMath.h::noteRowHeight()` (one pitch-range "row"
+      worth of the lane, tiling adjacent semitones instead of a fixed 6px
+      strip) and brightness scaled by note velocity, so it reads as a
+      denser, more piano-roll-like shape instead of sparse uniform ticks.
+
+Verification plan (approved):
+- [x] Automated (test-first): `tests/test_MidiNoteDisplayMath.cpp` gained 3
+      cases for `noteRowHeight()` (scales with lane/range, clamps to ≥1px,
+      degenerate-range guard), written before the implementation.
+      `tests/test_OfflineRenderer.cpp` gained 2 cases for
+      `trackContentLengthSamples()` (per-track isolation, empty-track
+      zero), also written first. Full suite (38/38 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly under a real X
+      display.
+- [x] Partial manual: confirmed visually (screenshot) that the dock now
+      reads "Instrument Roll", and that selecting an Instrument track
+      enables the "Save to Loop Browser" button (disabled with no
+      selection). Did not confirm the button's actual save/refresh
+      behavior or the lane's visual rectangles end-to-end — driving the
+      on-screen piano keyboard via automated clicks (xdotool) proved
+      unreliable in this session (clicks landed but no notes registered
+      in the track's note list across several attempts) and burned
+      significant time without a clear root cause (could be a click
+      timing issue with the automation, not necessarily an app bug).
+- [ ] Full manual still needed (by hand, not automatable from this
+      session): choose a Loop Browser folder, record a short phrase on an
+      Instrument track, confirm the lane shows filled note-length
+      rectangles (not sparse ticks); click "Save to Loop Browser", confirm
+      a new WAV appears in the Loop Browser list and sounds correct.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.

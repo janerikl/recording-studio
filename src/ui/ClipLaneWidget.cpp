@@ -146,15 +146,18 @@ void ClipLaneWidget::paintMidiNotes(QPainter& painter) {
         return;
     }
 
+    int laneHeight = height() - 8;
+    int noteH = std::max(3, noteRowHeight(laneHeight, 36, 96));
+
     for (auto& note : *notes) {
         int x0 = sampleToX(note->startSample);
         int x1 = sampleToX(note->startSample + note->lengthSamples);
         int w = std::max(2, x1 - x0);
-        int y = pitchToY(note->pitch, height() - 8, 36, 96) + 4;
-        int noteH = 6;
+        int y = pitchToY(note->pitch, laneHeight, 36, 96) + 4;
 
+        int velocityGreen = 140 + static_cast<int>(std::clamp(note->velocity, 0.0f, 1.0f) * 90.0f);
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(160, 210, 120));
+        painter.setBrush(QColor(90, velocityGreen, 90));
         painter.drawRect(x0, y - noteH / 2, w, noteH);
     }
 }

@@ -17,6 +17,7 @@ public:
     int sampleRate = 48000;
     int channels = 2;
     double bpm = 120.0;
+    bool metronomeEnabled = false;
     std::vector<std::shared_ptr<Track>> tracks;
     MasterBus masterBus;
     QString filePath;

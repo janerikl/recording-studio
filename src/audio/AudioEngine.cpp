@@ -103,6 +103,10 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
                 self->m_previewPosition.store(previewPos, std::memory_order_relaxed);
             }
         }
+
+        self->m_metronome.render(out, nFrames, self->m_channels, self->m_sampleRate, pos,
+                                  self->m_session->bpm,
+                                  playbackActive && self->m_session->metronomeEnabled);
     }
 
     if (playbackActive) self->m_transport.advance(nFrames);

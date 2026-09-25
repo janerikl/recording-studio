@@ -59,6 +59,7 @@ private slots:
     void onLoadSessionClicked();
     void onCloseSessionClicked();
     void onSettingsClicked();
+    void onUsageGuideClicked();
     void onAddTrackClicked();
     void onAddInstrumentTrackClicked();
     void onAddBusTrackClicked();
@@ -80,6 +81,8 @@ private slots:
     void onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
     void onExternalFileDroppedOnTrack(QUuid trackId, QString filePath, int64_t sessionStartSample);
     void onLoopPreviewRequested(QString filePath);
+    void onMediaPreviewRequested(int index);
+    void onSaveToLoopBrowserRequested(std::shared_ptr<Track> track);
     void onUndoClicked();
     void onRedoClicked();
     void drainCaptureRing();
@@ -173,6 +176,8 @@ private:
     QCheckBox* m_loopRecordCheckBox = nullptr;
     QDoubleSpinBox* m_punchInSpin = nullptr;
     QDoubleSpinBox* m_punchOutSpin = nullptr;
+    QDoubleSpinBox* m_bpmSpin = nullptr;
+    QCheckBox* m_metronomeCheckBox = nullptr;
     WaveformWidget* m_masterWaveform = nullptr;
     MediaLibraryPanel* m_mediaLibrary = nullptr;
     EffectsPopoverWidget* m_effectsPopover = nullptr;

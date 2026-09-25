@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -17,7 +18,9 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QStringList>
+#include <QTimer>
 #include <QStyle>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QWidget>
@@ -234,6 +237,28 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_punchInSpin, &QDoubleSpinBox::valueChanged, this, &MainWindow::onPunchFieldsChanged);
     connect(m_punchOutSpin, &QDoubleSpinBox::valueChanged, this, &MainWindow::onPunchFieldsChanged);
 
+    toolbar->addSeparator();
+    toolbar->addWidget(new QLabel(" BPM: ", this));
+    m_bpmSpin = new QDoubleSpinBox(this);
+    m_bpmSpin->setRange(20.0, 300.0);
+    m_bpmSpin->setDecimals(1);
+    m_bpmSpin->setValue(m_session->bpm);
+    toolbar->addWidget(m_bpmSpin);
+    connect(m_bpmSpin, &QDoubleSpinBox::valueChanged, this, [this](double v) {
+        m_session->bpm = v;
+        m_session->dirty = true;
+        m_pianoRollPanel->setBpm(v);
+    });
+
+    m_metronomeCheckBox = new QCheckBox("Metronome", this);
+    m_metronomeCheckBox->setChecked(m_session->metronomeEnabled);
+    m_metronomeCheckBox->setToolTip("Click track during playback/recording, at the BPM above.");
+    toolbar->addWidget(m_metronomeCheckBox);
+    connect(m_metronomeCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        m_session->metronomeEnabled = checked;
+        m_session->dirty = true;
+    });
+
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
 
@@ -308,13 +333,21 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_instrumentPanel, &InstrumentPanel::noteOff, this, &MainWindow::onInstrumentNoteOff);
     m_instrumentDock->setWidget(m_instrumentPanel);
     addDockWidget(Qt::RightDockWidgetArea, m_instrumentDock);
-    tabifyDockWidget(mediaDock, m_instrumentDock);
+    // Floats as its own window by default (not tabbed with the other
+    // docks) — the piano/drum-pad player and practice panel want more
+    // horizontal room than the docked sidebar gives them, and a learner
+    // is likely to want it up and visible the whole time regardless of
+    // which other dock is on top.
+    m_instrumentDock->setFloating(true);
+    m_instrumentDock->resize(900, 420);
 
-    m_pianoRollDock = new QDockWidget("Piano Roll", this);
+    m_pianoRollDock = new QDockWidget("Instrument Roll", this);
     m_pianoRollPanel = new PianoRollPanel(m_pianoRollDock);
     m_pianoRollPanel->setCommandStack(&m_commandStack);
     m_pianoRollPanel->setBpm(m_session->bpm);
     m_pianoRollPanel->setSampleRate(m_session->sampleRate);
+    connect(m_pianoRollPanel, &PianoRollPanel::saveToLoopBrowserRequested, this,
+            &MainWindow::onSaveToLoopBrowserRequested);
     m_pianoRollDock->setWidget(m_pianoRollPanel);
     addDockWidget(Qt::RightDockWidgetArea, m_pianoRollDock);
     tabifyDockWidget(mediaDock, m_pianoRollDock);
@@ -323,6 +356,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_loopBrowser = new LoopBrowserPanel(loopBrowserDock);
     connect(m_loopBrowser, &LoopBrowserPanel::previewRequested, this,
             &MainWindow::onLoopPreviewRequested);
+    connect(m_mediaLibrary, &MediaLibraryPanel::previewRequested, this,
+            &MainWindow::onMediaPreviewRequested);
     loopBrowserDock->setWidget(m_loopBrowser);
     addDockWidget(Qt::RightDockWidgetArea, loopBrowserDock);
     tabifyDockWidget(mediaDock, loopBrowserDock);
@@ -347,6 +382,10 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(m_pianoRollDock->toggleViewAction());
     viewMenu->addAction(loopBrowserDock->toggleViewAction());
     viewMenu->addAction(mixerDock->toggleViewAction());
+
+    auto* helpMenu = menuBar()->addMenu("&Help");
+    auto* usageGuideAction = helpMenu->addAction("Usage Guide");
+    connect(usageGuideAction, &QAction::triggered, this, &MainWindow::onUsageGuideClicked);
 
     m_ringDrainTimer = new QTimer(this);
     m_ringDrainTimer->setInterval(30);
@@ -426,13 +465,30 @@ MainWindow::MainWindow(QWidget* parent)
                 [this, i]() { onSelectTrackByIndex(i - 1); });
     }
 
-    // Restore window size/position and dock layout from last run, if any.
+    // Restore window size/position and dock layout (including every
+    // dock's floating position/size, e.g. the Instrument window) from
+    // last run, if any — QMainWindow::saveState()/restoreState() already
+    // covers this generically for all docks, not just the Instrument one.
     QSettings settings("RecordingStudio", "RecordingStudio");
     if (settings.contains("mainWindow/geometry")) {
         restoreGeometry(settings.value("mainWindow/geometry").toByteArray());
     }
-    if (settings.contains("mainWindow/state")) {
+    bool hadSavedState = settings.contains("mainWindow/state");
+    if (hadSavedState) {
         restoreState(settings.value("mainWindow/state").toByteArray());
+    }
+
+    if (!hadSavedState) {
+        // First run (nothing saved yet): default the Instrument window to
+        // the right of the main window, deferred to just after it's
+        // actually shown/placed by the window manager — this->geometry()
+        // isn't reliable yet at construction time, so computing this here
+        // would sometimes land on the wrong monitor in a multi-monitor
+        // setup.
+        QTimer::singleShot(0, this, [this]() {
+            QRect mainGeom = frameGeometry();
+            m_instrumentDock->move(mainGeom.right() + 1, mainGeom.top());
+        });
     }
 }
 
@@ -1022,6 +1078,41 @@ void MainWindow::onExportClicked() {
     QMessageBox::information(this, "Export Complete", message);
 }
 
+void MainWindow::onSaveToLoopBrowserRequested(std::shared_ptr<Track> track) {
+    if (!track || track->kind != TrackKind::Instrument) return;
+
+    int64_t lengthSamples = trackContentLengthSamples(*track);
+    if (lengthSamples <= 0) {
+        QMessageBox::warning(this, "Nothing to Save", "This track has no recorded notes yet.");
+        return;
+    }
+
+    QString folder = m_loopBrowser->folderPath();
+    if (folder.isEmpty()) {
+        QMessageBox::warning(this, "No Loop Browser Folder",
+                              "Choose a folder in the Loop Browser panel first.");
+        return;
+    }
+
+    // Same reasoning as onExportClicked(): offline rendering mutates this
+    // track's SynthEngine state, which the live RT callback also touches.
+    onStopClicked();
+    track->synthEngine.reset();
+
+    auto rendered = renderTrackStem(*track, static_cast<unsigned int>(m_session->sampleRate),
+                                     static_cast<unsigned int>(m_session->channels), lengthSamples);
+
+    QString name = track->name.isEmpty() ? "Instrument Roll" : track->name + " - Instrument Roll";
+    QString path = folder + "/" + name + ".wav";
+    if (!AudioFileIO::writeFile(path, *rendered, ExportFormat::Wav32Float)) {
+        QMessageBox::warning(this, "Save Failed", "Could not write: " + path);
+        return;
+    }
+
+    m_loopBrowser->refresh();
+    QMessageBox::information(this, "Saved", "Saved to Loop Browser: " + path);
+}
+
 void MainWindow::onSaveSessionClicked() {
     // Silently resave to the known path (Ctrl+S / repeat saves); only prompt
     // the first time or after Close Session cleared it.
@@ -1067,6 +1158,15 @@ void MainWindow::onSettingsClicked() {
     m_recordAction->setEnabled(true);
     m_playAction->setEnabled(true);
     m_playFromStartAction->setEnabled(true);
+}
+
+void MainWindow::onUsageGuideClicked() {
+    QString guidePath = QStringLiteral(RSD_SOURCE_DIR "/docs/usage-guide.html");
+    if (!QFileInfo::exists(guidePath)) {
+        QMessageBox::warning(this, "Usage Guide", "Usage guide file not found:\n" + guidePath);
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(guidePath));
 }
 
 void MainWindow::onLoadSessionClicked() {
@@ -1171,6 +1271,12 @@ void MainWindow::rebuildTimelineFromSession() {
     m_pianoRollPanel->setBpm(m_session->bpm);
     m_pianoRollPanel->setSampleRate(m_session->sampleRate);
     m_mixer->setMasterBus(&m_session->masterBus);
+    {
+        const QSignalBlocker b1(m_bpmSpin);
+        const QSignalBlocker b2(m_metronomeCheckBox);
+        m_bpmSpin->setValue(m_session->bpm);
+        m_metronomeCheckBox->setChecked(m_session->metronomeEnabled);
+    }
 
     m_trackCounter = 0;
     for (auto& track : m_session->tracks) {
@@ -1291,6 +1397,16 @@ void MainWindow::onLoopPreviewRequested(QString filePath) {
         QMessageBox::warning(this, "Preview Failed", "Could not load: " + filePath);
         return;
     }
+    m_engine->previewSample(buffer);
+}
+
+void MainWindow::onMediaPreviewRequested(int index) {
+    if (index < 0) {
+        m_engine->stopPreview();
+        return;
+    }
+    auto buffer = m_mediaLibrary->bufferAt(index);
+    if (!buffer) return;
     m_engine->previewSample(buffer);
 }
 

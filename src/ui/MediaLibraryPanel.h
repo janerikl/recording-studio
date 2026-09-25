@@ -45,6 +45,10 @@ signals:
     // format) — MainWindow can surface this, the panel itself stays silent.
     void fileLoadFailed(QString path);
 
+    // User clicked an entry to hear it (or clicked the currently-previewing
+    // one again, in which case index is -1). See MediaPreviewToggleMath.h.
+    void previewRequested(int index);
+
 protected:
     QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override;
     void dragEnterEvent(QDragEnterEvent* event) override;
@@ -60,6 +64,8 @@ private:
     // the same file again just selects the existing entry instead of adding
     // a duplicate.
     QSet<QString> m_loadedPaths;
+
+    int m_previewingRow = -1;
 };
 
 } // namespace rsd

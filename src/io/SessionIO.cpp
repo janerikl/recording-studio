@@ -138,6 +138,7 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
     root["sampleRate"] = session.sampleRate;
     root["channels"] = session.channels;
     root["bpm"] = session.bpm;
+    root["metronomeEnabled"] = session.metronomeEnabled;
 
     QJsonArray tracksJson;
     for (auto& track : session.tracks) {
@@ -292,6 +293,7 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
     outSession.sampleRate = root["sampleRate"].toInt(outSession.sampleRate);
     outSession.channels = root["channels"].toInt(outSession.channels);
     outSession.bpm = root["bpm"].toDouble(outSession.bpm);
+    outSession.metronomeEnabled = root["metronomeEnabled"].toBool(outSession.metronomeEnabled);
     outSession.tracks.clear();
     outSession.markers.clear();
     for (const auto& markerVal : root["markers"].toArray()) {

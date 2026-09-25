@@ -10,15 +10,21 @@ namespace {
 constexpr int64_t kBlockFrames = 1024;
 }
 
+int64_t trackContentLengthSamples(const Track& track) {
+    int64_t maxEnd = 0;
+    for (auto& clip : *track.clipsSnapshot()) {
+        maxEnd = std::max(maxEnd, clip->sessionStartSample + clip->lengthSamples);
+    }
+    for (auto& note : *track.midiClipsSnapshot()) {
+        maxEnd = std::max(maxEnd, note->startSample + note->lengthSamples);
+    }
+    return maxEnd;
+}
+
 int64_t sessionContentLengthSamples(const Session& session) {
     int64_t maxEnd = 0;
     for (auto& track : session.tracks) {
-        for (auto& clip : *track->clipsSnapshot()) {
-            maxEnd = std::max(maxEnd, clip->sessionStartSample + clip->lengthSamples);
-        }
-        for (auto& note : *track->midiClipsSnapshot()) {
-            maxEnd = std::max(maxEnd, note->startSample + note->lengthSamples);
-        }
+        maxEnd = std::max(maxEnd, trackContentLengthSamples(*track));
     }
     return maxEnd;
 }

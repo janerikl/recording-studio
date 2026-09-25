@@ -7,6 +7,7 @@
 #include <QFileInfo>
 
 #include "io/AudioFileIO.h"
+#include "ui/MediaPreviewToggleMath.h"
 
 namespace rsd {
 
@@ -16,6 +17,11 @@ MediaLibraryPanel::MediaLibraryPanel(QWidget* parent) : QListWidget(parent) {
     setSelectionMode(QAbstractItemView::SingleSelection);
     setAcceptDrops(true); // for external file drops; outgoing drag uses DragOnly above
     setStyleSheet("QListWidget::item { padding: 8px; }");
+
+    connect(this, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+        m_previewingRow = nextPreviewIndex(row(item), m_previewingRow);
+        emit previewRequested(m_previewingRow);
+    });
 }
 
 static QString formatDuration(int64_t samples, int sampleRate) {
@@ -52,6 +58,7 @@ void MediaLibraryPanel::resetLibrary() {
     m_buffers.clear();
     m_names.clear();
     m_loadedPaths.clear();
+    m_previewingRow = -1;
 }
 
 void MediaLibraryPanel::refresh(const Session& session) {

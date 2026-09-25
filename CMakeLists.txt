@@ -12,6 +12,7 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RTAUDIO REQUIRED IMPORTED_TARGET rtaudio)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
+pkg_check_modules(FLUIDSYNTH REQUIRED IMPORTED_TARGET fluidsynth)
 
 add_executable(recording_studio
     src/main.cpp
@@ -36,7 +37,9 @@ add_executable(recording_studio
     src/ui/MediaLibraryPanel.cpp
     src/ui/EffectsPopoverWidget.cpp
     src/ui/PianoKeyboardWidget.cpp
+    src/ui/DrumPadWidget.cpp
     src/ui/InstrumentPanel.cpp
+    src/ui/PracticePanel.cpp
     src/ui/PianoRollGridWidget.cpp
     src/ui/PianoRollPanel.cpp
     src/ui/AutomationLaneWidget.cpp
@@ -48,10 +51,15 @@ add_executable(recording_studio
 
 target_include_directories(recording_studio PRIVATE src)
 
+target_compile_definitions(recording_studio PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 target_link_libraries(recording_studio PRIVATE
     Qt6::Widgets
     PkgConfig::RTAUDIO
     PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
 )
 
 option(BUILD_TESTS "Build unit tests" OFF)

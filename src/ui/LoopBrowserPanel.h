@@ -23,6 +23,13 @@ class LoopBrowserPanel : public QWidget {
 public:
     explicit LoopBrowserPanel(QWidget* parent = nullptr);
 
+    // The folder currently being browsed (empty if none chosen yet).
+    QString folderPath() const { return m_folderPath; }
+    // Re-scans the current folder — call after writing a new file into it
+    // from elsewhere (e.g. saving a rendered instrument roll) so it shows
+    // up without the user having to reopen the folder.
+    void refresh() { rescan(); }
+
 signals:
     // User clicked a file to hear it (or clicked the currently-previewing
     // one again / hit Stop, in which case filePath is empty).

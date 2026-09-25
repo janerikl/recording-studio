@@ -1,38 +1,26 @@
 #include "InstrumentPanel.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QSignalBlocker>
-#include <QSlider>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
+#include "audio/GMInstruments.h"
+#include "ui/DrumPadWidget.h"
 #include "ui/PianoKeyboardWidget.h"
+#include "ui/PracticePanel.h"
 
 namespace rsd {
-
-namespace {
-QSlider* addSlider(QVBoxLayout* layout, const QString& labelText, int minV, int maxV, int value) {
-    auto* row = new QWidget;
-    auto* rowLayout = new QHBoxLayout(row);
-    rowLayout->setContentsMargins(0, 0, 0, 0);
-    auto* label = new QLabel(labelText);
-    label->setMinimumWidth(90);
-    auto* slider = new QSlider(Qt::Horizontal);
-    slider->setRange(minV, maxV);
-    slider->setValue(value);
-    rowLayout->addWidget(label);
-    rowLayout->addWidget(slider);
-    layout->addWidget(row);
-    return slider;
-}
-} // namespace
 
 InstrumentPanel::InstrumentPanel(QWidget* parent) : QWidget(parent) {
     setStyleSheet(
         "InstrumentPanel { background: #1e1e1e; }"
         "QLabel { color: #cccccc; }"
-        "QComboBox { background: #2a2a2a; color: #e0e0e0; border: 1px solid #4a4a4a; }");
+        "QComboBox { background: #2a2a2a; color: #e0e0e0; border: 1px solid #4a4a4a; }"
+        "QCheckBox { color: #cccccc; }");
 
     auto* outer = new QVBoxLayout(this);
 
@@ -44,51 +32,55 @@ InstrumentPanel::InstrumentPanel(QWidget* parent) : QWidget(parent) {
     auto* paramsLayout = new QVBoxLayout(m_paramsContainer);
     paramsLayout->setContentsMargins(0, 0, 0, 0);
 
-    auto* waveRow = new QWidget;
-    auto* waveLayout = new QHBoxLayout(waveRow);
-    waveLayout->setContentsMargins(0, 0, 0, 0);
-    waveLayout->addWidget(new QLabel("Waveform"));
-    m_waveformCombo = new QComboBox;
-    m_waveformCombo->addItem("Sine", static_cast<int>(SynthWaveform::Sine));
-    m_waveformCombo->addItem("Saw", static_cast<int>(SynthWaveform::Saw));
-    m_waveformCombo->addItem("Square", static_cast<int>(SynthWaveform::Square));
-    m_waveformCombo->addItem("Triangle", static_cast<int>(SynthWaveform::Triangle));
-    waveLayout->addWidget(m_waveformCombo);
-    paramsLayout->addWidget(waveRow);
-    connect(m_waveformCombo, &QComboBox::currentIndexChanged, this, [this](int) {
-        if (m_track) m_track->synthParams.waveform.store(m_waveformCombo->currentData().toInt());
+    m_drumKitCheck = new QCheckBox("Drum Kit");
+    paramsLayout->addWidget(m_drumKitCheck);
+    connect(m_drumKitCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        if (m_track) m_track->synthParams.isDrumKit.store(checked);
+        m_instrumentCombo->setEnabled(!checked);
+        m_playerStack->setCurrentWidget(checked ? static_cast<QWidget*>(m_drumPads)
+                                                 : static_cast<QWidget*>(m_keyboard));
+        // Practice exercises are melodic (scales/songs) — not meaningful
+        // for a drum kit, so hide it and clear any pending highlight.
+        m_practicePanel->setVisible(!checked);
+        if (checked) m_keyboard->setExpectedPitch(std::nullopt);
     });
 
-    // Sliders store milliseconds/percent as ints; converted to the atomic's
-    // native seconds/0-1 float units in each valueChanged handler.
-    m_attackSlider = addSlider(paramsLayout, "Attack (ms)", 1, 2000, 10);
-    connect(m_attackSlider, &QSlider::valueChanged, this, [this](int v) {
-        if (m_track) m_track->synthParams.attackSeconds.store(v / 1000.0f);
-    });
-    m_decaySlider = addSlider(paramsLayout, "Decay (ms)", 1, 2000, 100);
-    connect(m_decaySlider, &QSlider::valueChanged, this, [this](int v) {
-        if (m_track) m_track->synthParams.decaySeconds.store(v / 1000.0f);
-    });
-    m_sustainSlider = addSlider(paramsLayout, "Sustain (%)", 0, 100, 70);
-    connect(m_sustainSlider, &QSlider::valueChanged, this, [this](int v) {
-        if (m_track) m_track->synthParams.sustainLevel.store(v / 100.0f);
-    });
-    m_releaseSlider = addSlider(paramsLayout, "Release (ms)", 1, 3000, 200);
-    connect(m_releaseSlider, &QSlider::valueChanged, this, [this](int v) {
-        if (m_track) m_track->synthParams.releaseSeconds.store(v / 1000.0f);
-    });
-    m_filterSlider = addSlider(paramsLayout, "Filter (Hz)", 100, 15000, 8000);
-    connect(m_filterSlider, &QSlider::valueChanged, this, [this](int v) {
-        if (m_track) m_track->synthParams.filterCutoffHz.store(static_cast<float>(v));
+    auto* instrumentRow = new QWidget;
+    auto* instrumentLayout = new QHBoxLayout(instrumentRow);
+    instrumentLayout->setContentsMargins(0, 0, 0, 0);
+    instrumentLayout->addWidget(new QLabel("Instrument"));
+    m_instrumentCombo = new QComboBox;
+    for (int i = 0; i < static_cast<int>(gmInstrumentNames().size()); ++i) {
+        m_instrumentCombo->addItem(gmInstrumentNames()[i], i);
+    }
+    instrumentLayout->addWidget(m_instrumentCombo, 1);
+    paramsLayout->addWidget(instrumentRow);
+    connect(m_instrumentCombo, &QComboBox::currentIndexChanged, this, [this](int) {
+        if (m_track) m_track->synthParams.instrumentProgram.store(m_instrumentCombo->currentData().toInt());
     });
 
     outer->addWidget(m_paramsContainer);
     outer->addStretch();
 
+    m_practicePanel = new PracticePanel(this);
+    outer->addWidget(m_practicePanel);
+
+    m_playerStack = new QStackedWidget(this);
     m_keyboard = new PianoKeyboardWidget(this);
     connect(m_keyboard, &PianoKeyboardWidget::noteOn, this, &InstrumentPanel::noteOn);
     connect(m_keyboard, &PianoKeyboardWidget::noteOff, this, &InstrumentPanel::noteOff);
-    outer->addWidget(m_keyboard);
+    connect(m_keyboard, &PianoKeyboardWidget::noteOn, m_practicePanel,
+            [this](int pitch, float) { m_practicePanel->checkNotePlayed(pitch); });
+    connect(m_practicePanel, &PracticePanel::expectedPitchChanged, m_keyboard,
+            &PianoKeyboardWidget::setExpectedPitch);
+    m_playerStack->addWidget(m_keyboard);
+
+    m_drumPads = new DrumPadWidget(this);
+    connect(m_drumPads, &DrumPadWidget::noteOn, this, &InstrumentPanel::noteOn);
+    connect(m_drumPads, &DrumPadWidget::noteOff, this, &InstrumentPanel::noteOff);
+    m_playerStack->addWidget(m_drumPads);
+
+    outer->addWidget(m_playerStack);
 
     setTrack(nullptr);
 }
@@ -103,24 +95,23 @@ void InstrumentPanel::rebuild() {
     m_trackNameLabel->setText(isInstrument ? (m_track->name.isEmpty() ? "Instrument Track" : m_track->name)
                                             : "No instrument track selected");
     m_paramsContainer->setEnabled(isInstrument);
-    m_keyboard->setEnabled(isInstrument);
+    m_playerStack->setEnabled(isInstrument);
 
     if (!isInstrument) return;
 
-    const QSignalBlocker b1(m_waveformCombo);
-    const QSignalBlocker b2(m_attackSlider);
-    const QSignalBlocker b3(m_decaySlider);
-    const QSignalBlocker b4(m_sustainSlider);
-    const QSignalBlocker b5(m_releaseSlider);
-    const QSignalBlocker b6(m_filterSlider);
+    const QSignalBlocker b1(m_drumKitCheck);
+    const QSignalBlocker b2(m_instrumentCombo);
 
-    int wfIndex = m_waveformCombo->findData(m_track->synthParams.waveform.load());
-    if (wfIndex >= 0) m_waveformCombo->setCurrentIndex(wfIndex);
-    m_attackSlider->setValue(static_cast<int>(m_track->synthParams.attackSeconds.load() * 1000.0f));
-    m_decaySlider->setValue(static_cast<int>(m_track->synthParams.decaySeconds.load() * 1000.0f));
-    m_sustainSlider->setValue(static_cast<int>(m_track->synthParams.sustainLevel.load() * 100.0f));
-    m_releaseSlider->setValue(static_cast<int>(m_track->synthParams.releaseSeconds.load() * 1000.0f));
-    m_filterSlider->setValue(static_cast<int>(m_track->synthParams.filterCutoffHz.load()));
+    bool isDrumKit = m_track->synthParams.isDrumKit.load();
+    m_drumKitCheck->setChecked(isDrumKit);
+    m_instrumentCombo->setEnabled(!isDrumKit);
+
+    int programIndex = m_instrumentCombo->findData(m_track->synthParams.instrumentProgram.load());
+    if (programIndex >= 0) m_instrumentCombo->setCurrentIndex(programIndex);
+
+    m_playerStack->setCurrentWidget(isDrumKit ? static_cast<QWidget*>(m_drumPads)
+                                               : static_cast<QWidget*>(m_keyboard));
+    m_practicePanel->setVisible(!isDrumKit);
 }
 
 } // namespace rsd
