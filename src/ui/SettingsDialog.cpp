@@ -4,17 +4,34 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QMessageBox>
+#include <QSettings>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <set>
 
+#include "ui/DialogGeometry.h"
+#include "ui/ShortcutSettingsTab.h"
+
 namespace rsd {
 
-SettingsDialog::SettingsDialog(AudioEngine& engine, QWidget* parent)
+SettingsDialog::SettingsDialog(AudioEngine& engine, ShortcutManager& shortcuts, QWidget* parent)
     : QDialog(parent), m_engine(engine) {
-    setWindowTitle("Audio Settings");
+    setWindowTitle("Settings");
 
-    auto* layout = new QVBoxLayout(this);
+    QSettings windowSettings("RecordingStudio", "RecordingStudio");
+    restoreDialogGeometry(*this, windowSettings, "settingsDialog");
+    connect(this, &QDialog::finished, this, [this]() {
+        QSettings settings("RecordingStudio", "RecordingStudio");
+        saveDialogGeometry(*this, settings, "settingsDialog");
+    });
+
+    auto* dialogLayout = new QVBoxLayout(this);
+    auto* tabs = new QTabWidget(this);
+    dialogLayout->addWidget(tabs);
+
+    auto* audioTab = new QWidget(this);
+    auto* layout = new QVBoxLayout(audioTab);
     auto* form = new QFormLayout();
 
     m_outputCombo = new QComboBox(this);
@@ -86,11 +103,14 @@ SettingsDialog::SettingsDialog(AudioEngine& engine, QWidget* parent)
     layout->addLayout(form);
 
     layout->addWidget(new QLabel("Applying changes restarts the audio stream.", this));
+    tabs->addTab(audioTab, "Audio");
+
+    tabs->addTab(new ShortcutSettingsTab(shortcuts, this), "Keyboard Shortcuts");
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &SettingsDialog::onAccept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    layout->addWidget(buttons);
+    dialogLayout->addWidget(buttons);
 }
 
 void SettingsDialog::onAccept() {

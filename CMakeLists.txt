@@ -34,7 +34,10 @@ add_executable(recording_studio
     src/ui/TimelineView.cpp
     src/ui/TimeRulerWidget.cpp
     src/ui/LevelMeterWidget.cpp
+    src/ui/DialogGeometry.cpp
     src/ui/SettingsDialog.cpp
+    src/ui/ShortcutManager.cpp
+    src/ui/ShortcutSettingsTab.cpp
     src/ui/MediaLibraryPanel.cpp
     src/ui/EffectsPopoverWidget.cpp
     src/ui/PianoKeyboardWidget.cpp

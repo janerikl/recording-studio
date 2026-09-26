@@ -96,9 +96,11 @@ MainWindow::MainWindow(QWidget* parent)
     m_zoomInAction = new QAction(QIcon::fromTheme("zoom-in-symbolic"), "Zoom In", this);
     m_zoomInAction->setToolTip("Zoom In (Ctrl++)");
     m_zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    m_shortcutManager.registerAction("zoomIn", "Zoom In", m_zoomInAction);
     m_zoomOutAction = new QAction(QIcon::fromTheme("zoom-out-symbolic"), "Zoom Out", this);
     m_zoomOutAction->setToolTip("Zoom Out (Ctrl+-)");
     m_zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    m_shortcutManager.registerAction("zoomOut", "Zoom Out", m_zoomOutAction);
     m_zoomResetAction = new QAction(QIcon::fromTheme("zoom-original-symbolic"), "Reset Zoom", this);
     m_zoomResetAction->setToolTip("Reset Zoom");
 
@@ -109,6 +111,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* saveSessionAction =
         new QAction(QIcon::fromTheme("document-save-symbolic"), "Save Session...", this);
     saveSessionAction->setShortcut(QKeySequence::Save); // Ctrl+S
+    m_shortcutManager.registerAction("saveSession", "Save Session", saveSessionAction);
     auto* loadSessionAction =
         new QAction(QIcon::fromTheme("document-open-symbolic"), "Load Session...", this);
     auto* closeSessionAction =
@@ -120,16 +123,19 @@ MainWindow::MainWindow(QWidget* parent)
         QIcon::fromTheme("edit-undo-symbolic", style()->standardIcon(QStyle::SP_ArrowBack)), "Undo", this);
     m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setEnabled(false);
+    m_shortcutManager.registerAction("undo", "Undo", m_undoAction);
     m_redoAction = new QAction(
         QIcon::fromTheme("edit-redo-symbolic", style()->standardIcon(QStyle::SP_ArrowForward)), "Redo",
         this);
     m_redoAction->setShortcut(QKeySequence::Redo);
     m_redoAction->setEnabled(false);
+    m_shortcutManager.registerAction("redo", "Redo", m_redoAction);
     m_deleteClipAction = new QAction(
         QIcon::fromTheme("edit-delete-symbolic", style()->standardIcon(QStyle::SP_DialogDiscardButton)),
         "Delete Selected Clip", this);
     m_deleteClipAction->setShortcut(QKeySequence(Qt::Key_Delete));
     m_deleteClipAction->setEnabled(false);
+    m_shortcutManager.registerAction("deleteClip", "Delete Selected Clip", m_deleteClipAction);
 
     connect(m_recordAction, &QAction::triggered, this, &MainWindow::onRecordClicked);
     connect(m_playAction, &QAction::triggered, this, &MainWindow::onPlayClicked);
@@ -435,11 +441,13 @@ MainWindow::MainWindow(QWidget* parent)
             onStopClicked();
         }
     });
+    m_shortcutManager.registerShortcut("playStop", "Play/Stop", spaceShortcut);
 
     // Delete/Undo/Redo shortcuts already live on their QActions above; only
     // Backspace (an alias for delete-clip) and R need their own QShortcut.
     auto* playFromStartShortcut = new QShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Space), this);
     connect(playFromStartShortcut, &QShortcut::activated, this, &MainWindow::onPlayFromStartClicked);
+    m_shortcutManager.registerShortcut("playFromStart", "Play from Start", playFromStartShortcut);
 
     auto* backspaceShortcut = new QShortcut(QKeySequence(Qt::Key_Backspace), this);
     connect(backspaceShortcut, &QShortcut::activated, this, &MainWindow::onDeleteClipClicked);
@@ -448,25 +456,40 @@ MainWindow::MainWindow(QWidget* parent)
     connect(recordShortcut, &QShortcut::activated, this, [this]() {
         if (m_engine->transport().state() == TransportState::Stopped) onRecordClicked();
     });
+    m_shortcutManager.registerShortcut("record", "Record", recordShortcut);
 
     // Bookmarks: Ctrl+Shift+N sets marker N at the playhead, Ctrl+N jumps to it.
+    std::vector<QShortcut*> setMarkerShortcuts;
+    std::vector<QShortcut*> jumpMarkerShortcuts;
     for (int i = 1; i <= 9; ++i) {
         auto* setShortcut =
             new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | (Qt::Key_0 + i)), this);
         connect(setShortcut, &QShortcut::activated, this, [this, i]() { onSetMarker(i); });
+        setMarkerShortcuts.push_back(setShortcut);
 
         auto* jumpShortcut = new QShortcut(QKeySequence(Qt::CTRL | (Qt::Key_0 + i)), this);
         connect(jumpShortcut, &QShortcut::activated, this, [this, i]() { onJumpToMarker(i); });
+        jumpMarkerShortcuts.push_back(jumpShortcut);
     }
+    m_shortcutManager.registerFamily("setBookmark", "Set Bookmark", setMarkerShortcuts);
+    m_shortcutManager.registerFamily("jumpToBookmark", "Jump to Bookmark", jumpMarkerShortcuts);
 
     // Ctrl+Alt+1-9 selects (focuses) the corresponding track, same as
     // clicking it. Plain Alt+1-9 is commonly captured by the desktop
     // environment (workspace switching etc.) before it reaches the app.
+    std::vector<QShortcut*> selectTrackShortcuts;
     for (int i = 1; i <= 9; ++i) {
         auto* selectTrackShortcut =
             new QShortcut(QKeySequence(Qt::CTRL | Qt::ALT | (Qt::Key_0 + i)), this);
         connect(selectTrackShortcut, &QShortcut::activated, this,
                 [this, i]() { onSelectTrackByIndex(i - 1); });
+        selectTrackShortcuts.push_back(selectTrackShortcut);
+    }
+    m_shortcutManager.registerFamily("selectTrack", "Select Track", selectTrackShortcuts);
+
+    {
+        QSettings shortcutSettings("RecordingStudio", "RecordingStudio");
+        m_shortcutManager.load(shortcutSettings);
     }
 
     // Restore window size/position and dock layout (including every
@@ -1146,7 +1169,7 @@ void MainWindow::onSaveSessionClicked() {
 void MainWindow::onSettingsClicked() {
     onStopClicked(); // don't restart the stream mid-playback/recording
 
-    SettingsDialog dialog(*m_engine, this);
+    SettingsDialog dialog(*m_engine, m_shortcutManager, this);
     if (dialog.exec() != QDialog::Accepted) return;
 
     // Existing clips keep their sample counts at whatever rate they were

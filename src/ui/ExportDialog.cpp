@@ -4,12 +4,22 @@
 #include <QDialogButtonBox>
 #include <QGroupBox>
 #include <QRadioButton>
+#include <QSettings>
 #include <QVBoxLayout>
+
+#include "ui/DialogGeometry.h"
 
 namespace rsd {
 
 ExportDialog::ExportDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Export Session");
+
+    QSettings windowSettings("RecordingStudio", "RecordingStudio");
+    restoreDialogGeometry(*this, windowSettings, "exportDialog");
+    connect(this, &QDialog::finished, this, [this]() {
+        QSettings settings("RecordingStudio", "RecordingStudio");
+        saveDialogGeometry(*this, settings, "exportDialog");
+    });
 
     auto* layout = new QVBoxLayout(this);
 

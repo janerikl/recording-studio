@@ -6,6 +6,8 @@
 #include <QDropEvent>
 #include <QHelpEvent>
 #include <QInputDialog>
+#include <QKeyEvent>
+#include <QMenu>
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
@@ -17,6 +19,7 @@
 #include <cstdlib>
 
 #include "command/EditCommands.h"
+#include "model/EditClipboard.h"
 #include "ui/ClipEditMath.h"
 #include "ui/ClipLaneScrollMath.h"
 #include "ui/MediaLibraryPanel.h"
@@ -37,6 +40,7 @@ ClipLaneWidget::ClipLaneWidget(std::shared_ptr<Track> track, QWidget* parent)
     setMinimumHeight(kLaneHeight);
     setMouseTracking(true);
     setAcceptDrops(true);
+    setFocusPolicy(Qt::StrongFocus); // needed to receive Ctrl+C/Ctrl+V key events
     QPalette pal = palette();
     pal.setColor(QPalette::Window, QColor(30, 30, 30));
     setAutoFillBackground(true);
@@ -138,6 +142,18 @@ std::shared_ptr<Clip> ClipLaneWidget::findClipAt(int64_t sample) const {
     return nullptr;
 }
 
+std::shared_ptr<MidiNote> ClipLaneWidget::findMidiNoteAt(int64_t sample, int y) const {
+    auto notes = m_track->midiClipsSnapshot();
+    int laneHeight = height() - 8;
+    int noteH = std::max(3, noteRowHeight(laneHeight, 36, 96));
+    for (auto& n : *notes) {
+        if (sample < n->startSample || sample >= n->startSample + n->lengthSamples) continue;
+        int noteY = pitchToY(n->pitch, laneHeight, 36, 96) + 4;
+        if (std::abs(y - noteY) <= noteH / 2 + 1) return n;
+    }
+    return nullptr;
+}
+
 void ClipLaneWidget::paintMidiNotes(QPainter& painter) {
     auto notes = m_track->midiClipsSnapshot();
     if (notes->empty()) {
@@ -156,7 +172,8 @@ void ClipLaneWidget::paintMidiNotes(QPainter& painter) {
         int y = pitchToY(note->pitch, laneHeight, 36, 96) + 4;
 
         int velocityGreen = 140 + static_cast<int>(std::clamp(note->velocity, 0.0f, 1.0f) * 90.0f);
-        painter.setPen(Qt::NoPen);
+        bool selected = note->id == m_selectedMidiNoteId;
+        painter.setPen(selected ? QPen(QColor(255, 210, 90), 2) : Qt::NoPen);
         painter.setBrush(QColor(90, velocityGreen, 90));
         painter.drawRect(x0, y - noteH / 2, w, noteH);
     }
@@ -197,6 +214,7 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
             painter.setPen(QPen(QColor(230, 80, 80), 2));
             painter.drawLine(px, 0, px, height());
         }
+        paintRangeSelection(painter);
         return;
     }
 
@@ -204,6 +222,7 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
     if (clips->empty()) {
         painter.setPen(QColor(120, 120, 120));
         painter.drawText(rect(), Qt::AlignCenter, "No audio — Import or Record into this track");
+        paintRangeSelection(painter);
         return;
     }
 
@@ -308,10 +327,50 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
         painter.setPen(QPen(QColor(230, 80, 80), 2));
         painter.drawLine(px, 0, px, height());
     }
+    paintRangeSelection(painter);
+}
+
+void ClipLaneWidget::paintRangeSelection(QPainter& painter) {
+    if (!m_rangeSelecting && !m_hasRangeSelection) return;
+    int64_t start = std::min(m_rangeSelectionStart, m_rangeSelectionEnd);
+    int64_t end = std::max(m_rangeSelectionStart, m_rangeSelectionEnd);
+    int x0 = sampleToX(start);
+    int x1 = sampleToX(end);
+    painter.fillRect(x0, 0, std::max(1, x1 - x0), height(), QColor(255, 255, 255, 40));
+    painter.setPen(QPen(QColor(255, 255, 255, 120), 1));
+    painter.drawLine(x0, 0, x0, height());
+    painter.drawLine(x1, 0, x1, height());
 }
 
 void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
+    setFocus(Qt::MouseFocusReason);
+
+    if (event->modifiers() & Qt::ShiftModifier) {
+        m_rangeSelecting = true;
+        m_rangeSelectionStart = m_rangeSelectionEnd = xToSample(event->pos().x());
+        m_hasRangeSelection = false;
+        update();
+        return;
+    }
+
     int64_t sample = xToSample(event->pos().x());
+
+    if (m_track->kind == TrackKind::Instrument) {
+        // View-only lane: notes can be selected (for copy/paste) but not
+        // dragged/trimmed/split like audio Clips.
+        auto note = findMidiNoteAt(sample, event->pos().y());
+        if (!note) {
+            clearSelection();
+            m_scrubbingPlayhead = true;
+            emit seekRequested(sample);
+            return;
+        }
+        m_selectedMidiNoteId = note->id;
+        emit selectionChanged(true);
+        update();
+        return;
+    }
+
     auto clip = findClipAt(sample);
 
     if (!clip) {
@@ -394,6 +453,12 @@ void ClipLaneWidget::updateHoverCursor(const QPoint& pos) {
 }
 
 void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (m_rangeSelecting) {
+        m_rangeSelectionEnd = xToSample(event->pos().x());
+        update();
+        return;
+    }
+
     if (m_scrubbingPlayhead) {
         emit seekRequested(xToSample(event->pos().x()));
         return;
@@ -460,6 +525,13 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void ClipLaneWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (m_rangeSelecting) {
+        m_rangeSelecting = false;
+        m_hasRangeSelection = m_rangeSelectionEnd != m_rangeSelectionStart;
+        update();
+        return;
+    }
+
     bool wasEditing = m_dragMode != DragMode::None;
 
     if (m_dragMode == DragMode::Move) {
@@ -520,21 +592,76 @@ void ClipLaneWidget::wheelEvent(QWheelEvent* event) {
 
 void ClipLaneWidget::contextMenuEvent(QContextMenuEvent* event) {
     int64_t sample = xToSample(event->pos().x());
+
+    if (m_track->kind == TrackKind::Instrument) {
+        auto note = findMidiNoteAt(sample, event->pos().y());
+        if (!note) return;
+
+        QMenu menu(this);
+        QAction* repeatAction = menu.addAction("Repeat...");
+        if (menu.exec(event->globalPos()) != repeatAction) return;
+
+        repeatMidiNote(note);
+        return;
+    }
+
     auto clip = findClipAt(sample);
     if (!clip) return;
 
+    QMenu menu(this);
+    QAction* gainAction = menu.addAction("Set Gain...");
+    QAction* repeatAction = menu.addAction("Repeat...");
+    QAction* chosen = menu.exec(event->globalPos());
+    if (!chosen) return;
+
+    if (chosen == gainAction) {
+        bool ok = false;
+        double newGain = QInputDialog::getDouble(this, "Clip Gain", "Gain (0.0 - 2.0):", clip->gain, 0.0,
+                                                  2.0, 2, &ok);
+        if (!ok) return;
+
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<SetClipGainCommand>(m_track, clip->id, clip->gain,
+                                                                        static_cast<float>(newGain)));
+        } else {
+            auto edited = std::make_shared<Clip>(*clip);
+            edited->gain = static_cast<float>(newGain);
+            m_track->replaceClip(clip->id, edited);
+        }
+        update();
+    } else if (chosen == repeatAction) {
+        repeatClip(clip);
+    }
+}
+
+void ClipLaneWidget::repeatClip(const std::shared_ptr<Clip>& clip) {
     bool ok = false;
-    double newGain = QInputDialog::getDouble(this, "Clip Gain", "Gain (0.0 - 2.0):", clip->gain, 0.0,
-                                              2.0, 2, &ok);
+    int count = QInputDialog::getInt(this, "Repeat Clip", "Number of repeats:", 1, 1, 999, 1, &ok);
     if (!ok) return;
 
+    auto before = m_track->clipsSnapshot();
+    int64_t insertAt = clip->sessionStartSample + clip->lengthSamples;
+    auto after = repeatItemAfter<Clip>(*before, *clip, insertAt, count);
+    m_track->restoreClips(std::make_shared<const Track::ClipList>(std::move(after)));
     if (m_commandStack) {
-        m_commandStack->push(std::make_unique<SetClipGainCommand>(m_track, clip->id, clip->gain,
-                                                                    static_cast<float>(newGain)));
-    } else {
-        auto edited = std::make_shared<Clip>(*clip);
-        edited->gain = static_cast<float>(newGain);
-        m_track->replaceClip(clip->id, edited);
+        m_commandStack->push(
+            std::make_unique<TrackClipsCommand>(m_track, before, m_track->clipsSnapshot(), "Repeat Clip"));
+    }
+    update();
+}
+
+void ClipLaneWidget::repeatMidiNote(const std::shared_ptr<MidiNote>& note) {
+    bool ok = false;
+    int count = QInputDialog::getInt(this, "Repeat Note", "Number of repeats:", 1, 1, 999, 1, &ok);
+    if (!ok) return;
+
+    auto before = m_track->midiClipsSnapshot();
+    int64_t insertAt = note->startSample + note->lengthSamples;
+    auto after = repeatItemAfter<MidiNote>(*before, *note, insertAt, count);
+    m_track->restoreMidiClips(std::make_shared<const Track::MidiNoteList>(std::move(after)));
+    if (m_commandStack) {
+        m_commandStack->push(std::make_unique<TrackMidiCommand>(m_track, before, m_track->midiClipsSnapshot(),
+                                                                  "Repeat Note"));
     }
     update();
 }
@@ -554,8 +681,127 @@ void ClipLaneWidget::deleteSelected() {
 
 void ClipLaneWidget::clearSelection() {
     m_selectedClipId = QUuid();
+    m_selectedMidiNoteId = QUuid();
     emit selectionChanged(false);
     update();
+}
+
+void ClipLaneWidget::copyRangeSelection() {
+    if (!m_hasRangeSelection) return;
+    int64_t start = std::min(m_rangeSelectionStart, m_rangeSelectionEnd);
+    int64_t end = std::max(m_rangeSelectionStart, m_rangeSelectionEnd);
+
+    if (m_track->kind == TrackKind::Instrument) {
+        EditClipboardStore::instance().setMidi(extractRange<MidiNote>(*m_track->midiClipsSnapshot(), start, end));
+    } else {
+        EditClipboardStore::instance().setClips(extractRange<Clip>(*m_track->clipsSnapshot(), start, end));
+    }
+}
+
+void ClipLaneWidget::pasteAtPlayhead() {
+    if (m_playheadSample < 0) return;
+    auto& store = EditClipboardStore::instance();
+
+    if (m_track->kind == TrackKind::Instrument && store.hasMidi()) {
+        auto before = m_track->midiClipsSnapshot();
+        auto after = pasteRange<MidiNote>(*before, store.midi(), m_playheadSample);
+        m_track->restoreMidiClips(std::make_shared<const Track::MidiNoteList>(std::move(after)));
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackMidiCommand>(m_track, before,
+                                                                      m_track->midiClipsSnapshot(), "Paste"));
+        }
+        update();
+    } else if (m_track->kind != TrackKind::Instrument && store.hasClips()) {
+        auto before = m_track->clipsSnapshot();
+        auto after = pasteRange<Clip>(*before, store.clips(), m_playheadSample);
+        m_track->restoreClips(std::make_shared<const Track::ClipList>(std::move(after)));
+        if (m_commandStack) {
+            m_commandStack->push(
+                std::make_unique<TrackClipsCommand>(m_track, before, m_track->clipsSnapshot(), "Paste"));
+        }
+        update();
+    }
+}
+
+void ClipLaneWidget::copySelectedItem() {
+    auto& store = EditClipboardStore::instance();
+
+    if (m_track->kind == TrackKind::Instrument) {
+        if (m_selectedMidiNoteId.isNull()) return;
+        for (auto& n : *m_track->midiClipsSnapshot()) {
+            if (n && n->id == m_selectedMidiNoteId) {
+                store.setSingleMidi(
+                    {std::make_shared<MidiNote>(*n), n->startSample + n->lengthSamples, m_track->id});
+                return;
+            }
+        }
+    } else {
+        if (m_selectedClipId.isNull()) return;
+        for (auto& c : *m_track->clipsSnapshot()) {
+            if (c && c->id == m_selectedClipId) {
+                store.setSingleClip(
+                    {std::make_shared<Clip>(*c), c->sessionStartSample + c->lengthSamples, m_track->id});
+                return;
+            }
+        }
+    }
+}
+
+void ClipLaneWidget::pasteChainedSingleItem() {
+    auto& store = EditClipboardStore::instance();
+
+    if (m_track->kind == TrackKind::Instrument) {
+        if (!store.hasSingleMidi() || store.singleMidi().sourceTrackId != m_track->id) return;
+        const auto& pending = store.singleMidi();
+        int64_t insertAt = pending.nextPasteSample;
+        int64_t length = pending.item->lengthSamples;
+
+        auto before = m_track->midiClipsSnapshot();
+        auto after = insertItemAfter<MidiNote>(*before, *pending.item, insertAt);
+        m_track->restoreMidiClips(std::make_shared<const Track::MidiNoteList>(std::move(after)));
+        if (m_commandStack) {
+            m_commandStack->push(std::make_unique<TrackMidiCommand>(m_track, before,
+                                                                      m_track->midiClipsSnapshot(), "Paste"));
+        }
+        store.advanceSingleMidi(insertAt + length);
+        update();
+    } else {
+        if (!store.hasSingleClip() || store.singleClip().sourceTrackId != m_track->id) return;
+        const auto& pending = store.singleClip();
+        int64_t insertAt = pending.nextPasteSample;
+        int64_t length = pending.item->lengthSamples;
+
+        auto before = m_track->clipsSnapshot();
+        auto after = insertItemAfter<Clip>(*before, *pending.item, insertAt);
+        m_track->restoreClips(std::make_shared<const Track::ClipList>(std::move(after)));
+        if (m_commandStack) {
+            m_commandStack->push(
+                std::make_unique<TrackClipsCommand>(m_track, before, m_track->clipsSnapshot(), "Paste"));
+        }
+        store.advanceSingleClip(insertAt + length);
+        update();
+    }
+}
+
+void ClipLaneWidget::keyPressEvent(QKeyEvent* event) {
+    if (event->matches(QKeySequence::Copy)) {
+        if (m_hasRangeSelection) {
+            copyRangeSelection();
+        } else {
+            copySelectedItem();
+        }
+        return;
+    }
+    if (event->matches(QKeySequence::Paste)) {
+        auto& store = EditClipboardStore::instance();
+        if (store.hasMidi() || store.hasClips()) {
+            pasteAtPlayhead();
+        } else {
+            pasteChainedSingleItem();
+        }
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 void ClipLaneWidget::dragEnterEvent(QDragEnterEvent* event) {

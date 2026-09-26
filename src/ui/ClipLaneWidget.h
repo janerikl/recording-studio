@@ -8,6 +8,7 @@
 class QContextMenuEvent;
 class QDragEnterEvent;
 class QDropEvent;
+class QKeyEvent;
 class QWheelEvent;
 class QPainter;
 
@@ -31,6 +32,27 @@ public:
     QUuid selectedClipId() const { return m_selectedClipId; }
     void deleteSelected();
     void clearSelection();
+
+    // Shift+drag on the lane background marks a time range (highlighted
+    // across the full lane height, independent of the single-clip/note
+    // selection above). Ctrl+C copies whatever it overlaps for this track's
+    // kind (Clips or MidiNotes) into a shared app-wide clipboard; Ctrl+V,
+    // pressed while a (possibly different) track's lane has focus, pastes
+    // at that lane's current playhead position, overwriting anything the
+    // pasted region lands on.
+    bool hasRangeSelection() const { return m_hasRangeSelection; }
+    void copyRangeSelection();
+    void pasteAtPlayhead();
+
+    // Ctrl+C/Ctrl+V also work on the single selected clip/note (no range
+    // selection needed): copy captures just that item, and each Ctrl+V
+    // inserts a copy immediately after the previous one (original on the
+    // first paste, the just-pasted copy on every paste after that), pushing
+    // any later clips/notes on the same track out of the way. Scoped to the
+    // track it was copied from — pressing Ctrl+V on a different track's lane
+    // does nothing, since "after the original" only means something there.
+    void copySelectedItem();
+    void pasteChainedSingleItem();
 
     // Edits made directly in this lane (move/trim/split/delete) push their
     // own undo command once the CommandStack is set; not required for the
@@ -98,12 +120,14 @@ protected:
     // Vertical gridlines at the same tick spacing as TimeRulerWidget, so a
     // track's clips can be visually lined up against the ruler's time marks.
     void paintGridLines(QPainter& painter);
+    void paintRangeSelection(QPainter& painter);
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
@@ -119,11 +143,18 @@ private:
     int64_t effectiveTimelineLength() const;
     int64_t effectiveScrollOffset() const;
     std::shared_ptr<Clip> findClipAt(int64_t sample) const;
+    std::shared_ptr<MidiNote> findMidiNoteAt(int64_t sample, int y) const;
+    // Right-click "Repeat..." menu action: prompts for a count, then inserts
+    // that many back-to-back copies right after the clicked clip/note,
+    // pushing later items out of the way, as a single undo step.
+    void repeatClip(const std::shared_ptr<Clip>& clip);
+    void repeatMidiNote(const std::shared_ptr<MidiNote>& note);
     void updateHoverCursor(const QPoint& pos);
     static QString formatDuration(int64_t samples, int sampleRate);
 
     std::shared_ptr<Track> m_track;
     QUuid m_selectedClipId;
+    QUuid m_selectedMidiNoteId; // Instrument tracks only; parallels m_selectedClipId
     CommandStack* m_commandStack = nullptr;
     std::shared_ptr<const Track::ClipList> m_editBeforeSnapshot; // set while a drag/edit is in flight
 
@@ -147,6 +178,11 @@ private:
     int64_t m_contentExtentSamples = 0;  // full, un-zoomed content length
     int64_t m_scrollOffsetSamples = 0;   // this lane's own horizontal scroll position
     int64_t m_dragScrollOffsetSamples = 0; // scroll offset locked at drag start
+
+    bool m_rangeSelecting = false;    // actively dragging out a new range (Shift held)
+    bool m_hasRangeSelection = false;
+    int64_t m_rangeSelectionStart = 0;
+    int64_t m_rangeSelectionEnd = 0;
 
     static constexpr int kEdgeThresholdPx = 10;
     // A fade handle only grabs the mouse within this many pixels of the top

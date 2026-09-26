@@ -23,6 +23,7 @@
 #include "ui/TimelineView.h"
 #include "ui/TimeRulerWidget.h"
 #include "ui/SettingsDialog.h"
+#include "ui/ShortcutManager.h"
 #include "ui/WaveformWidget.h"
 #include "ui/MediaLibraryPanel.h"
 #include "ui/EffectsPopoverWidget.h"
@@ -155,6 +156,7 @@ private:
     QAction* m_zoomInAction = nullptr;
     QAction* m_zoomOutAction = nullptr;
     QAction* m_zoomResetAction = nullptr;
+    ShortcutManager m_shortcutManager;
     // >1 = zoomed in (fewer seconds visible, clips appear wider); clamped to
     // a sane range. Applied on top of the content-based floor/headroom scale
     // in refreshTimelineScale().

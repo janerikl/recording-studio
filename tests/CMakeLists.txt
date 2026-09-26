@@ -1,4 +1,4 @@
-find_package(Qt6 COMPONENTS Core Gui Test REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Widgets Test REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FLUIDSYNTH REQUIRED IMPORTED_TARGET fluidsynth)
 
@@ -259,6 +259,21 @@ target_include_directories(rhythm_click_track_tests PRIVATE ${CMAKE_SOURCE_DIR}/
 target_compile_definitions(rhythm_click_track_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(rhythm_click_track_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
 add_test(NAME RhythmClickTrackTests COMMAND rhythm_click_track_tests)
+
+add_executable(edit_clipboard_tests test_EditClipboard.cpp)
+target_include_directories(edit_clipboard_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(edit_clipboard_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME EditClipboardTests COMMAND edit_clipboard_tests)
+
+add_executable(shortcut_manager_tests test_ShortcutManager.cpp ${CMAKE_SOURCE_DIR}/src/ui/ShortcutManager.cpp)
+target_include_directories(shortcut_manager_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(shortcut_manager_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME ShortcutManagerTests COMMAND shortcut_manager_tests)
+
+add_executable(dialog_geometry_tests test_DialogGeometry.cpp ${CMAKE_SOURCE_DIR}/src/ui/DialogGeometry.cpp)
+target_include_directories(dialog_geometry_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(dialog_geometry_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME DialogGeometryTests COMMAND dialog_geometry_tests)
 
 add_executable(rhythm_piano_playback_tests
     test_RhythmPianoPlayback.cpp
