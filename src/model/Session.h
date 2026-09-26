@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "LibraryFolder.h"
 #include "MasterBus.h"
 #include "Track.h"
 
@@ -25,6 +26,10 @@ public:
 
     // Numbered bookmarks (slots 1-9), set/jumped via Ctrl+Shift+N / Ctrl+N.
     std::map<int, int64_t> markers;
+
+    // User-organized virtual folders for the Media Browser (Project Media +
+    // Loops), persisted alongside the rest of the session.
+    LibraryFolderTree libraryFolders;
 
     std::shared_ptr<Track> addTrack(const QString& name) {
         auto track = std::make_shared<Track>();

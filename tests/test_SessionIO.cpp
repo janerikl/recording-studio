@@ -240,6 +240,91 @@ private slots:
         QVERIFY(loadedMasterEq);
         QVERIFY(qFuzzyCompare(loadedMasterEq->midGainDb.load(), 2.0f));
     }
+
+    void roundTripsLibraryEntryPersistentItemId() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+
+        auto buffer = std::make_shared<AudioBuffer>();
+        buffer->channels = 1;
+        buffer->sampleRate = 48000;
+        buffer->samples.assign(4800, 0.2f);
+
+        QVector<LibraryEntry> library;
+        library.append({"Snare", buffer, "fixed-item-id"});
+        QVERIFY(SessionIO::saveSession(path, session, library));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loadedLibrary.size(), 1);
+        QCOMPARE(loadedLibrary[0].name, QString("Snare"));
+        QCOMPARE(loadedLibrary[0].itemId, QString("fixed-item-id"));
+    }
+
+    void libraryEntryWithoutExplicitItemId_getsOneAssignedOnSave() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        auto buffer = std::make_shared<AudioBuffer>();
+        buffer->channels = 1;
+        buffer->sampleRate = 48000;
+        buffer->samples.assign(4800, 0.2f);
+
+        QVector<LibraryEntry> library;
+        library.append({"Kick", buffer}); // itemId left blank
+        QVERIFY(SessionIO::saveSession(path, session, library));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loadedLibrary.size(), 1);
+        QVERIFY(!loadedLibrary[0].itemId.isEmpty());
+    }
+
+    void roundTripsLibraryFolderTreeAndItemMembership() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        auto parent = session.libraryFolders.addFolder("Drums");
+        auto child = session.libraryFolders.addFolder("Kicks", parent.get());
+        session.libraryFolders.moveItem("loop:/samples/kick.wav", child.get());
+
+        auto buffer = std::make_shared<AudioBuffer>();
+        buffer->channels = 1;
+        buffer->sampleRate = 48000;
+        buffer->samples.assign(4800, 0.1f);
+        QVector<LibraryEntry> library;
+        library.append({"Bass Hit", buffer, "bass-hit-id"});
+        session.libraryFolders.moveItem("pm:bass-hit-id", parent.get());
+
+        QVERIFY(SessionIO::saveSession(path, session, library));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loaded.libraryFolders.roots.size(), 1);
+        auto loadedParent = loaded.libraryFolders.roots[0];
+        QCOMPARE(loadedParent->name, QString("Drums"));
+        QCOMPARE(loadedParent->itemRefs.size(), 1);
+        QCOMPARE(loadedParent->itemRefs[0], QString("pm:bass-hit-id"));
+
+        QCOMPARE(loadedParent->children.size(), 1);
+        auto loadedChild = loadedParent->children[0];
+        QCOMPARE(loadedChild->name, QString("Kicks"));
+        QCOMPARE(loadedChild->itemRefs.size(), 1);
+        QCOMPARE(loadedChild->itemRefs[0], QString("loop:/samples/kick.wav"));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestSessionIO)

@@ -7,12 +7,41 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 #include <iostream>
 
 #include "audio/Effects.h"
 #include "io/AudioFileIO.h"
 
 namespace rsd {
+
+static QJsonObject libraryFolderToJson(const LibraryFolder& folder) {
+    QJsonObject json;
+    json["id"] = folder.id.toString();
+    json["name"] = folder.name;
+
+    QJsonArray itemsJson;
+    for (const QString& itemRef : folder.itemRefs) itemsJson.append(itemRef);
+    json["items"] = itemsJson;
+
+    QJsonArray childrenJson;
+    for (auto& child : folder.children) childrenJson.append(libraryFolderToJson(*child));
+    json["children"] = childrenJson;
+
+    return json;
+}
+
+static std::shared_ptr<LibraryFolder> libraryFolderFromJson(const QJsonObject& json) {
+    auto folder = std::make_shared<LibraryFolder>();
+    folder->id = QUuid(json["id"].toString());
+    folder->name = json["name"].toString();
+
+    for (const auto& itemVal : json["items"].toArray()) folder->itemRefs.append(itemVal.toString());
+    for (const auto& childVal : json["children"].toArray())
+        folder->children.append(libraryFolderFromJson(childVal.toObject()));
+
+    return folder;
+}
 
 static QString effectTypeToString(EffectType t) {
     switch (t) {
@@ -237,8 +266,8 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
 
     QJsonArray libraryJson;
     for (auto& entry : libraryEntries) {
-        const QString& name = entry.first;
-        auto& buffer = entry.second;
+        const QString& name = entry.name;
+        auto& buffer = entry.buffer;
         if (!buffer) continue;
 
         QString relPath;
@@ -256,12 +285,20 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
             writtenFiles[buffer.get()] = relPath;
         }
 
+        QString itemId = entry.itemId.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces)
+                                                 : entry.itemId;
+
         QJsonObject entryJson;
         entryJson["name"] = name;
         entryJson["audioFile"] = relPath;
+        entryJson["itemId"] = itemId;
         libraryJson.append(entryJson);
     }
     root["mediaLibrary"] = libraryJson;
+
+    QJsonArray libraryFoldersJson;
+    for (auto& folder : session.libraryFolders.roots) libraryFoldersJson.append(libraryFolderToJson(*folder));
+    root["libraryFolders"] = libraryFoldersJson;
 
     QFile file(projectPath);
     if (!file.open(QIODevice::WriteOnly)) {
@@ -410,8 +447,14 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
             loadedBuffers[fullPath] = buffer;
         }
 
-        outLibraryEntries.append({entryJson["name"].toString(), buffer});
+        QString itemId = entryJson["itemId"].toString();
+        if (itemId.isEmpty()) itemId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        outLibraryEntries.append({entryJson["name"].toString(), buffer, itemId});
     }
+
+    outSession.libraryFolders.roots.clear();
+    for (const auto& folderVal : root["libraryFolders"].toArray())
+        outSession.libraryFolders.roots.append(libraryFolderFromJson(folderVal.toObject()));
 
     return true;
 }

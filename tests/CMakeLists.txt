@@ -230,6 +230,7 @@ add_executable(session_io_tests
     ${CMAKE_SOURCE_DIR}/src/io/SessionIO.cpp
     ${CMAKE_SOURCE_DIR}/src/io/AudioFileIO.cpp
     ${CMAKE_SOURCE_DIR}/src/audio/Effects.cpp
+    ${CMAKE_SOURCE_DIR}/src/model/LibraryFolder.cpp
 )
 target_include_directories(session_io_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_compile_definitions(session_io_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")

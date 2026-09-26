@@ -8,8 +8,15 @@
 
 namespace rsd {
 
-// One Media Library entry: display name + its audio data.
-using LibraryEntry = std::pair<QString, std::shared_ptr<AudioBuffer>>;
+// One Media Library entry: display name, its audio data, and a persistent
+// identity (used as the "pm:<itemId>" key for virtual folder membership,
+// stable across a save/reload even though the buffer pointer isn't). If
+// itemId is left blank when saving, one is generated.
+struct LibraryEntry {
+    QString name;
+    std::shared_ptr<AudioBuffer> buffer;
+    QString itemId;
+};
 
 // Serializes a Session to a .rsdproj JSON file plus a companion
 // "<name>_audiofiles/" directory holding one WAV per unique AudioBuffer

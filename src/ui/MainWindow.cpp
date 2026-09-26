@@ -1151,10 +1151,7 @@ void MainWindow::onSaveSessionClicked() {
         if (!path.endsWith(".rsdproj")) path += ".rsdproj";
     }
 
-    QVector<LibraryEntry> libraryEntries;
-    for (int i = 0; i < m_mediaLibrary->count(); ++i) {
-        libraryEntries.append({m_mediaLibrary->nameAt(i), m_mediaLibrary->bufferAt(i)});
-    }
+    QVector<LibraryEntry> libraryEntries = m_mediaBrowser->projectMediaEntries();
 
     if (!SessionIO::saveSession(path, *m_session, libraryEntries)) {
         QMessageBox::warning(this, "Save Failed", "Could not save session to: " + path);
