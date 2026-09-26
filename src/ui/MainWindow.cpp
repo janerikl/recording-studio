@@ -275,9 +275,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* meterRow = new QWidget(central);
     auto* meterLayout = new QHBoxLayout(meterRow);
     m_inputMeter = new LevelMeterWidget("In", meterRow);
-    m_outputMeter = new LevelMeterWidget("Out", meterRow);
     meterLayout->addWidget(m_inputMeter);
-    meterLayout->addWidget(m_outputMeter);
     layout->addWidget(meterRow);
 
     m_ruler = new TimeRulerWidget(central);
@@ -958,8 +956,7 @@ void MainWindow::updatePlayhead() {
 
 void MainWindow::updateMeters() {
     m_inputMeter->setLevels(m_engine->inputPeakL(), m_engine->inputPeakR());
-    m_outputMeter->setLevels(m_engine->outputPeakL(), m_engine->outputPeakR());
-    m_mixer->updateMeters();
+    m_mixer->updateMeters(m_engine->outputPeakL(), m_engine->outputPeakR());
     m_timeline->updateBusMeters();
 }
 

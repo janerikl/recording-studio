@@ -233,3 +233,45 @@ via each track's `sendBusId()` against this bus's id), replacing the
       correct "Bus — receives from Track X" label (multiple senders listed
       if more than one); confirm normal tracks' empty-lane placeholder is
       unchanged.
+
+# Move master Out meter next to master volume in mixer
+
+## Goal
+The master "Out" level meter (`MainWindow.cpp:278`, `LevelMeterWidget`) is
+currently in a horizontal `meterRow` at the top of the app, next to the
+`In` meter, disconnected from the master volume slider in the mixer
+section (`MixerPanel.cpp:36-62`, `m_masterVolumeSlider`). Move it into the
+mixer's master strip as vertical L/R bars right beside the slider, matching
+the look of per-track meters in `MixerStripWidget` (vertical
+`LevelMeterWidget`, 120px height, paired with that track's fader). Leave
+the `In` meter where it is in the top bar — a separate "recording section"
+idea (In meter + digital time) was raised but is out of scope here and can
+be planned separately later.
+
+## Steps
+- [x] In MainWindow.cpp, remove `m_outputMeter` from `meterRow`/
+      `meterLayout` (keep `m_inputMeter` there); remove the now-unused
+      `m_outputMeter` member/updates from MainWindow.h/.cpp (its level
+      feed via `m_engine->outputPeakL/R()` moves to MixerPanel).
+- [x] In MixerPanel.h/.cpp, add a vertical `LevelMeterWidget` inside
+      `masterStrip`, placed in a horizontal `faderRow` sub-layout next to
+      `m_masterVolumeSlider` — mirrors MixerStripWidget's slider+meter
+      pairing.
+- [x] Changed `MixerPanel::updateMeters()` to `updateMeters(float
+      masterPeakL, float masterPeakR)`, wired from
+      `MainWindow::updateMeters()` using `m_engine->outputPeakL/R()`
+      (same source the old `m_outputMeter` used), same 33ms cadence.
+- [x] Styling refinements from GUI review: `masterLayout` pinned to
+      `Qt::AlignTop` (was centering in leftover stretch space, same fix
+      as MixerStripWidget's Bus-strip case); strip widened 90px → 110px
+      with a bold "Master" label and lighter background tint to read as
+      visually distinct from track strips; removed the fixed 120px height
+      on the slider/meter so `faderRow`'s stretch factor lets them expand
+      to fill the strip; added a 10px gap between the title and FX button,
+      and an 8px bottom margin so the slider/meter visibly stop short of
+      the strip's edge.
+- [x] Build clean (recording_studio + tests), all 50 tests pass.
+- [x] Manual verification via GUI, confirmed by user across several
+      screenshot review rounds: mixer master strip shows vertical L/R Out
+      bars next to the volume slider; top bar still shows In meter alone
+      in its old spot; master volume slider still controls output level.

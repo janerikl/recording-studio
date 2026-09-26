@@ -17,6 +17,7 @@ class QPushButton;
 namespace rsd {
 
 class MixerStripWidget;
+class LevelMeterWidget;
 
 // Bottom-docked, side-by-side alternate view of the same per-track mixer
 // controls already on each TrackRowWidget header, plus a fixed Master
@@ -37,9 +38,10 @@ public:
     void clear();
     void refreshTrackEffectsButton(const QUuid& trackId);
     void refreshSendBusOptions();
-    // Polls every strip's post-fader peak into its meter. Call from the same
-    // timer that drives the transport toolbar's global input/output meters.
-    void updateMeters();
+    // Polls every strip's post-fader peak into its meter, and pushes the
+    // given master output peak into the master strip's meter. Call from the
+    // same timer that drives the transport toolbar's global input meter.
+    void updateMeters(float masterPeakL, float masterPeakR);
 
 signals:
     void trackSelected(std::shared_ptr<Track> track);
@@ -57,6 +59,7 @@ private:
 
     QSlider* m_masterVolumeSlider = nullptr;
     QPushButton* m_masterFxButton = nullptr;
+    LevelMeterWidget* m_masterLevelMeter = nullptr;
 };
 
 } // namespace rsd

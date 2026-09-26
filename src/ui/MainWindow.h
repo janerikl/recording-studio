@@ -196,7 +196,6 @@ private:
     MixerPanel* m_mixer = nullptr;
     QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
-    LevelMeterWidget* m_outputMeter = nullptr;
     int m_trackCounter = 0;
     int m_busCounter = 0;
 };
