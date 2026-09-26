@@ -202,6 +202,50 @@ void ClipLaneWidget::paintGridLines(QPainter& painter) {
     }
 }
 
+static float busMeterDecay(float current, float incoming) {
+    incoming = std::clamp(incoming, 0.0f, 1.0f);
+    return incoming > current ? incoming : current * 0.85f;
+}
+
+void ClipLaneWidget::updateBusMeter(float peakL, float peakR) {
+    m_busDisplayL = busMeterDecay(m_busDisplayL, peakL);
+    m_busDisplayR = busMeterDecay(m_busDisplayR, peakR);
+    update();
+}
+
+void ClipLaneWidget::setSenderLabel(const QString& label) {
+    if (m_senderLabel == label) return;
+    m_senderLabel = label;
+    update();
+}
+
+void ClipLaneWidget::paintBusMeter(QPainter& painter) {
+    // Solid amber, not the mixer's level-based green/yellow/red — this lane
+    // isn't a normal audio track, so its fill deliberately reads as a
+    // different kind of thing rather than "loud vs quiet".
+    static const QColor kBusMeterColor(220, 150, 60);
+    static const QColor kBusMeterTrack(50, 42, 30);
+
+    int barGap = 3;
+    int barHeight = (height() - 8 - barGap) / 2;
+    int barY0 = 4;
+    int barY1 = 4 + barHeight + barGap;
+    int barWidth = std::max(0, width() - 8);
+
+    painter.fillRect(4, barY0, barWidth, barHeight, kBusMeterTrack);
+    painter.fillRect(4, barY1, barWidth, barHeight, kBusMeterTrack);
+
+    int filledL = static_cast<int>(m_busDisplayL * barWidth);
+    int filledR = static_cast<int>(m_busDisplayR * barWidth);
+    if (filledL > 0) painter.fillRect(4, barY0, filledL, barHeight, kBusMeterColor);
+    if (filledR > 0) painter.fillRect(4, barY1, filledR, barHeight, kBusMeterColor);
+
+    QString label = m_senderLabel.isEmpty() ? QStringLiteral("Bus — no tracks routed to it")
+                                             : m_senderLabel;
+    painter.setPen(QColor(180, 150, 110));
+    painter.drawText(rect().adjusted(8, 0, -8, 0), Qt::AlignHCenter | Qt::AlignVCenter, label);
+}
+
 void ClipLaneWidget::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(30, 30, 30));
@@ -214,6 +258,12 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
             painter.setPen(QPen(QColor(230, 80, 80), 2));
             painter.drawLine(px, 0, px, height());
         }
+        paintRangeSelection(painter);
+        return;
+    }
+
+    if (m_track->kind == TrackKind::Bus) {
+        paintBusMeter(painter);
         paintRangeSelection(painter);
         return;
     }

@@ -27,6 +27,10 @@ public:
     // Forwarded to every row's ClipLaneWidget, for its gridlines (see
     // ClipLaneWidget::setSampleRate).
     void setSampleRate(int sampleRate);
+    // Called on every meter timer tick (see MainWindow::updateMeters): pushes
+    // live peak levels into each Bus track's ClipLaneWidget and recomputes
+    // its "receives from ..." sender label from the current send routing.
+    void updateBusMeters();
     void clear(); // remove all rows, e.g. before loading a new session
     void refreshTrackWaveform(const QUuid& trackId);
     void refreshTrackTakeLanes(const QUuid& trackId);

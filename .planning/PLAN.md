@@ -190,3 +190,46 @@ it silently keeps the same file up to date.
       edit a session, wait ~2s without Ctrl+S, confirm the file on disk
       updated (mtime/diff) with no prompt/block; force-quit after an
       unsaved edit and relaunch, confirm the change survived.
+
+# Visualize Bus track lane (live meter instead of empty placeholder)
+
+## Goal
+Bus tracks have no clips of their own, so the timeline lane currently shows
+the misleading "No audio — Import or Record into this track" placeholder
+(src/ui/ClipLaneWidget.cpp:205-227), which only makes sense for real audio
+tracks. Bus tracks already compute live post-fader peak levels
+(`Track::postFaderPeakL/R`, src/model/Track.h:73-74, fed by
+SessionMixer.cpp:192-203) used by the mixer strip's `LevelMeterWidget`.
+Replace the placeholder for Bus-kind tracks with a live meter fill in the
+lane itself, in a solid amber/orange color (distinct from the mixer's
+level-based green/yellow/red) so it reads unambiguously as "not a normal
+audio track." When idle (no signal / stopped), show a flat/unlit meter plus
+a label naming the source track(s) currently routed to this bus (scanned
+via each track's `sendBusId()` against this bus's id), replacing the
+"Import or Record" text entirely for buses.
+
+## Steps
+- [x] In ClipLaneWidget.cpp/.h, branch on `m_track->kind == TrackKind::Bus`
+      before the existing `clips->empty()` placeholder block, into a new
+      `paintBusMeter()`. Draws two amber (220,150,60) horizontal bars (L/R)
+      reading `m_busDisplayL/R` (decayed the same way LevelMeterWidget.cpp:
+      25-28 does, via new `updateBusMeter(peakL, peakR)`), plus a centered
+      sender label (`setSenderLabel()`/`m_senderLabel`).
+- [x] Added `TimelineView::updateBusMeters()`: iterates all rows, for
+      Bus-kind tracks calls `clipLane()->updateBusMeter(postFaderPeakL/R)`
+      and recomputes the label by scanning all other rows for
+      `sendBusId() == track->id`, joining sender track names (or "no tracks
+      routed to it" when none). Wired from `MainWindow::updateMeters()`
+      (already ticking every 33ms via m_meterTimer), so it's live during
+      playback and idle alike, same cadence as the mixer strip meters.
+- [x] Non-bus tracks untouched — the `TrackKind::Bus` branch returns before
+      reaching the original `clips->empty()` placeholder code.
+- [x] Full build clean (recording_studio + tests), all 50 tests pass
+      (unchanged — no test coverage added for this one, per explicit user
+      choice to verify manually only).
+- [ ] Manual verification via GUI: route a track's send to a Bus track,
+      play audio, confirm the bus lane fills with an amber meter tracking
+      the source level; stop/remove the send, confirm the idle flat meter +
+      correct "Bus — receives from Track X" label (multiple senders listed
+      if more than one); confirm normal tracks' empty-lane placeholder is
+      unchanged.

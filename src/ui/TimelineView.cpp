@@ -1,6 +1,7 @@
 #include "TimelineView.h"
 
 #include <QFrame>
+#include <QStringList>
 
 namespace rsd {
 
@@ -29,6 +30,26 @@ void TimelineView::setCommandStack(CommandStack* stack) {
 void TimelineView::setSampleRate(int sampleRate) {
     m_sampleRate = sampleRate;
     for (auto& [id, row] : m_rows) row->clipLane()->setSampleRate(sampleRate);
+}
+
+void TimelineView::updateBusMeters() {
+    for (auto& [id, row] : m_rows) {
+        auto track = row->track();
+        if (track->kind != TrackKind::Bus) continue;
+
+        row->clipLane()->updateBusMeter(track->postFaderPeakL.load(std::memory_order_relaxed),
+                                         track->postFaderPeakR.load(std::memory_order_relaxed));
+
+        QStringList senders;
+        for (auto& [otherId, otherRow] : m_rows) {
+            auto other = otherRow->track();
+            if (other->sendBusId() == track->id) senders << other->name;
+        }
+        QString label = senders.isEmpty()
+            ? QStringLiteral("Bus — no tracks routed to it")
+            : QStringLiteral("Bus — receives from ") + senders.join(", ");
+        row->clipLane()->setSenderLabel(label);
+    }
 }
 
 void TimelineView::addTrack(std::shared_ptr<Track> track) {

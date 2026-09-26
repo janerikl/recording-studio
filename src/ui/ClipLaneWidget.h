@@ -72,6 +72,16 @@ public:
         update();
     }
 
+    // Bus tracks only: pushed on every meter tick (see TimelineView::
+    // updateBusMeters) with the track's live post-fader peak levels, decayed
+    // the same way LevelMeterWidget does, then repainted as an amber meter
+    // fill in place of the empty-lane placeholder (see paintEvent).
+    void updateBusMeter(float peakL, float peakR);
+    // Bus tracks only: names the track(s) currently sending into this bus
+    // (e.g. "Bus — receives from Track 6"), shown when the bus is idle.
+    // Recomputed by TimelineView whenever tracks/sends change.
+    void setSenderLabel(const QString& label);
+
     // Horizontal scroll support (only meaningful once zoomed in past what
     // fits in the widget's width). Scrolling is per-track by default; the
     // owning TrackRowWidget/TimelineView handle syncing multiple lanes
@@ -117,6 +127,7 @@ signals:
 
 protected:
     void paintMidiNotes(QPainter& painter); // Instrument tracks: view-only note rectangles
+    void paintBusMeter(QPainter& painter);  // Bus tracks: live amber meter + sender label
     // Vertical gridlines at the same tick spacing as TimeRulerWidget, so a
     // track's clips can be visually lined up against the ruler's time marks.
     void paintGridLines(QPainter& painter);
@@ -169,6 +180,10 @@ private:
     int64_t m_dragOrigFadeOut = 0;
     float m_dragOrigGain = 1.0f;
     int64_t m_dragTotalSamples = 0; // timeline scale locked at drag start
+
+    float m_busDisplayL = 0.0f; // decayed display level for the Bus meter fill (see updateBusMeter)
+    float m_busDisplayR = 0.0f;
+    QString m_senderLabel; // e.g. "Bus — receives from Track 6" (see setSenderLabel)
 
     int m_sampleRate = 48000; // only used to convert gridline tick seconds to samples
     int64_t m_sharedTimelineLength = 0; // 0 = not set, fall back to local computation
