@@ -354,8 +354,10 @@ MainWindow::MainWindow(QWidget* parent)
     meterLayout->addWidget(inputMeterColumn);
 
     // Quick record-target picker, next to the recording section: pick a
-    // track to arm it for recording (unarming all others) and see/change
-    // its input source, without needing that track's own mixer strip.
+    // track to arm it for recording (unarming all others). Source stays
+    // exclusively on that track's own mixer strip (MixerStripWidget's
+    // Source combo) — matching standard DAW convention of not duplicating
+    // input-source selection in the transport area.
     auto* recordTargetWidget = new QWidget(central);
     auto* recordTargetLayout = new QHBoxLayout(recordTargetWidget);
     recordTargetLayout->setContentsMargins(0, 0, 0, 0);
@@ -366,15 +368,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_recordTrackCombo, &QComboBox::currentIndexChanged, this,
             &MainWindow::onRecordTrackComboChanged);
     recordTargetLayout->addWidget(m_recordTrackCombo);
-    recordTargetLayout->addWidget(new QLabel("Source:", recordTargetWidget));
-    m_recordSourceCombo = new QComboBox(recordTargetWidget);
-    m_recordSourceCombo->addItem("Mic", QVariant::fromValue(static_cast<int>(AudioSource::Mic)));
-    m_recordSourceCombo->addItem("Sys",
-                                  QVariant::fromValue(static_cast<int>(AudioSource::SystemAudio)));
-    m_recordSourceCombo->setEnabled(false); // no track selected until refreshRecordTrackCombo() runs
-    connect(m_recordSourceCombo, &QComboBox::currentIndexChanged, this,
-            &MainWindow::onRecordSourceComboChanged);
-    recordTargetLayout->addWidget(m_recordSourceCombo);
 
     auto* recordingSectionRow = new QWidget(central);
     auto* recordingSectionLayout = new QHBoxLayout(recordingSectionRow);
@@ -876,6 +869,25 @@ void MainWindow::onRecordClicked() {
         m_activeSystemAudioRecordingClip = makeRecordingClip();
     }
 
+    // Live waveform preview: give each armed target track its own clip
+    // right away, sharing the source clip's buffer, so ClipLaneWidget has
+    // something to paint (and grow) while recording is in progress. Purely
+    // transient/visual — not pushed to the undo stack; replaced by the real
+    // finalized clip in onStopClicked().
+    auto addPreviewClipFor = [this](std::shared_ptr<Clip>& sourceClip,
+                                     std::vector<std::shared_ptr<Track>>& targets) {
+        if (!sourceClip) return;
+        for (auto& track : targets) {
+            auto preview = std::make_shared<Clip>(*sourceClip);
+            preview->id = QUuid::createUuid();
+            preview->isLiveRecording = true;
+            track->addClip(preview);
+            m_livePreviewClips[track->id] = preview;
+        }
+    };
+    addPreviewClipFor(m_activeRecordingClip, m_recordTargetTracks);
+    addPreviewClipFor(m_activeSystemAudioRecordingClip, m_systemAudioRecordTargetTracks);
+
     m_recordingStartSample = m_engine->transport().positionSamples();
     m_engine->transport().setState(TransportState::Recording);
     m_ringDrainTimer->start();
@@ -1006,6 +1018,17 @@ void MainWindow::onStopClicked() {
                 (m_activeSystemAudioRecordingClip && !m_systemAudioRecordTargetTracks.empty()))) {
         drainCaptureRing(); // flush any remaining samples
 
+        // Remove each live preview clip before capturing "before" snapshots
+        // below, so the undo command's before-state is clean (as if the
+        // preview never existed) and addClipsFor's finalized clip is the
+        // only one added.
+        for (auto& [trackId, previewClip] : m_livePreviewClips) {
+            auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
+                                    [&](auto& t) { return t->id == trackId; });
+            if (it != m_session->tracks.end()) (*it)->removeClip(previewClip->id);
+        }
+        m_livePreviewClips.clear();
+
         // Every armed track gets its own Clip (so each can be trimmed/moved
         // independently later) but tracks sharing a source share that
         // source's recorded AudioBuffer — identical audio, no data
@@ -1114,21 +1137,7 @@ void MainWindow::refreshRecordTrackCombo() {
         if (track->kind != TrackKind::Audio) continue;
         m_recordTrackCombo->addItem(track->name, track->id);
     }
-    int idx = m_recordTrackCombo->findData(previousSelected);
-    m_recordTrackCombo->setCurrentIndex(idx);
-
-    QSignalBlocker sourceBlocker(m_recordSourceCombo);
-    auto selectedIt = idx >= 0 ? std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
-                                               [&](auto& t) { return t->id == previousSelected; })
-                                : m_session->tracks.end();
-    if (idx >= 0 && selectedIt != m_session->tracks.end()) {
-        m_recordSourceCombo->setCurrentIndex(
-            (*selectedIt)->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
-        m_recordSourceCombo->setEnabled(true);
-    } else {
-        m_recordSourceCombo->setCurrentIndex(0);
-        m_recordSourceCombo->setEnabled(false);
-    }
+    m_recordTrackCombo->setCurrentIndex(m_recordTrackCombo->findData(previousSelected));
 }
 
 void MainWindow::onRecordTrackComboChanged(int index) {
@@ -1142,35 +1151,6 @@ void MainWindow::onRecordTrackComboChanged(int index) {
         m_commandStack.push(std::make_unique<TrackStateCommand>(
             track, before, TrackState::capture(*track), "Arm Track"));
     }
-    updateUndoRedoButtons();
-
-    QSignalBlocker sourceBlocker(m_recordSourceCombo);
-    if (index >= 0) {
-        auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
-                                [&](auto& t) { return t->id == selectedId; });
-        if (it != m_session->tracks.end()) {
-            m_recordSourceCombo->setCurrentIndex(
-                (*it)->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
-        }
-        m_recordSourceCombo->setEnabled(true);
-    } else {
-        m_recordSourceCombo->setEnabled(false);
-    }
-}
-
-void MainWindow::onRecordSourceComboChanged(int index) {
-    int comboIndex = m_recordTrackCombo->currentIndex();
-    if (comboIndex < 0) return;
-    QUuid selectedId = m_recordTrackCombo->itemData(comboIndex).toUuid();
-    auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
-                            [&](auto& t) { return t->id == selectedId; });
-    if (it == m_session->tracks.end()) return;
-
-    auto& track = *it;
-    TrackState before = TrackState::capture(*track);
-    track->inputSource.store(index == 1 ? AudioSource::SystemAudio : AudioSource::Mic);
-    m_commandStack.push(std::make_unique<TrackStateCommand>(
-        track, before, TrackState::capture(*track), "Change Track Input Source"));
     updateUndoRedoButtons();
 }
 
@@ -1224,6 +1204,19 @@ void MainWindow::drainCaptureRing() {
             samples.insert(samples.end(), tmp, tmp + n);
         }
     }
+
+    // Grow each armed track's live preview clip to match, so the waveform
+    // visibly fills in as recording progresses (see onRecordClicked()).
+    auto growPreviewClips = [this](std::vector<std::shared_ptr<Track>>& targets) {
+        for (auto& track : targets) {
+            auto it = m_livePreviewClips.find(track->id);
+            if (it == m_livePreviewClips.end()) continue;
+            it->second->lengthSamples = it->second->buffer->frameCount();
+            refreshWaveformFor(track);
+        }
+    };
+    growPreviewClips(m_recordTargetTracks);
+    growPreviewClips(m_systemAudioRecordTargetTracks);
 }
 
 void MainWindow::onImportClicked() {

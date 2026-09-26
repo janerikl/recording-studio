@@ -354,3 +354,230 @@ anywhere in the app (confirmed by research) — this is the first one.
       continuously, even stopped — a prior deliberate choice per an old
       code comment, explicitly superseded per user request). Shows flat
       (0/0) otherwise.
+
+# Suppress non-armed track playback during Recording
+
+## Goal
+While Recording, every non-armed track was still mixed to audio output
+(SessionMixer.cpp:125, `playbackActive` covers both Playing and Recording
+identically). This caused two problems the user hit: (1) if a track is
+armed with Source: System Audio, `SystemAudioLoopback` captures the app's
+own default sink output (confirmed: `pw-loopback -C @DEFAULT_SINK@`,
+SystemAudioLoopback.h:23) — so other tracks playing back would get
+re-recorded into the System-Audio-armed track, a feedback loop; (2) other
+tracks playing through speakers can acoustically bleed into a mic
+recording too. Fix: suppress OUTPUT for every non-record-armed track while
+Recording, so only armed track(s) render — while the armed track(s)
+themselves (and Bus tracks, which go silent naturally since nothing feeds
+them) render normally. Metronome click is explicitly left untouched per
+user (separate, often-intentional timing reference).
+
+## Steps
+- [x] Added `isRecording` bool parameter (default `false`, so existing
+      callers/tests/offline export are unaffected) to `mixSessionBlock()`
+      (SessionMixer.h:42-43, SessionMixer.cpp:95-96), passed from
+      AudioEngine.cpp as `state == TransportState::Recording`.
+- [x] In the main per-track loop (SessionMixer.cpp), after the existing
+      solo/mute `audible` check, added: if `isRecording &&
+      !track->recordArmed.load()`, zero that track's peak meters (same
+      pattern as the existing muted-track branch) and `continue` — skips
+      rendering it to output. Applies to Audio and Instrument tracks alike
+      (Bus tracks' own solo/mute check, in the second pass, is untouched —
+      they go silent naturally when starved of source audio).
+- [x] Added two unit tests in tests/test_SessionMixer.cpp:
+      `nonArmedTrackSilentWhileRecordingButArmedTrackStillRenders()` and
+      `nonArmedTrackStillPlaysWhenNotRecording()` — both pass.
+- [x] Build clean (recording_studio + tests), all tests pass (12/12 in
+      session_mixer_tests, including the 2 new ones; 50/50 CTest suites
+      overall).
+- [ ] Manual verification via GUI: arm Track A, leave Track B unarmed with
+      existing audio; play Track B's clip, hit Record — confirm only Track
+      A's meter shows activity and Track B is inaudible/not re-recorded;
+      confirm normal Play (not Recording) still plays all unmuted tracks
+      as before; confirm a System-Audio-armed track no longer re-records
+      other tracks' playback.
+
+# Remove duplicate Source picker from recording section
+
+## Goal
+The recording section's Track+Source picker duplicated the per-track
+mixer strip's own Source combo (MixerStripWidget.cpp:73-86) — same
+`track->inputSource` field, editable from two places, which the user found
+confusing ("I don't want to do it in two places"). Standard DAW convention
+(Pro Tools/Logic/Ableton/Reaper) keeps input source selection on the
+track's own channel strip only; the transport area doesn't duplicate it.
+Fix: remove `m_recordSourceCombo` from the recording section, keeping only
+the "Track:" picker there for quick-arming — Source stays exclusively on
+each track's own mixer strip.
+
+## Steps
+- [x] Removed `m_recordSourceCombo` (member, construction, signal wiring,
+      and `onRecordSourceComboChanged()`) from MainWindow.h/.cpp.
+- [x] Simplified `refreshRecordTrackCombo()` and `onRecordTrackComboChanged()`
+      to drop all source-combo sync logic — they only handle
+      arming/unarming tracks now.
+- [x] Removed the "Source:" label from the recording section's
+      `recordTargetWidget` layout, leaving just "Track:" + the combo.
+- [x] Build clean (recording_studio + tests), all 50 tests pass.
+- [ ] Manual verification via GUI: recording section shows only a Track
+      picker (no Source combo); selecting a track there still arms it
+      (visible via that track's own mixer-strip Arm checkbox); that
+      track's own mixer-strip Source combo is the only way to set Mic/Sys,
+      and reflects correctly.
+
+# Live-growing waveform during recording
+
+## Goal
+Currently a track shows nothing where it's recording until Stop finalizes
+the clip (MainWindow.cpp: `m_activeRecordingClip`/
+`m_activeSystemAudioRecordingClip` are held off-track and only added via
+`track->addClip()` at Stop). Waveforms are drawn fresh from raw samples on
+every paint (ClipLaneWidget.cpp:282-339, via `WaveformCache::computePeaks`,
+no persistent cache) — so once a clip exists on the track with a growing
+buffer, painting it live requires no cache-invalidation work. Add a
+transient "live preview" clip to each armed target track the moment
+Recording starts, growing every ~30ms as `drainCaptureRing()` appends
+samples, drawn in a distinct color from normal clips (blue,
+`QColor(90,170,230)`) so it's unambiguous that it's still being recorded.
+Scope: normal Record only — punch/loop recording (a separate, take-based
+path) is unchanged for now.
+
+## Steps
+- [x] Added `bool isLiveRecording = false;` to Clip.h.
+- [x] Added `std::map<QUuid, std::shared_ptr<Clip>> m_livePreviewClips` to
+      MainWindow.h.
+- [x] In `onRecordClicked()`'s normal (non-punch) path, right after
+      `m_activeRecordingClip`/`m_activeSystemAudioRecordingClip` are
+      created: added an `addPreviewClipFor` lambda that, for each track in
+      `m_recordTargetTracks`/`m_systemAudioRecordTargetTracks`, copies the
+      source clip (sharing its `buffer`), sets `isLiveRecording = true`,
+      adds it via `track->addClip()` (no command-stack push) and stores it
+      in `m_livePreviewClips`.
+- [x] In `drainCaptureRing()` (already ticking every 30ms via
+      `m_ringDrainTimer`), after appending new samples, added
+      `growPreviewClips()` which updates each preview clip's
+      `lengthSamples = buffer->frameCount()` and calls
+      `refreshWaveformFor(track)`.
+- [x] In `onStopClicked()`, before the existing finalization logic runs,
+      added a loop that removes every preview clip from its track via
+      `track->removeClip(id)` and clears `m_livePreviewClips` — the
+      existing addClipsFor logic then adds the real, finalized clips
+      exactly as it already did, untouched.
+- [x] In ClipLaneWidget.cpp's waveform draw loop, `clip->isLiveRecording`
+      now selects `QColor(230, 90, 90)` (red) instead of the normal blue
+      `QColor(90, 170, 230)`.
+- [x] Build clean (recording_studio + tests), all 50 pass; no new
+      automated test for this visual/timing feature, per prior explicit
+      user choice to verify such things manually.
+- [ ] Manual verification via GUI: arm a track, hit Record, confirm its
+      waveform grows live in the distinct color as you speak/play into the
+      mic; hit Stop, confirm the clip is replaced by the normal-colored
+      finalized clip with correct length and no duplicate/leftover preview
+      clip; confirm Undo removes the whole recording as one action, same
+      as before.
+
+# Auto-scroll: playhead following + drag-to-edge panning
+
+## Goal
+Two related timeline usability gaps, both confirmed to have no existing
+auto-scroll/pan mechanism (ClipLaneWidget.cpp): (1) when the playhead
+reaches a track lane's right edge during playback or recording, the lane
+should scroll to keep it visible — each track's lane scrolls independently
+today (confirmed: no shared/global scroll, the ruler itself has no scroll
+concept at all), so this is scoped per-lane, matching that existing model;
+(2) when dragging a clip (Move) near the lane's right edge, the view should
+auto-pan right to reveal more space, since dragging currently hard-clamps
+at `m_dragTotalSamples - length` (the *frozen zoom window's* span, treated
+as an absolute position ceiling) — confirmed this blocks dragging a clip
+to align with another track's clip ending further right than the current
+window. Fix is pure panning (scroll offset advances at constant zoom
+scale), not rescaling — avoids the exact "widening" visual glitch the
+existing scale-freeze-during-drag code was written to prevent (see
+ClipLaneWidget.cpp's `effectiveTimelineLength()` comment).
+
+## Steps
+- [x] In `ClipLaneWidget::setPlayheadSample()`, when the new sample is past
+      `effectiveScrollOffset() + effectiveTimelineLength()` (the lane's own
+      current right edge) and no drag is in flight, scroll via
+      `setScrollOffsetSamples()` so the playhead sits 5% in from the right
+      edge instead of running off-screen. Applies during both Playing and
+      Recording, any track, independently per-lane.
+- [x] In `ClipLaneWidget::mouseMoveEvent()`'s `DragMode::Move` branch: when
+      `event->pos().x()` is within 30px of `width()`, advance
+      `m_dragScrollOffsetSamples` each move event by `total/40` — panning
+      at the *same* zoom scale (never touching `m_dragTotalSamples`), so
+      existing on-screen clips never rescale/jitter. Added
+      `m_dragInitialScrollOffsetSamples` to measure how much has been
+      panned so far, folded into the drag's delta-samples math so the clip
+      actually tracks the pan (not just raw pixel movement).
+- [x] Relaxed the `Move` drag's position clamp: replaced
+      `maxStart = m_dragTotalSamples - m_dragOrigLength` (which wrongly
+      treated the frozen *visible window size* as an absolute session-wide
+      ceiling — confirmed via user's screenshot: couldn't drag Track 6's
+      clip out to align with Track 5's, further right than the window that
+      was visible when the drag started) with a floor-at-0-only clamp.
+- [x] In `mouseReleaseEvent()`, persist any edge-pan back into the lane's
+      real `m_scrollOffsetSamples` (else it snaps back to pre-drag position
+      the instant the drag ends, making the just-dropped clip appear to
+      vanish); also grow `m_contentExtentSamples` locally first via
+      `timelineLengthSamples()` so that persist isn't immediately clamped
+      back down by a stale (pre-drag) content extent.
+- [x] Build clean (recording_studio + tests), all 50 pass; no new
+      automated test for this drag-gesture/timing behavior, per prior
+      explicit user choice to verify such things manually.
+- [x] Fixed a follow-up bug found via manual testing: the playhead
+      auto-scroll wasn't visibly moving during recording at all, because
+      `setScrollOffsetSamples()` was silently clamping the scroll back to
+      the pre-recording range — `m_contentExtentSamples` is only refreshed
+      by MainWindow at specific action points (add/remove track, zoom),
+      never continuously while recording. Now grows
+      `m_contentExtentSamples` to at least the current playhead sample
+      right before scrolling, so the clamp doesn't fight the auto-scroll.
+- [ ] Manual verification via GUI: zoom into a track with playback/
+      recording running, confirm the lane scrolls to keep the playhead
+      visible as it crosses the right edge; drag a clip near a lane's right
+      edge, confirm the view pans smoothly to reveal more space and the
+      clip can be dropped beyond the original window's edge (e.g. aligned
+      with where another track's clip ends); confirm drags away from the
+      edge behave exactly as before (no pan, same clamp-at-0 floor).
+
+# Cache waveform peaks to fix playback lag with many tracks
+
+## Goal
+User reported lag with 8 tracks playing. Confirmed via research: every
+~33ms playhead tick, every track lane's `paintEvent` runs (the playhead
+timer calls `setPlayheadSample()` on every lane, each triggering a full
+repaint), and `WaveformCache::computePeaks()` — despite its doc comment
+claiming to "precompute... so painting never has to rescan raw samples" —
+has zero actual caching: it rescans every sample in a clip's visible range
+from scratch on every single call, and ClipLaneWidget.cpp additionally
+built a fresh sub-buffer copy (another full-range scan) before even
+calling it. With several long clips across 8 tracks, this added up to
+hundreds of full-buffer rescans per second on the UI thread purely because
+the playhead moved — the waveform pixels themselves hadn't changed at all.
+
+## Steps
+- [x] Added a peak cache to ClipLaneWidget (`m_peakCache`, a
+      `std::map<tuple<buffer ptr, sourceOffsetSamples, clampedLen, pixel
+      width, channel>, QVector<PeakPair>>`), keyed on exactly the inputs
+      that affect `computePeaks()`'s output — not on the ephemeral
+      per-paint `sub` AudioBuffer (whose address changes every call, which
+      is why caching couldn't live inside WaveformCache itself without
+      touching every call site).
+- [x] Restructured the waveform-drawing lambda in
+      `ClipLaneWidget::paintEvent()` to check the cache first; only on a
+      miss does it build the sub-buffer and call `computePeaks()`,
+      storing the result. Scrolling/panning and playhead movement don't
+      change the key (buffer/offset/length/width/channel all stay the
+      same for a finished clip), so those repaints now hit cache with zero
+      rescanning. A still-growing live-recording clip's `lengthSamples`
+      changes every ~30ms tick, so it naturally gets a fresh key each time
+      and keeps updating live (verified this doesn't regress the earlier
+      live-waveform-during-recording feature).
+- [x] Capped the cache at 5000 entries (clears entirely past that) to
+      bound memory growth over a long editing session.
+- [x] Build clean (recording_studio + tests), all 50 pass; no new
+      automated test for this perf/rendering fix, per prior explicit user
+      choice to verify such things manually.
+- [x] Manual verification via GUI, confirmed by user: playback of the
+      8-track session feels "much better" — no more lag.

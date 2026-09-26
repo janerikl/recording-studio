@@ -2,8 +2,12 @@
 
 #include <QPoint>
 #include <QUuid>
+#include <QVector>
 #include <QWidget>
+#include <map>
 #include <memory>
+#include <tuple>
+#include <utility>
 
 class QContextMenuEvent;
 class QDragEnterEvent;
@@ -14,6 +18,7 @@ class QPainter;
 
 #include "command/CommandStack.h"
 #include "model/Track.h"
+#include "waveform/WaveformCache.h"
 
 namespace rsd {
 
@@ -192,7 +197,24 @@ private:
 
     int64_t m_contentExtentSamples = 0;  // full, un-zoomed content length
     int64_t m_scrollOffsetSamples = 0;   // this lane's own horizontal scroll position
-    int64_t m_dragScrollOffsetSamples = 0; // scroll offset locked at drag start
+    // While a Move drag is in flight, m_dragScrollOffsetSamples starts out
+    // equal to m_dragInitialScrollOffsetSamples but is then actively panned
+    // forward when the cursor nears the lane's right edge (see
+    // mouseMoveEvent's edge-pan block), revealing space to drop a clip
+    // beyond what was visible when the drag started. The delta between the
+    // two is added into the drag's sample math so the clip's position
+    // tracks the pan, not just raw pixel movement.
+    int64_t m_dragScrollOffsetSamples = 0;
+    int64_t m_dragInitialScrollOffsetSamples = 0;
+
+    // Memoizes WaveformCache::computePeaks() results, keyed by everything
+    // that affects the output (buffer identity, trimmed range, pixel width,
+    // channel). Without this, every ~33ms playhead-driven repaint rescans
+    // every visible clip's raw samples from scratch — the confirmed cause
+    // of playback lag with several tracks. A still-growing live-recording
+    // clip's range changes every tick, so it naturally bypasses the cache.
+    std::map<std::tuple<const void*, int64_t, int64_t, int, int>, QVector<WaveformCache::PeakPair>>
+        m_peakCache;
 
     bool m_rangeSelecting = false;    // actively dragging out a new range (Shift held)
     bool m_hasRangeSelection = false;

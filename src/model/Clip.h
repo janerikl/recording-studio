@@ -33,6 +33,12 @@ public:
     int64_t fadeOutSamples = 0;
     FadeCurve fadeInCurve = FadeCurve::Linear;
     FadeCurve fadeOutCurve = FadeCurve::Linear;
+
+    // Transient marker for a still-recording preview clip (see MainWindow's
+    // m_livePreviewClips): true only between Record and Stop, never
+    // persisted by SessionIO. ClipLaneWidget draws it in a distinct color
+    // so it reads as "still recording", not a finished clip.
+    bool isLiveRecording = false;
 };
 
 } // namespace rsd

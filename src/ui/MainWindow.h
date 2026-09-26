@@ -33,6 +33,7 @@
 #include "ui/ExportDialog.h"
 #include "ui/MixerPanel.h"
 
+#include <map>
 #include <unordered_map>
 
 class QCloseEvent;
@@ -94,7 +95,6 @@ private slots:
     // exists.
     void refreshRecordTrackCombo();
     void onRecordTrackComboChanged(int index);
-    void onRecordSourceComboChanged(int index);
     void onZoomInClicked();
     void onZoomOutClicked();
     void onZoomResetClicked();
@@ -148,6 +148,11 @@ private:
     // the plain whole-transport recording path.
     bool m_punchRecordingActive = false;
     static constexpr double kPunchPreRollSeconds = 2.0;
+    // Transient waveform preview shown live while normal (non-punch)
+    // Recording is in progress: one entry per armed target track, added at
+    // Record and removed at Stop just before the real, finalized clip is
+    // added in its place. See drainCaptureRing().
+    std::map<QUuid, std::shared_ptr<Clip>> m_livePreviewClips;
     std::shared_ptr<Track> m_trackWithClipSelection;
     // MIDI note capture while an Instrument track is armed+recording:
     // GUI-thread-only bookkeeping (pitch -> start sample when the on-screen
@@ -210,10 +215,10 @@ private:
     LevelMeterWidget* m_inputMeter = nullptr;
     QLabel* m_recordingTimeLabel = nullptr; // elapsed recording time; see updateMeters()
     // Quick record-target picker in the recording section: choosing a track
-    // arms it (unarming all others) and shows/edits its input source. See
-    // refreshRecordTrackCombo(), onRecordTrackComboChanged().
+    // arms it (unarming all others). Input source stays exclusively on that
+    // track's own mixer strip. See refreshRecordTrackCombo(),
+    // onRecordTrackComboChanged().
     QComboBox* m_recordTrackCombo = nullptr;
-    QComboBox* m_recordSourceCombo = nullptr;
     int m_trackCounter = 0;
     int m_busCounter = 0;
 };

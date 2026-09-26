@@ -79,11 +79,12 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     }
 
     const bool playbackActive = state == TransportState::Playing || state == TransportState::Recording;
+    const bool isRecording = state == TransportState::Recording;
     int64_t pos = self->m_transport.positionSamples();
 
     if (self->m_session) {
         mixSessionBlock(*self->m_session, self->m_sampleRate, self->m_channels, pos, nFrames,
-                         playbackActive, out, self->m_mixScratch);
+                         playbackActive, out, self->m_mixScratch, isRecording);
 
         // Loop browser audition: mixed straight onto the final output,
         // independent of transport state/session tracks, one throwaway

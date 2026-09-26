@@ -53,6 +53,35 @@ private slots:
         for (float v : out) QCOMPARE(v, 0.0f);
     }
 
+    void nonArmedTrackSilentWhileRecordingButArmedTrackStillRenders() {
+        Session session;
+        auto armed = makeTrackWithClip(0.5f, 100);
+        armed->recordArmed.store(true);
+        auto notArmed = makeTrackWithClip(0.5f, 100);
+        session.tracks.push_back(armed);
+        session.tracks.push_back(notArmed);
+
+        SessionMixScratch scratch;
+        std::vector<float> out(100 * 2, -1.0f);
+        mixSessionBlock(session, 48000, 2, 0, 100, true, out.data(), scratch, /*isRecording=*/true);
+
+        // Only the armed track's 0.5f contributes; the non-armed track is
+        // suppressed, so the mix should equal the armed track alone.
+        for (float v : out) QCOMPARE(v, 0.5f);
+    }
+
+    void nonArmedTrackStillPlaysWhenNotRecording() {
+        Session session;
+        auto notArmed = makeTrackWithClip(0.5f, 100);
+        session.tracks.push_back(notArmed);
+
+        SessionMixScratch scratch;
+        std::vector<float> out(100 * 2, -1.0f);
+        mixSessionBlock(session, 48000, 2, 0, 100, true, out.data(), scratch, /*isRecording=*/false);
+
+        for (float v : out) QCOMPARE(v, 0.5f);
+    }
+
     void auxSendAddsScaledCopyOnTopOfDirectContribution() {
         Session session;
         auto bus = std::make_shared<Track>();

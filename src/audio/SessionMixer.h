@@ -39,7 +39,15 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
 // size >= nFrames*channels). This is the exact mixing logic
 // AudioEngine::rtCallback uses for live playback, extracted so an offline
 // export sounds identical — see OfflineRenderer.h.
+// `isRecording`: while true, every track that isn't record-armed is
+// skipped entirely (silent output), same as a muted track. Prevents two
+// problems: a System-Audio-armed track's loopback capture (which captures
+// this app's own output — see SystemAudioLoopback.h) re-recording other
+// tracks' playback, and other tracks bleeding acoustically into a mic
+// recording. Defaults to false so existing callers (tests, offline export)
+// are unaffected.
 void mixSessionBlock(Session& session, unsigned int sampleRate, unsigned int channels, int64_t pos,
-                     unsigned int nFrames, bool playbackActive, float* out, SessionMixScratch& scratch);
+                     unsigned int nFrames, bool playbackActive, float* out, SessionMixScratch& scratch,
+                     bool isRecording = false);
 
 } // namespace rsd

@@ -93,7 +93,8 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
 }
 
 void mixSessionBlock(Session& session, unsigned int sampleRate, unsigned int channels, int64_t pos,
-                     unsigned int nFrames, bool playbackActive, float* out, SessionMixScratch& scratch) {
+                     unsigned int nFrames, bool playbackActive, float* out, SessionMixScratch& scratch,
+                     bool isRecording) {
     size_t needed = static_cast<size_t>(nFrames) * channels;
 
     bool anySoloed = false;
@@ -128,6 +129,14 @@ void mixSessionBlock(Session& session, unsigned int sampleRate, unsigned int cha
         bool muted = track->muted.load(std::memory_order_relaxed);
         bool audible = anySoloed ? soloed : !muted;
         if (!audible) {
+            track->postFaderPeakL.store(0.0f, std::memory_order_relaxed);
+            track->postFaderPeakR.store(0.0f, std::memory_order_relaxed);
+            continue;
+        }
+
+        // While recording, only the armed track(s) should reach output —
+        // see mixSessionBlock's isRecording doc comment for why.
+        if (isRecording && !track->recordArmed.load(std::memory_order_relaxed)) {
             track->postFaderPeakL.store(0.0f, std::memory_order_relaxed);
             track->postFaderPeakR.store(0.0f, std::memory_order_relaxed);
             continue;

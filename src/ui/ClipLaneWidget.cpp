@@ -117,6 +117,28 @@ int64_t ClipLaneWidget::maxScrollOffsetSamples() const {
 
 void ClipLaneWidget::setPlayheadSample(int64_t sample) {
     m_playheadSample = sample;
+
+    // Auto-scroll to follow the playhead during Playing/Recording: once it
+    // reaches this lane's own right edge, scroll so it sits just inside the
+    // edge instead of running off-screen. Each lane scrolls independently
+    // (matching the existing per-lane scroll model — there's no shared/
+    // global scroll, and the ruler itself has no scroll concept at all).
+    if (m_dragMode == DragMode::None) {
+        int64_t rightEdge = effectiveScrollOffset() + effectiveTimelineLength();
+        if (sample > rightEdge) {
+            // m_contentExtentSamples is only refreshed by MainWindow at
+            // specific action points (add/remove track, zoom, etc.), never
+            // continuously while recording — without this, the scroll
+            // below gets silently clamped back to the pre-recording range
+            // by setScrollOffsetSamples(), since it has no idea the clip
+            // (and thus the timeline) has grown.
+            m_contentExtentSamples = std::max(m_contentExtentSamples, sample);
+            constexpr double kRightMarginFraction = 0.05; // keep playhead 5% in from the edge
+            int64_t margin = static_cast<int64_t>(effectiveTimelineLength() * kRightMarginFraction);
+            setScrollOffsetSamples(sample - effectiveTimelineLength() + margin);
+        }
+    }
+
     update();
 }
 
@@ -296,24 +318,45 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
         int64_t srcStart = clip->sourceOffsetSamples;
         int64_t srcLen = clip->lengthSamples;
         if (srcLen > 0 && clip->buffer->frameCount() > 0) {
-            AudioBuffer sub;
-            sub.channels = clip->buffer->channels;
-            sub.sampleRate = clip->buffer->sampleRate;
             int64_t clampedLen =
                 std::min(srcLen, clip->buffer->frameCount() - std::max<int64_t>(0, srcStart));
             if (clampedLen > 0) {
-                sub.samples.assign(
-                    clip->buffer->samples.begin() + srcStart * sub.channels,
-                    clip->buffer->samples.begin() + (srcStart + clampedLen) * sub.channels);
-
                 auto drawChannel = [&](int channel, int centerY, float halfH) {
-                    auto peaks = WaveformCache::computePeaks(sub, w, channel);
+                    // Peaks only depend on (buffer identity, trimmed range,
+                    // pixel width, channel) — while the playhead moves or
+                    // the lane scrolls, none of that changes for a finished
+                    // clip, so cache the result instead of rescanning
+                    // potentially millions of samples on every ~33ms
+                    // playhead-driven repaint (confirmed hotspot with many
+                    // tracks). A still-growing live-recording clip gets a
+                    // new clampedLen each tick, so it naturally bypasses the
+                    // cache and stays live.
+                    auto key = std::make_tuple(static_cast<const void*>(clip->buffer.get()),
+                                                srcStart, clampedLen, w, channel);
+                    QVector<WaveformCache::PeakPair> peaks;
+                    auto cacheIt = m_peakCache.find(key);
+                    if (cacheIt != m_peakCache.end()) {
+                        peaks = cacheIt->second;
+                    } else {
+                        AudioBuffer sub;
+                        sub.channels = clip->buffer->channels;
+                        sub.sampleRate = clip->buffer->sampleRate;
+                        sub.samples.assign(
+                            clip->buffer->samples.begin() + srcStart * sub.channels,
+                            clip->buffer->samples.begin() + (srcStart + clampedLen) * sub.channels);
+                        peaks = WaveformCache::computePeaks(sub, w, channel);
+                        if (m_peakCache.size() > 5000) m_peakCache.clear(); // bound unbounded growth
+                        m_peakCache[key] = peaks;
+                    }
                     // Gain scales the drawn waveform directly (can visually
                     // clip against the lane bounds above unity, same as
                     // Pro Tools/Audacity's clip-gain line) so the handle
                     // gives immediate visual feedback while dragging.
                     float displayScale = computeWaveformDisplayScale(peaks) * clip->gain;
-                    painter.setPen(QColor(90, 170, 230));
+                    // Distinct red vs the normal blue while still recording
+                    // (see Clip::isLiveRecording), so it reads unambiguously
+                    // as in-progress rather than a finished clip.
+                    painter.setPen(clip->isLiveRecording ? QColor(230, 90, 90) : QColor(90, 170, 230));
                     for (int i = 0; i < peaks.size(); ++i) {
                         auto [minV, maxV] = peaks[i];
                         int yTop = centerY - static_cast<int>(maxV * displayScale * halfH);
@@ -322,7 +365,7 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
                     }
                 };
 
-                if (sub.channels >= 2) {
+                if (clip->buffer->channels >= 2) {
                     // Stereo: split the lane into a top (L) and bottom (R)
                     // half instead of averaging channels into one trace.
                     int quarterH = height() / 4;
@@ -465,6 +508,7 @@ void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
     // instant the drag started, before the mouse even moved.
     m_dragTotalSamples = resolveDragLockSamples(m_sharedTimelineLength, timelineLengthSamples());
     m_dragScrollOffsetSamples = effectiveScrollOffset();
+    m_dragInitialScrollOffsetSamples = m_dragScrollOffsetSamples;
 
     bool nearTopBand = event->pos().y() <= 4 + kFadeHandleBandPx;
     if (nearTopBand && std::abs(event->pos().x() - x0) <= kEdgeThresholdPx) {
@@ -532,8 +576,22 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
 
     int64_t total = m_dragTotalSamples;
     if (total <= 0 || width() <= 0) return;
+
+    // Edge-pan while moving a clip: nudge the drag's frozen scroll offset
+    // forward each move event the cursor spends within kEdgePanThresholdPx
+    // of the right edge, revealing more space to drop into. Pans at a fixed
+    // zoom (never touches m_dragTotalSamples), so existing on-screen clips
+    // never rescale — only the visible window slides right.
+    if (m_dragMode == DragMode::Move) {
+        constexpr int kEdgePanThresholdPx = 30;
+        if (event->pos().x() > width() - kEdgePanThresholdPx) {
+            m_dragScrollOffsetSamples += total / 40;
+        }
+    }
+    int64_t pannedSoFar = m_dragScrollOffsetSamples - m_dragInitialScrollOffsetSamples;
     int64_t deltaSamples =
-        static_cast<int64_t>((event->pos().x() - m_dragStartX) / static_cast<double>(width()) * total);
+        static_cast<int64_t>((event->pos().x() - m_dragStartX) / static_cast<double>(width()) * total) +
+        pannedSoFar;
 
     auto clips = m_track->clipsSnapshot();
     std::shared_ptr<Clip> original;
@@ -545,12 +603,14 @@ void ClipLaneWidget::mouseMoveEvent(QMouseEvent* event) {
     auto edited = std::make_shared<Clip>(*original);
 
     if (m_dragMode == DragMode::Move) {
-        // Clamp within [0, total - length] so the clip can never be dragged
-        // past the scale that was frozen for this gesture — otherwise
-        // releasing the mouse would force a rescale (the timeline "widening")
-        // right as the clip settles.
-        int64_t maxStart = std::max<int64_t>(0, m_dragTotalSamples - m_dragOrigLength);
-        int64_t newStart = std::clamp<int64_t>(m_dragOrigStart + deltaSamples, 0, maxStart);
+        // Only a floor at 0 matters now — the old upper clamp
+        // (m_dragTotalSamples - length) wrongly treated the frozen visible
+        // window's span as an absolute session-wide position ceiling, which
+        // blocked dragging a clip further right than whatever was visible
+        // when the drag started. The track's content extent naturally grows
+        // to include wherever the clip ends up once dropped, same as it
+        // already does for any clip placed near the existing edge.
+        int64_t newStart = std::max<int64_t>(0, m_dragOrigStart + deltaSamples);
         edited->sessionStartSample = newStart;
     } else if (m_dragMode == DragMode::TrimStart) {
         int64_t maxTrim = m_dragOrigLength - 1; // keep at least 1 sample
@@ -597,6 +657,18 @@ void ClipLaneWidget::mouseReleaseEvent(QMouseEvent* event) {
 
     if (m_dragMode == DragMode::Move) {
         emit clipDropped(m_dragClipId, event->globalPosition().toPoint());
+        // Persist any edge-pan from this drag, otherwise effectiveScrollOffset()
+        // would snap back to the pre-drag position the instant m_dragMode
+        // clears below, making the just-dropped clip appear to vanish off
+        // the right edge.
+        if (m_dragScrollOffsetSamples != m_dragInitialScrollOffsetSamples) {
+            // The moved clip may now sit past what m_contentExtentSamples
+            // (only refreshed by MainWindow at specific action points, not
+            // after every plain in-lane drag) currently accounts for — grow
+            // it locally first so the offset below isn't clamped back down.
+            m_contentExtentSamples = std::max(m_contentExtentSamples, timelineLengthSamples());
+            setScrollOffsetSamples(m_dragScrollOffsetSamples);
+        }
     }
     m_dragMode = DragMode::None;
     m_scrubbingPlayhead = false;
