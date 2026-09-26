@@ -38,7 +38,9 @@ add_executable(recording_studio
     src/ui/SettingsDialog.cpp
     src/ui/ShortcutManager.cpp
     src/ui/ShortcutSettingsTab.cpp
-    src/ui/MediaLibraryPanel.cpp
+    src/ui/MediaBrowserPanel.cpp
+    src/ui/LibraryItemDelegate.cpp
+    src/model/LibraryFolder.cpp
     src/ui/EffectsPopoverWidget.cpp
     src/ui/PianoKeyboardWidget.cpp
     src/ui/DrumPadWidget.cpp
@@ -48,7 +50,6 @@ add_executable(recording_studio
     src/ui/PianoRollGridWidget.cpp
     src/ui/PianoRollPanel.cpp
     src/ui/AutomationLaneWidget.cpp
-    src/ui/LoopBrowserPanel.cpp
     src/ui/ExportDialog.cpp
     src/ui/MixerStripWidget.cpp
     src/ui/MixerPanel.cpp

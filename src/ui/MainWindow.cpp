@@ -318,12 +318,14 @@ MainWindow::MainWindow(QWidget* parent)
 
     setCentralWidget(central);
 
-    auto* mediaDock = new QDockWidget("Media Library", this);
-    m_mediaLibrary = new MediaLibraryPanel(mediaDock);
-    connect(m_mediaLibrary, &MediaLibraryPanel::fileLoadFailed, this, [this](const QString& path) {
+    auto* mediaDock = new QDockWidget("Media Browser", this);
+    m_mediaBrowser = new MediaBrowserPanel(mediaDock);
+    connect(m_mediaBrowser, &MediaBrowserPanel::fileLoadFailed, this, [this](const QString& path) {
         QMessageBox::warning(this, "Import Failed", "Could not load: " + path);
     });
-    mediaDock->setWidget(m_mediaLibrary);
+    connect(m_mediaBrowser, &MediaBrowserPanel::previewRequested, this,
+            &MainWindow::onMediaBrowserPreviewRequested);
+    mediaDock->setWidget(m_mediaBrowser);
     addDockWidget(Qt::RightDockWidgetArea, mediaDock);
 
     m_effectsPopover = new EffectsPopoverWidget(this);
@@ -362,16 +364,6 @@ MainWindow::MainWindow(QWidget* parent)
     addDockWidget(Qt::RightDockWidgetArea, m_pianoRollDock);
     tabifyDockWidget(mediaDock, m_pianoRollDock);
 
-    auto* loopBrowserDock = new QDockWidget("Loop Browser", this);
-    m_loopBrowser = new LoopBrowserPanel(loopBrowserDock);
-    connect(m_loopBrowser, &LoopBrowserPanel::previewRequested, this,
-            &MainWindow::onLoopPreviewRequested);
-    connect(m_mediaLibrary, &MediaLibraryPanel::previewRequested, this,
-            &MainWindow::onMediaPreviewRequested);
-    loopBrowserDock->setWidget(m_loopBrowser);
-    addDockWidget(Qt::RightDockWidgetArea, loopBrowserDock);
-    tabifyDockWidget(mediaDock, loopBrowserDock);
-
     auto* mixerDock = new QDockWidget("Mixer", this);
     m_mixer = new MixerPanel(mixerDock);
     m_mixer->setCommandStack(&m_commandStack);
@@ -390,7 +382,6 @@ MainWindow::MainWindow(QWidget* parent)
     viewMenu->addAction(mediaDock->toggleViewAction());
     viewMenu->addAction(m_instrumentDock->toggleViewAction());
     viewMenu->addAction(m_pianoRollDock->toggleViewAction());
-    viewMenu->addAction(loopBrowserDock->toggleViewAction());
     viewMenu->addAction(mixerDock->toggleViewAction());
 
     auto* helpMenu = menuBar()->addMenu("&Help");
@@ -1114,7 +1105,7 @@ void MainWindow::onSaveToLoopBrowserRequested(std::shared_ptr<Track> track) {
         return;
     }
 
-    QString folder = m_loopBrowser->folderPath();
+    QString folder = m_mediaBrowser->loopFolderPath();
     if (folder.isEmpty()) {
         QMessageBox::warning(this, "No Loop Browser Folder",
                               "Choose a folder in the Loop Browser panel first.");
@@ -1136,7 +1127,7 @@ void MainWindow::onSaveToLoopBrowserRequested(std::shared_ptr<Track> track) {
         return;
     }
 
-    m_loopBrowser->refresh();
+    m_mediaBrowser->refreshLoops();
     QMessageBox::information(this, "Saved", "Saved to Loop Browser: " + path);
 }
 
@@ -1152,6 +1143,7 @@ void MainWindow::onSaveSessionClicked() {
     }
 
     QVector<LibraryEntry> libraryEntries = m_mediaBrowser->projectMediaEntries();
+    m_session->libraryFolders = m_mediaBrowser->folders();
 
     if (!SessionIO::saveSession(path, *m_session, libraryEntries)) {
         QMessageBox::warning(this, "Save Failed", "Could not save session to: " + path);
@@ -1224,10 +1216,11 @@ bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessag
     m_masterWaveform->setSampleRate(m_session->sampleRate);
     m_timeline->setSampleRate(m_session->sampleRate);
 
-    m_mediaLibrary->resetLibrary();
+    m_mediaBrowser->resetLibrary();
     for (auto& entry : libraryEntries) {
-        m_mediaLibrary->addEntry(entry.first, entry.second);
+        m_mediaBrowser->addProjectMediaEntry(entry.name, entry.buffer, entry.itemId);
     }
+    m_mediaBrowser->restoreFolders(m_session->libraryFolders);
 
     m_currentSessionPath = path;
     rebuildTimelineFromSession();
@@ -1252,7 +1245,7 @@ void MainWindow::onCloseSessionClicked() {
     updateUndoRedoButtons();
     m_trackCounter = 0;
     m_busCounter = 0;
-    m_mediaLibrary->resetLibrary();
+    m_mediaBrowser->resetLibrary();
     m_currentSessionPath.clear();
 
     rebuildTimelineFromSession();
@@ -1361,12 +1354,12 @@ void MainWindow::onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t 
     }
     if (!targetTrack) return;
 
-    auto buffer = m_mediaLibrary->bufferAt(libraryIndex);
+    auto buffer = m_mediaBrowser->bufferAt(libraryIndex);
     if (!buffer) return;
 
     auto clip = std::make_shared<Clip>();
     clip->buffer = buffer;
-    clip->name = m_mediaLibrary->nameAt(libraryIndex);
+    clip->name = m_mediaBrowser->nameAt(libraryIndex);
     clip->sessionStartSample = std::max<int64_t>(0, sessionStartSample);
     clip->sourceOffsetSamples = 0;
     clip->lengthSamples = buffer->frameCount();
@@ -1394,7 +1387,7 @@ void MainWindow::onExternalFileDroppedOnTrack(QUuid trackId, QString filePath,
         return;
     }
     QString name = QFileInfo(filePath).fileName();
-    m_mediaLibrary->addEntry(name, buffer);
+    m_mediaBrowser->addProjectMediaEntry(name, buffer);
 
     auto clip = std::make_shared<Clip>();
     clip->buffer = buffer;
@@ -1412,26 +1405,18 @@ void MainWindow::onExternalFileDroppedOnTrack(QUuid trackId, QString filePath,
     updateUndoRedoButtons();
 }
 
-void MainWindow::onLoopPreviewRequested(QString filePath) {
-    if (filePath.isEmpty()) {
+void MainWindow::onMediaBrowserPreviewRequested(LibraryItem item) {
+    if (!item.isValid()) {
         m_engine->stopPreview();
         return;
     }
-    auto buffer = AudioFileIO::loadFile(filePath);
-    if (!buffer) {
-        QMessageBox::warning(this, "Preview Failed", "Could not load: " + filePath);
-        return;
-    }
-    m_engine->previewSample(buffer);
-}
 
-void MainWindow::onMediaPreviewRequested(int index) {
-    if (index < 0) {
-        m_engine->stopPreview();
+    auto buffer = item.buffer;
+    if (!buffer && item.source == LibrarySource::Loop) buffer = AudioFileIO::loadFile(item.path);
+    if (!buffer) {
+        QMessageBox::warning(this, "Preview Failed", "Could not load: " + item.path);
         return;
     }
-    auto buffer = m_mediaLibrary->bufferAt(index);
-    if (!buffer) return;
     m_engine->previewSample(buffer);
 }
 
@@ -1520,7 +1505,7 @@ void MainWindow::refreshMasterAndScale(bool recaptureZoomBaseline) {
     // the full widget width instead of sharing this scale).
     m_masterWaveform->setTimelineLength(total);
     m_masterWaveform->setBuffer(renderSessionToBuffer());
-    m_mediaLibrary->refresh(*m_session);
+    m_mediaBrowser->refresh(*m_session);
 }
 
 int64_t MainWindow::sessionContentEndSamples() const {

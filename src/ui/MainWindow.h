@@ -25,11 +25,10 @@
 #include "ui/SettingsDialog.h"
 #include "ui/ShortcutManager.h"
 #include "ui/WaveformWidget.h"
-#include "ui/MediaLibraryPanel.h"
+#include "ui/MediaBrowserPanel.h"
 #include "ui/EffectsPopoverWidget.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/PianoRollPanel.h"
-#include "ui/LoopBrowserPanel.h"
 #include "ui/ExportDialog.h"
 #include "ui/MixerPanel.h"
 
@@ -81,8 +80,7 @@ private slots:
     void onClipMovedToTrack(QUuid clipId, QUuid sourceTrackId, QUuid destTrackId);
     void onMediaDroppedOnTrack(QUuid trackId, int libraryIndex, int64_t sessionStartSample);
     void onExternalFileDroppedOnTrack(QUuid trackId, QString filePath, int64_t sessionStartSample);
-    void onLoopPreviewRequested(QString filePath);
-    void onMediaPreviewRequested(int index);
+    void onMediaBrowserPreviewRequested(LibraryItem item);
     void onSaveToLoopBrowserRequested(std::shared_ptr<Track> track);
     void onUndoClicked();
     void onRedoClicked();
@@ -181,12 +179,11 @@ private:
     QDoubleSpinBox* m_bpmSpin = nullptr;
     QCheckBox* m_metronomeCheckBox = nullptr;
     WaveformWidget* m_masterWaveform = nullptr;
-    MediaLibraryPanel* m_mediaLibrary = nullptr;
+    MediaBrowserPanel* m_mediaBrowser = nullptr;
     EffectsPopoverWidget* m_effectsPopover = nullptr;
     InstrumentPanel* m_instrumentPanel = nullptr;
     QDockWidget* m_instrumentDock = nullptr;
     PianoRollPanel* m_pianoRollPanel = nullptr;
-    LoopBrowserPanel* m_loopBrowser = nullptr;
     MixerPanel* m_mixer = nullptr;
     QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;

@@ -22,7 +22,7 @@
 #include "model/EditClipboard.h"
 #include "ui/ClipEditMath.h"
 #include "ui/ClipLaneScrollMath.h"
-#include "ui/MediaLibraryPanel.h"
+#include "ui/MediaBrowserPanel.h"
 #include "ui/MidiNoteDisplayMath.h"
 #include "ui/TimelineScaleMath.h"
 #include "ui/TimelineTicks.h"
@@ -816,11 +816,11 @@ void ClipLaneWidget::keyPressEvent(QKeyEvent* event) {
 }
 
 void ClipLaneWidget::dragEnterEvent(QDragEnterEvent* event) {
-    // Two sources: an existing MediaLibraryPanel entry (by index), or a
+    // Two sources: an existing MediaBrowserPanel entry (by index), or a
     // plain file drop — either straight from a file manager, or from the
     // loop browser (which sets standard QUrl mime data, indistinguishable
     // from an OS drag, so it needs no special-cased MIME type of its own).
-    if (event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType) || event->mimeData()->hasUrls()) {
+    if (event->mimeData()->hasFormat(MediaBrowserPanel::kMimeType) || event->mimeData()->hasUrls()) {
         event->acceptProposedAction();
     }
 }
@@ -828,9 +828,9 @@ void ClipLaneWidget::dragEnterEvent(QDragEnterEvent* event) {
 void ClipLaneWidget::dropEvent(QDropEvent* event) {
     int64_t sample = xToSample(event->position().toPoint().x());
 
-    if (event->mimeData()->hasFormat(MediaLibraryPanel::kMimeType)) {
+    if (event->mimeData()->hasFormat(MediaBrowserPanel::kMimeType)) {
         bool ok = false;
-        int libraryIndex = event->mimeData()->data(MediaLibraryPanel::kMimeType).toInt(&ok);
+        int libraryIndex = event->mimeData()->data(MediaBrowserPanel::kMimeType).toInt(&ok);
         if (!ok) return;
         emit mediaDropped(libraryIndex, sample);
         event->acceptProposedAction();
