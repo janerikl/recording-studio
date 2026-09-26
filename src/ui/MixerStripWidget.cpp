@@ -2,6 +2,7 @@
 
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include "ui/TrackEffectsLabel.h"
@@ -148,6 +149,7 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
             m_commandStack->push(std::make_unique<TrackStateCommand>(
                 m_track, before, TrackState::capture(*m_track), "Solo Track"));
         }
+        emit soloToggled(m_track, checked);
     });
     layout->addWidget(m_soloBox);
 
@@ -185,6 +187,12 @@ MixerStripWidget::MixerStripWidget(std::shared_ptr<Track> track, QWidget* parent
         });
         layout->addWidget(m_sendLevelSlider);
     }
+}
+
+void MixerStripWidget::setSoloChecked(bool checked) {
+    QSignalBlocker blocker(m_soloBox);
+    m_soloBox->setChecked(checked);
+    m_track->soloed.store(checked, std::memory_order_relaxed);
 }
 
 void MixerStripWidget::updateMeter() {

@@ -47,6 +47,9 @@ signals:
     void masterEffectsPanelRequested(QRect globalAnchorRect);
 
 private:
+    // Un-solos every other strip so at most one track is soloed at a time.
+    void handleSoloToggled(std::shared_ptr<Track> track, bool checked);
+
     QHBoxLayout* m_stripsLayout = nullptr;
     std::map<QString, MixerStripWidget*> m_strips; // keyed by track id string
     CommandStack* m_commandStack = nullptr;

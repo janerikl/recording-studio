@@ -45,12 +45,17 @@ public:
     // Call periodically from the same timer that drives the transport
     // toolbar's global meters.
     void updateMeter();
+    // Sets the solo checkbox state without emitting soloToggled or pushing
+    // an undo command. Used by MixerPanel to un-solo other strips when one
+    // strip is soloed (solo is exclusive: only one track at a time).
+    void setSoloChecked(bool checked);
 
 signals:
     void selected(std::shared_ptr<Track> track);
     // globalAnchorRect is the FX button's geometry in global screen
     // coordinates, for positioning the effects popover next to it.
     void effectsPanelRequested(std::shared_ptr<Track> track, QRect globalAnchorRect);
+    void soloToggled(std::shared_ptr<Track> track, bool checked);
 
 private:
     std::shared_ptr<Track> m_track;

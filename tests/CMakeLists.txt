@@ -289,6 +289,14 @@ target_include_directories(library_folder_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(library_folder_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME LibraryFolderTests COMMAND library_folder_tests)
 
+add_executable(solo_exclusivity_math_tests
+    test_SoloExclusivityMath.cpp
+    ${CMAKE_SOURCE_DIR}/src/ui/SoloExclusivityMath.cpp
+)
+target_include_directories(solo_exclusivity_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(solo_exclusivity_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME SoloExclusivityMathTests COMMAND solo_exclusivity_math_tests)
+
 add_executable(library_filter_math_tests
     test_LibraryFilterMath.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/LibraryFilterMath.cpp

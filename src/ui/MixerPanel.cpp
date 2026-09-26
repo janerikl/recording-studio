@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 
 #include "ui/MixerStripWidget.h"
+#include "ui/SoloExclusivityMath.h"
 
 namespace rsd {
 
@@ -81,11 +82,26 @@ void MixerPanel::addTrack(std::shared_ptr<Track> track) {
     strip->setCommandStack(m_commandStack);
     connect(strip, &MixerStripWidget::selected, this, &MixerPanel::trackSelected);
     connect(strip, &MixerStripWidget::effectsPanelRequested, this, &MixerPanel::effectsPanelRequested);
+    connect(strip, &MixerStripWidget::soloToggled, this, &MixerPanel::handleSoloToggled);
 
     m_stripsLayout->insertWidget(m_stripsLayout->count() - 1, strip);
     m_strips[track->id.toString()] = strip;
 
     refreshSendBusOptions();
+}
+
+void MixerPanel::handleSoloToggled(std::shared_ptr<Track> track, bool checked) {
+    if (!checked) return;
+
+    QVector<QString> soloedIds;
+    for (auto& [id, strip] : m_strips) {
+        if (strip->track()->soloed.load()) soloedIds.push_back(id);
+    }
+
+    for (const auto& id : tracksToUnsolo(soloedIds, track->id.toString())) {
+        auto it = m_strips.find(id);
+        if (it != m_strips.end()) it->second->setSoloChecked(false);
+    }
 }
 
 void MixerPanel::removeTrack(const QUuid& trackId) {
