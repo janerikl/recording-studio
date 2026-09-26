@@ -1372,6 +1372,28 @@ Verification plan (approved):
       playhead jumps there; type garbage and press Enter, confirm it's
       ignored; press Escape mid-edit, confirm no seek happens.
 
+## Completed: "New" in the File menu
+
+Goal: standard File > New entry, since the menu had no obvious way to
+start a blank session — "Close Session" already did exactly that (reset
+to one blank track) but wasn't discoverable/positioned like a typical
+New command and had no shortcut.
+
+Design (approved): added `newSessionAction` (Ctrl+N, standard position at
+the top of the File menu) wired to the existing `onCloseSessionClicked` —
+same confirmation dialog and reset logic, no new behavior. "Close
+Session" kept as-is (still useful lower in the menu with its explicit
+name/icon).
+
+Verification plan (approved): no new automated test (pure UI wiring, no
+new logic — matches this codebase's precedent for pure menu/relocation
+changes). Smoke-tested: app builds and launches cleanly (ran the full
+timeout under a real X display, no crash/error output beyond the
+pre-existing ALSA probe warning), full suite (51/51 binaries) still
+passes.
+- [ ] Full manual (not done from this session): click File > New (and
+      Ctrl+N), confirm the same dialog/reset behavior as Close Session.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.

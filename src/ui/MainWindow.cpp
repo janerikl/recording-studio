@@ -105,6 +105,10 @@ MainWindow::MainWindow(QWidget* parent)
     m_zoomResetAction = new QAction(QIcon::fromTheme("zoom-original-symbolic"), "Reset Zoom", this);
     m_zoomResetAction->setToolTip("Reset Zoom");
 
+    auto* newSessionAction =
+        new QAction(QIcon::fromTheme("document-new-symbolic"), "New", this);
+    newSessionAction->setShortcut(QKeySequence::New); // Ctrl+N
+    m_shortcutManager.registerAction("newSession", "New Session", newSessionAction);
     auto* importAction =
         new QAction(QIcon::fromTheme("document-open-symbolic"), "Import...", this);
     auto* exportAction =
@@ -156,6 +160,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(saveSessionAction, &QAction::triggered, this, &MainWindow::onSaveSessionClicked);
     connect(loadSessionAction, &QAction::triggered, this, &MainWindow::onLoadSessionClicked);
     connect(closeSessionAction, &QAction::triggered, this, &MainWindow::onCloseSessionClicked);
+    // "New" is the standard-position alias for the same reset-to-blank-session
+    // behavior Close Session already provides — no separate logic needed.
+    connect(newSessionAction, &QAction::triggered, this, &MainWindow::onCloseSessionClicked);
     connect(m_undoAction, &QAction::triggered, this, &MainWindow::onUndoClicked);
     connect(m_redoAction, &QAction::triggered, this, &MainWindow::onRedoClicked);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::onSettingsClicked);
@@ -173,6 +180,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     // --- Menus ---
     auto* fileMenu = menuBar()->addMenu("&File");
+    fileMenu->addAction(newSessionAction);
+    fileMenu->addSeparator();
     fileMenu->addAction(importAction);
     fileMenu->addAction(exportAction);
     fileMenu->addSeparator();
