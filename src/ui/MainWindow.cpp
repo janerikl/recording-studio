@@ -401,6 +401,13 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_meterTimer, &QTimer::timeout, this, &MainWindow::updateMeters);
     m_meterTimer->start(); // always running, so input signal is visible before Record
 
+    m_autoSaveTimer = new QTimer(this);
+    m_autoSaveTimer->setSingleShot(true);
+    m_autoSaveTimer->setInterval(1500);
+    connect(m_autoSaveTimer, &QTimer::timeout, this, &MainWindow::onAutoSaveTimeout);
+    m_commandStack.setOnChange([this]() { requestAutoSave(); });
+    connect(m_mediaBrowser, &MediaBrowserPanel::libraryChanged, this, &MainWindow::requestAutoSave);
+
     // Ctrl+wheel zoom over the ruler, master strip, or track lanes.
     m_ruler->installEventFilter(this);
     m_masterWaveform->installEventFilter(this);
@@ -785,6 +792,7 @@ void MainWindow::onPlayFromStartClicked() {
 
 void MainWindow::onSetMarker(int slot) {
     m_session->markers[slot] = m_engine->transport().positionSamples();
+    m_session->dirty = true;
     m_ruler->setMarkers(m_session->markers);
 }
 
@@ -1151,8 +1159,29 @@ void MainWindow::onSaveSessionClicked() {
     }
 
     m_currentSessionPath = path;
+    m_session->dirty = false;
     addToRecentSessions(path);
     m_statusLabel->setText("Saved to: " + path);
+}
+
+void MainWindow::requestAutoSave() {
+    m_session->dirty = true;
+    if (m_currentSessionPath.isEmpty()) return; // no manual save yet; stay inactive
+    m_autoSaveTimer->start(); // restart the debounce window on every change
+}
+
+void MainWindow::onAutoSaveTimeout() {
+    if (!m_session->dirty || m_currentSessionPath.isEmpty()) return;
+
+    QVector<LibraryEntry> libraryEntries = m_mediaBrowser->projectMediaEntries();
+    m_session->libraryFolders = m_mediaBrowser->folders();
+
+    if (SessionIO::saveSession(m_currentSessionPath, *m_session, libraryEntries)) {
+        m_session->dirty = false;
+    }
+    // Silent on failure too: auto-save must never interrupt the user with a
+    // dialog; the next manual Ctrl+S (or the next successful auto-save) will
+    // surface/retry it.
 }
 
 void MainWindow::onSettingsClicked() {
@@ -1223,6 +1252,8 @@ bool MainWindow::loadSessionFromPath(const QString& path, bool showSuccessMessag
     m_mediaBrowser->restoreFolders(m_session->libraryFolders);
 
     m_currentSessionPath = path;
+    m_autoSaveTimer->stop();
+    m_session->dirty = false;
     rebuildTimelineFromSession();
     addToRecentSessions(path);
     if (showSuccessMessage) QMessageBox::information(this, "Session Loaded", "Loaded: " + path);
@@ -1247,6 +1278,8 @@ void MainWindow::onCloseSessionClicked() {
     m_busCounter = 0;
     m_mediaBrowser->resetLibrary();
     m_currentSessionPath.clear();
+    m_autoSaveTimer->stop();
+    m_session->dirty = false;
 
     rebuildTimelineFromSession();
     onAddTrackClicked(); // start fresh with one blank track, matching app startup

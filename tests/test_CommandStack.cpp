@@ -102,6 +102,59 @@ private slots:
         QVERIFY(!stack.canUndo());
         QVERIFY(!stack.canRedo());
     }
+
+    void pushInvokesOnChange() {
+        int counter = 0;
+        int changeCount = 0;
+        CommandStack stack;
+        stack.setOnChange([&changeCount]() { ++changeCount; });
+        stack.push(std::make_unique<IncrementCommand>(counter));
+        QCOMPARE(changeCount, 1);
+    }
+
+    void undoInvokesOnChange() {
+        int counter = 0;
+        int changeCount = 0;
+        CommandStack stack;
+        stack.push(std::make_unique<IncrementCommand>(counter));
+        stack.setOnChange([&changeCount]() { ++changeCount; });
+        stack.undo();
+        QCOMPARE(changeCount, 1);
+    }
+
+    void redoInvokesOnChange() {
+        int counter = 0;
+        int changeCount = 0;
+        CommandStack stack;
+        stack.push(std::make_unique<IncrementCommand>(counter));
+        stack.undo();
+        stack.setOnChange([&changeCount]() { ++changeCount; });
+        stack.redo();
+        QCOMPARE(changeCount, 1);
+    }
+
+    void undoOnEmptyStackDoesNotInvokeOnChange() {
+        int changeCount = 0;
+        CommandStack stack;
+        stack.setOnChange([&changeCount]() { ++changeCount; });
+        stack.undo();
+        QCOMPARE(changeCount, 0);
+    }
+
+    void redoOnEmptyStackDoesNotInvokeOnChange() {
+        int changeCount = 0;
+        CommandStack stack;
+        stack.setOnChange([&changeCount]() { ++changeCount; });
+        stack.redo();
+        QCOMPARE(changeCount, 0);
+    }
+
+    void noOnChangeSetIsSafe() {
+        int counter = 0;
+        CommandStack stack;
+        stack.push(std::make_unique<IncrementCommand>(counter)); // must not crash
+        QCOMPARE(counter, 1);
+    }
 };
 
 QTEST_APPLESS_MAIN(TestCommandStack)

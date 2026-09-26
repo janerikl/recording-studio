@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -24,9 +25,15 @@ public:
 
     void clear();
 
+    // Invoked whenever push/undo/redo actually mutates session state (never
+    // on a no-op empty-stack undo/redo). MainWindow uses this to mark the
+    // session dirty for auto-save without CommandStack knowing about Session.
+    void setOnChange(std::function<void()> onChange) { m_onChange = std::move(onChange); }
+
 private:
     std::vector<std::unique_ptr<Command>> m_undoStack;
     std::vector<std::unique_ptr<Command>> m_redoStack;
+    std::function<void()> m_onChange;
     static constexpr size_t kMaxDepth = 50;
 };
 

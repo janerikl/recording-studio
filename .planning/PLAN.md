@@ -116,19 +116,77 @@ show the full unfiltered list.
       the fix; still needs a post-fix manual pass.)
 
 ## Feature: rename/remove via right-click context menu
-Applies to both library items (loops/project media) and virtual folders.
-Remove only detaches the reference (LibraryFolderTree::removeFolder for
-folders, vector erase for items) — never deletes the file on disk.
+Applies to both library items (Project Media clips AND Loop-tab items) and
+virtual folders, per explicit user confirmation. Remove only detaches the
+reference — never deletes the file on disk. Loop items are a live
+filesystem listing (not persisted in the session); their rename/remove is
+in-memory only and reverts on the next rescan (Choose Folder or
+refreshLoops()) — an accepted, known limitation, not a bug.
 
-- [ ] Write failing tests: `LibraryFolder::renameFolder(QUuid, QString)` in
-      tests/test_LibraryFolder.cpp; MediaBrowserPanel context-menu behavior
-      (rename mutates name, remove erases from m_projectItems/tree/folder).
-- [ ] Implement `renameFolder()` in src/model/LibraryFolder.h/.cpp.
-- [ ] Implement `BrowserTreeWidget::contextMenuEvent()` in
-      MediaBrowserPanel.cpp (pattern from ClipLaneWidget.cpp:604), checking
-      `kFolderRole`/`kItemIdRole` to show Rename/Remove for the right target
-      type; rename via inline edit or QInputDialog, remove via
-      `m_folders.removeFolder(id)` or vector erase + `rebuildTree()`.
+- [x] Write failing tests: `LibraryFolder::renameFolder(QUuid, QString)` in
+      tests/test_LibraryFolder.cpp; new pure-function tests in
+      tests/test_LibraryItemOps.cpp for `renameLibraryItemById`/
+      `removeLibraryItemById` (extracted for testability, same pattern as
+      LibraryFilterMath rather than testing the QWidget directly).
+- [x] Implement `renameFolder()` in src/model/LibraryFolder.h/.cpp.
+- [x] Implement new src/ui/LibraryItemOps.h/.cpp:
+      `renameLibraryItemById`/`removeLibraryItemById`, pure functions over
+      `QVector<LibraryItem>` keyed by `LibraryItem::id()`.
+- [x] Implement `BrowserTreeWidget::contextMenuEvent()` in
+      MediaBrowserPanel.cpp (pattern from ClipLaneWidget.cpp:604) → new
+      public `MediaBrowserPanel::showContextMenu(item, globalPos)` (public,
+      not private, so the nested BrowserTreeWidget can call it — same
+      access pattern as the existing `mimeDataForItem`). Checks
+      `kFolderRole`/`kItemIdRole` to show Rename/Remove for the right
+      target; rename via QInputDialog::getText, remove via
+      `removeLibraryItemById` + `m_folders.moveItem(id, nullptr)` to unfile
+      + peak-cache eviction + stops preview if the removed item was
+      playing. Folder rename/remove reuse `LibraryFolderTree`'s existing
+      methods. Full build clean, all 49 tests pass (was 48; added
+      LibraryFolderTests::renameFolder_* and LibraryItemOpsTests).
 - [ ] Manual verification: right-click an item and a folder, rename each,
       remove each, confirm files on disk untouched; save + reload session,
-      confirm renames/removals persisted.
+      confirm Project Media renames/removals persisted (Loop ones won't,
+      by design — confirm they revert on rescan as expected).
+
+# Auto-save session on every edit
+
+## Goal
+Never lose unsaved work. Debounced auto-save of the current session file
+whenever session state changes (tracks, clips, library folders, effects,
+automation, markers), so the user never has to remember Ctrl+S. Scope:
+session state only (not destructive audio edits). Autosave stays inactive
+until the user does one manual Ctrl+S to establish a file path; after that
+it silently keeps the same file up to date.
+
+## Steps
+- [x] Investigated mutation paths: found a central `CommandStack`
+      (src/command/CommandStack.h) that ~95% of session mutations already
+      flow through (tracks, clips, effects, automation, mixer state). Chose
+      to hook dirty-tracking there instead of every individual call site.
+      Remaining gaps handled directly: MediaBrowserPanel library
+      rename/remove (bypasses CommandStack) and MainWindow::onSetMarker.
+- [x] Wrote failing tests in tests/test_CommandStack.cpp for a new
+      `CommandStack::setOnChange(std::function<void()>)` callback (fires on
+      push/undo/redo that actually mutate, not on empty-stack no-ops).
+- [x] Implemented `setOnChange` in src/command/CommandStack.h/.cpp. Tests
+      pass.
+- [x] Added `MediaBrowserPanel::libraryChanged()` signal, emitted from
+      renameFolder/removeFolder/renameItem/removeItem (the four mutations
+      that bypass CommandStack).
+- [x] Added `dirty = true` at the one remaining gap, MainWindow::onSetMarker.
+- [x] Added debounced auto-save in MainWindow: single-shot QTimer
+      (m_autoSaveTimer, 1.5s), restarted via `requestAutoSave()` — wired to
+      CommandStack::setOnChange and MediaBrowserPanel::libraryChanged.
+      Inactive until m_currentSessionPath is set (i.e. until one manual
+      Ctrl+S); onAutoSaveTimeout() silently calls SessionIO::saveSession()
+      and clears dirty on success, no dialogs on failure. Timer
+      stopped/dirty cleared on session load and Close Session so state
+      from a previous session can't leak into a fresh one.
+      Full build clean, all 49 tests pass (was 48 before the new
+      CommandStackTests; note total count is unchanged because
+      CommandStackTests already existed — 6 new cases added to it).
+- [ ] Manual verification via GUI (no automation harness in this repo):
+      edit a session, wait ~2s without Ctrl+S, confirm the file on disk
+      updated (mtime/diff) with no prompt/block; force-quit after an
+      unsaved edit and relaunch, confirm the change survived.

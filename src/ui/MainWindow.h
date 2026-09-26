@@ -92,8 +92,13 @@ private slots:
     void onZoomResetClicked();
     void onPunchRegionEditedOnRuler(PunchRegion region);
     void onPunchFieldsChanged();
+    void onAutoSaveTimeout();
 
 private:
+    // Marks the session dirty and (re)starts the debounced auto-save timer.
+    // Connected to CommandStack::setOnChange and MediaBrowserPanel::libraryChanged;
+    // called directly by handlers that mutate m_session outside the command stack.
+    void requestAutoSave();
     void updateStatusLabel();
     void refreshWaveformFor(const std::shared_ptr<Track>& track);
     int64_t refreshTimelineScale(bool recaptureZoomBaseline = false);
@@ -171,6 +176,10 @@ private:
     QTimer* m_ringDrainTimer = nullptr;
     QTimer* m_playheadTimer = nullptr;
     QTimer* m_meterTimer = nullptr;
+    // Debounced auto-save: restarted on every session change, fires ~1.5s
+    // after the last edit. Inactive until m_currentSessionPath is set (i.e.
+    // until the user has done one manual Save).
+    QTimer* m_autoSaveTimer = nullptr;
     TimelineView* m_timeline = nullptr;
     TimeRulerWidget* m_ruler = nullptr;
     QCheckBox* m_loopRecordCheckBox = nullptr;

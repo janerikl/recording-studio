@@ -7,6 +7,7 @@ void CommandStack::push(std::unique_ptr<Command> cmd) {
     m_undoStack.push_back(std::move(cmd));
     if (m_undoStack.size() > kMaxDepth) m_undoStack.erase(m_undoStack.begin());
     m_redoStack.clear(); // a fresh edit invalidates any redo history
+    if (m_onChange) m_onChange();
 }
 
 void CommandStack::undo() {
@@ -15,6 +16,7 @@ void CommandStack::undo() {
     m_undoStack.pop_back();
     cmd->undo();
     m_redoStack.push_back(std::move(cmd));
+    if (m_onChange) m_onChange();
 }
 
 void CommandStack::redo() {
@@ -23,6 +25,7 @@ void CommandStack::redo() {
     m_redoStack.pop_back();
     cmd->redo();
     m_undoStack.push_back(std::move(cmd));
+    if (m_onChange) m_onChange();
 }
 
 void CommandStack::clear() {
