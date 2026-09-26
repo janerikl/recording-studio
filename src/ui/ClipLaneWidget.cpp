@@ -118,14 +118,17 @@ int64_t ClipLaneWidget::maxScrollOffsetSamples() const {
 void ClipLaneWidget::setPlayheadSample(int64_t sample) {
     m_playheadSample = sample;
 
-    // Auto-scroll to follow the playhead during Playing/Recording: once it
-    // reaches this lane's own right edge, scroll so it sits just inside the
-    // edge instead of running off-screen. Each lane scrolls independently
-    // (matching the existing per-lane scroll model — there's no shared/
-    // global scroll, and the ruler itself has no scroll concept at all).
+    // Auto-scroll to follow the playhead whenever it lands outside this
+    // lane's own visible window — forward (Playing/Recording ran past the
+    // right edge) or backward (a seek/rewind landed before the left edge,
+    // e.g. jumping back to the start after letting playback run far past
+    // the session's content — previously this left the lane stuck scrolled
+    // forward with no way back short of restarting the app). Each lane
+    // scrolls independently (matching the existing per-lane scroll model —
+    // there's no shared/global scroll, and the ruler itself has no scroll
+    // concept at all).
     if (m_dragMode == DragMode::None) {
-        int64_t rightEdge = effectiveScrollOffset() + effectiveTimelineLength();
-        if (sample > rightEdge) {
+        if (sample > effectiveScrollOffset() + effectiveTimelineLength()) {
             // m_contentExtentSamples is only refreshed by MainWindow at
             // specific action points (add/remove track, zoom, etc.), never
             // continuously while recording — without this, the scroll
@@ -133,9 +136,11 @@ void ClipLaneWidget::setPlayheadSample(int64_t sample) {
             // by setScrollOffsetSamples(), since it has no idea the clip
             // (and thus the timeline) has grown.
             m_contentExtentSamples = std::max(m_contentExtentSamples, sample);
-            constexpr double kRightMarginFraction = 0.05; // keep playhead 5% in from the edge
-            int64_t margin = static_cast<int64_t>(effectiveTimelineLength() * kRightMarginFraction);
-            setScrollOffsetSamples(sample - effectiveTimelineLength() + margin);
+        }
+        int64_t revealedOffset =
+            scrollOffsetToRevealPlayhead(sample, effectiveScrollOffset(), effectiveTimelineLength());
+        if (revealedOffset != effectiveScrollOffset()) {
+            setScrollOffsetSamples(revealedOffset);
         }
     }
 

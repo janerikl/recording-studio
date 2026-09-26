@@ -1246,6 +1246,132 @@ Verification plan (approved):
       reflects accurate vs. mistimed/missed taps, confirm switching back
       to Pitch mode still works unchanged.
 
+## Completed: Digital playback time display
+
+Goal: an always-visible digital readout of playback position in the top
+bar, next to the transport/recording controls, click-to-toggle between
+Timecode (HH:MM:SS.mmm) and raw sample count. Not a `Qt::Popup` (the
+existing `EffectsPopoverWidget` floating-panel pattern auto-closes on
+outside click, which is wrong for something meant to stay visible through
+playback) — a plain docked widget in the top bar's `QHBoxLayout`.
+
+Design (approved):
+- [x] `ui/TimeDisplayMath.h` (pure, tested first): `formatTimecode(int64_t
+      samples, unsigned sampleRate)` → "HH:MM:SS.mmm" string, and
+      `formatSampleCount(int64_t samples)` → grouped digit string. Edge
+      cases: 0 samples, exact 1-hour rollover, non-integer
+      samples/sampleRate rounding, zero sample rate.
+- [x] New `ui/PlaybackTimeDisplay` (`QLabel`-based, not a popup — plain
+      widget dropped into the recording section's `QHBoxLayout`, always
+      visible): `MainWindow::updatePlayhead()` (the existing ~50ms tick)
+      calls `setPositionSamples()`; no new timer. Click
+      (`mousePressEvent` override) toggles between the two
+      `TimeDisplayMath` formats; format choice kept in-memory only. Not a
+      `QObject`/no `Q_OBJECT` — no signals needed, just a virtual-method
+      override, which also avoids a header-only-widget moc/link pitfall
+      (`undefined reference to vtable` when a Q_OBJECT class is defined
+      only in a header AUTOMOC doesn't separately compile).
+- [x] `MainWindow.cpp`: added into the recording section's
+      `QHBoxLayout`, next to the track-arm picker, before the trailing
+      stretch.
+
+Verification plan (approved):
+- [x] Automated: `tests/test_TimeDisplayMath.cpp` (8 cases, written
+      before the formatting functions) — 0 samples, 1-hour rollover,
+      rounding, zero sample rate, digit grouping. Full suite (51/51
+      binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full
+      timeout under a real X display, no crash/error output beyond the
+      pre-existing ALSA probe warning).
+- [ ] Full manual (not done from this session): start playback, confirm
+      digits update live and match the timeline position; click the
+      widget mid-playback, confirm it toggles format instantly without
+      jumping/resetting.
+
+## Completed: Fixed stuck-scroll after playback runs past the end of content
+
+Bug found via user report while trying the new go-to-time feature (also
+reproducible without it): letting playback run far past the session's
+actual content (e.g. ~3 min of clips left playing for 30 min, or typing a
+sample position far ahead into the new playback display) permanently
+scrolled every track lane forward to follow the playhead
+(`ClipLaneWidget::setPlayheadSample`'s existing auto-follow-during-
+recording logic, which also runs during Playing). Stopping and seeking
+back to the start (Play-from-Start, ruler click, marker, or the new
+display) moved the playhead back but never scrolled the view back —
+the auto-follow logic only handled the forward direction — leaving every
+track's waveform effectively invisible (scrolled off to the right) with
+no way back short of restarting the app (which resets the in-memory
+scroll/extent state; no data was ever lost).
+
+Design (approved: "snap scroll to show the seek target" for either
+direction):
+- [x] `ui/ClipLaneScrollMath.h`: new pure `scrollOffsetToRevealPlayhead()`
+      (tested first, 5 cases: already-visible/no-op, forward past right
+      edge, backward before left edge — the reported bug — clamped at
+      0, and the exact-left-edge boundary). Mirrors the existing
+      clamp/max-offset helpers' style.
+- [x] `ClipLaneWidget::setPlayheadSample()`: forward-follow still grows
+      `m_contentExtentSamples` as before (unchanged, still needed for
+      the continuous-recording case per the existing comment), but the
+      actual scroll decision for both directions now goes through
+      `scrollOffsetToRevealPlayhead()` instead of only handling the
+      forward case inline.
+
+Verification plan (approved):
+- [x] Automated: `tests/test_ClipLaneScrollMath.cpp` (+5 cases, written
+      before the function). Full suite (51/51 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full
+      timeout under a real X display, no crash/error output beyond the
+      pre-existing ALSA probe warning).
+- [ ] Full manual (not done from this session, needs the user to
+      confirm): let playback run past the end of a session's content,
+      stop, seek back to 0 (via Play-from-Start/ruler/marker/the digital
+      display) — confirm every track's waveform is visible again without
+      needing to restart the app or manually drag any scrollbar.
+
+## Completed: Go-to-time on the playback time display
+
+Goal: double-click the digital playback display to type a target time and
+jump the playhead there — a standard DAW transport-clock feature (Pro
+Tools/Logic-style click-to-edit clock).
+
+Design (approved):
+- [x] `ui/TimeDisplayMath.h`: added `parseTimecode(QString, sampleRate)`
+      and `parseSampleCount(QString)`, both `std::optional<int64_t>`
+      (nullopt on invalid/negative/empty input). Timecode parsing
+      accepts `HH:MM:SS.mmm`, `MM:SS.mmm`, or plain seconds; sample
+      parsing accepts a raw integer with optional comma grouping.
+- [x] `PlaybackTimeDisplay` rebuilt as a `Q_OBJECT` widget with its own
+      `.cpp` (like `EffectsPopoverWidget`) — a header-only `Q_OBJECT`
+      class hit an "undefined reference to vtable" link error last time
+      (AUTOMOC doesn't compile moc output for a Q_OBJECT class defined
+      only in a header included from elsewhere), so this needed a real
+      source file for AUTOMOC to attach to. Internally a `QStackedLayout`
+      swaps between the `QLabel` (single click toggles
+      timecode/samples) and a `QLineEdit` on double-click, pre-filled
+      with the current display text. Enter parses per the active
+      display mode and emits `seekRequested(int64_t samples)` on
+      success; invalid input is ignored (stack reverts to the label, no
+      seek); Escape or focus-out without Enter also just reverts, no
+      seek.
+- [x] `MainWindow.cpp`: connects `seekRequested` to the existing
+      `onSeekRequested()` handler already shared by the ruler and
+      timeline's own seek gestures — no new seek logic needed.
+
+Verification plan (approved):
+- [x] Automated: extended `tests/test_TimeDisplayMath.cpp` (12 new
+      cases, written before the parse functions) — round-trip of each
+      accepted timecode/sample format, and garbage/negative/empty input
+      all producing nullopt. Full suite (51/51 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly (ran the full
+      timeout under a real X display, no crash/error output beyond the
+      pre-existing ALSA probe warning).
+- [ ] Full manual (not done from this session): double-click the display
+      (stopped and while playing), type a time, press Enter, confirm the
+      playhead jumps there; type garbage and press Enter, confirm it's
+      ignored; press Escape mid-edit, confirm no seek happens.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.

@@ -5,6 +5,7 @@
 using rsd::clampScrollOffset;
 using rsd::maxScrollOffsetSamples;
 using rsd::scrollbarShouldBeEnabled;
+using rsd::scrollOffsetToRevealPlayhead;
 
 class ClipLaneScrollMathTests : public QObject {
     Q_OBJECT
@@ -45,6 +46,35 @@ private slots:
 
     void scrollbarEnabled_trueWhenContentExceedsWindow() {
         QVERIFY(scrollbarShouldBeEnabled(5000, 2000));
+    }
+
+    void reveal_noChangeWhenPlayheadAlreadyVisible() {
+        // Window is [1000, 3000); playhead at 2000 is comfortably inside it.
+        QCOMPARE(scrollOffsetToRevealPlayhead(2000, 1000, 2000), static_cast<int64_t>(1000));
+    }
+
+    void reveal_scrollsForwardWhenPlayheadPastRightEdge() {
+        // Window is [0, 2000); playhead at 5000 is past the right edge —
+        // scroll so it sits 5% in from the edge (margin = 100).
+        int64_t result = scrollOffsetToRevealPlayhead(5000, 0, 2000);
+        QCOMPARE(result, static_cast<int64_t>(5000 - 2000 + 100));
+    }
+
+    void reveal_scrollsBackwardWhenPlayheadBeforeLeftEdge() {
+        // This is the reported bug: after playback ran far forward (scroll
+        // offset stuck at 50000), seeking back to sample 0 must scroll the
+        // view back to reveal it, not leave the lane showing empty space.
+        int64_t result = scrollOffsetToRevealPlayhead(0, 50000, 2000);
+        QCOMPARE(result, static_cast<int64_t>(0));
+    }
+
+    void reveal_backwardJumpNeverGoesNegative() {
+        int64_t result = scrollOffsetToRevealPlayhead(50, 50000, 2000);
+        QVERIFY(result >= 0);
+    }
+
+    void reveal_playheadExactlyAtLeftEdgeCountsAsVisible() {
+        QCOMPARE(scrollOffsetToRevealPlayhead(1000, 1000, 2000), static_cast<int64_t>(1000));
     }
 };
 
