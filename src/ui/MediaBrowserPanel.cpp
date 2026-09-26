@@ -1,6 +1,7 @@
 #include "MediaBrowserPanel.h"
 
 #include <QByteArray>
+#include <QContextMenuEvent>
 #include <QDirIterator>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
@@ -8,8 +9,10 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMimeData>
 #include <QPushButton>
 #include <QSettings>
@@ -22,6 +25,7 @@
 #include "io/AudioFileIO.h"
 #include "ui/LibraryFilterMath.h"
 #include "ui/LibraryItemDelegate.h"
+#include "ui/LibraryItemOps.h"
 #include "ui/MediaPreviewToggleMath.h"
 
 namespace rsd {
@@ -65,6 +69,10 @@ protected:
             m_owner->handleExternalFileDrop(url.toLocalFile());
         }
         event->acceptProposedAction();
+    }
+
+    void contextMenuEvent(QContextMenuEvent* event) override {
+        m_owner->showContextMenu(itemAt(event->pos()), event->globalPos());
     }
 
 private:
@@ -253,6 +261,7 @@ QTreeWidgetItem* MediaBrowserPanel::addItemNode(QTreeWidgetItem* parent, const L
     node->setFlags((node->flags() | Qt::ItemIsDragEnabled) & ~Qt::ItemIsDropEnabled);
     if (item.source == LibrarySource::ProjectMedia && item.buffer) {
         QString duration = formatDuration(item.buffer->frameCount(), item.buffer->sampleRate);
+        node->setData(0, MediaBrowserPanel::kDurationRole, duration);
         node->setToolTip(0, QString("%1\nDuration: %2\nSample rate: %3 Hz\nChannels: %4")
                                  .arg(item.name)
                                  .arg(duration)
@@ -325,6 +334,88 @@ void MediaBrowserPanel::handleItemClicked(QTreeWidgetItem* item, int /*column*/)
         }
         return;
     }
+}
+
+void MediaBrowserPanel::showContextMenu(QTreeWidgetItem* item, const QPoint& globalPos) {
+    if (!item) return;
+
+    QVariant folderIdVar = item->data(0, kFolderRole);
+    QVariant itemIdVar = item->data(0, MediaBrowserPanel::kItemIdRole);
+    if (!folderIdVar.isValid() && !itemIdVar.isValid()) return;
+
+    QMenu menu(this);
+    QAction* renameAction = menu.addAction("Rename...");
+    QAction* removeAction = menu.addAction("Remove");
+    QAction* chosen = menu.exec(globalPos);
+    if (!chosen) return;
+
+    if (folderIdVar.isValid()) {
+        QUuid id(folderIdVar.toString());
+        if (chosen == renameAction) renameFolder(id);
+        else if (chosen == removeAction) removeFolder(id);
+    } else {
+        QString id = itemIdVar.toString();
+        if (chosen == renameAction) renameItem(id);
+        else if (chosen == removeAction) removeItem(id);
+    }
+}
+
+void MediaBrowserPanel::renameFolder(const QUuid& id) {
+    LibraryFolder* folder = m_folders.findFolder(id);
+    if (!folder) return;
+
+    bool ok = false;
+    QString newName =
+        QInputDialog::getText(this, "Rename Folder", "Name:", QLineEdit::Normal, folder->name, &ok);
+    if (!ok || newName.isEmpty()) return;
+
+    m_folders.renameFolder(id, newName);
+    rebuildTree();
+    emit libraryChanged();
+}
+
+void MediaBrowserPanel::removeFolder(const QUuid& id) {
+    m_folders.removeFolder(id);
+    rebuildTree();
+    emit libraryChanged();
+}
+
+void MediaBrowserPanel::renameItem(const QString& id) {
+    QVector<LibraryItem>& items = m_activeSource == LibrarySource::ProjectMedia ? m_projectItems : m_loopItems;
+
+    QString currentName;
+    for (auto& item : items) {
+        if (item.id() == id) {
+            currentName = item.name;
+            break;
+        }
+    }
+    if (currentName.isEmpty()) return;
+
+    bool ok = false;
+    QString newName =
+        QInputDialog::getText(this, "Rename", "Name:", QLineEdit::Normal, currentName, &ok);
+    if (!ok || newName.isEmpty()) return;
+
+    items = renameLibraryItemById(items, id, newName);
+    rebuildTree();
+    emit libraryChanged();
+}
+
+void MediaBrowserPanel::removeItem(const QString& id) {
+    QVector<LibraryItem>& items = m_activeSource == LibrarySource::ProjectMedia ? m_projectItems : m_loopItems;
+
+    items = removeLibraryItemById(items, id);
+    m_folders.moveItem(id, nullptr); // un-file it wherever it was filed
+    m_peakCache.remove(id);
+
+    if (m_previewingItem.isValid() && m_previewingItem.id() == id) {
+        m_previewingItem = LibraryItem();
+        emit previewRequested(LibraryItem());
+    }
+
+    rebuildTree();
+    emit libraryChanged();
 }
 
 QVector<WaveformCache::PeakPair> MediaBrowserPanel::peaksForItemId(const QString& itemId,

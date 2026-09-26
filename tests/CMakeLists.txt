@@ -297,6 +297,14 @@ target_include_directories(library_filter_math_tests PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(library_filter_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME LibraryFilterMathTests COMMAND library_filter_math_tests)
 
+add_executable(library_item_ops_tests
+    test_LibraryItemOps.cpp
+    ${CMAKE_SOURCE_DIR}/src/ui/LibraryItemOps.cpp
+)
+target_include_directories(library_item_ops_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(library_item_ops_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME LibraryItemOpsTests COMMAND library_item_ops_tests)
+
 add_executable(rhythm_piano_playback_tests
     test_RhythmPianoPlayback.cpp
     ${CMAKE_SOURCE_DIR}/src/audio/RhythmClickTrack.cpp

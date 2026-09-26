@@ -79,6 +79,20 @@ private slots:
         tree.removeFolder(child->id);
         QVERIFY(parent->children.isEmpty());
     }
+
+    void renameFolder_existingId_updatesName() {
+        LibraryFolderTree tree;
+        auto folder = tree.addFolder("Drums");
+        tree.renameFolder(folder->id, "Percussion");
+        QCOMPARE(folder->name, QString("Percussion"));
+    }
+
+    void renameFolder_unknownId_isNoop() {
+        LibraryFolderTree tree;
+        auto folder = tree.addFolder("Drums");
+        tree.renameFolder(QUuid::createUuid(), "Percussion");
+        QCOMPARE(folder->name, QString("Drums"));
+    }
 };
 
 QTEST_MAIN(LibraryFolderTests)

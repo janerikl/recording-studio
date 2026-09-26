@@ -72,6 +72,10 @@ public:
     // (non-folder) tree items. Used by LibraryItemDelegate to look up the
     // waveform peaks to paint for that row.
     static constexpr int kItemIdRole = Qt::UserRole + 2;
+    // Row data role holding a leaf's formatted duration string (e.g.
+    // "0:32"), empty if unknown. Used by LibraryItemDelegate to paint the
+    // duration on its own line, in a smaller font below the name.
+    static constexpr int kDurationRole = Qt::UserRole + 3;
 
     // Waveform peaks for the item with this id, computed and cached on
     // first request. Project Media decodes are free (buffer already in
@@ -88,6 +92,11 @@ public:
     // (e.g. a file manager) — loads and adds it unless already present.
     void handleExternalFileDrop(const QString& path);
 
+    // Right-click handling for the tree, invoked by BrowserTreeWidget.
+    // Shows Rename/Remove for `item` (folder or leaf row) at `globalPos`;
+    // no-op if item is nullptr (right-clicked empty space).
+    void showContextMenu(QTreeWidgetItem* item, const QPoint& globalPos);
+
 signals:
     // A file failed to load on external drop (e.g. not a supported audio
     // format) — MainWindow can surface this, the panel itself stays silent.
@@ -97,6 +106,10 @@ signals:
     // one again, in which case item is default-constructed / invalid,
     // meaning "stop").
     void previewRequested(LibraryItem item);
+
+    // A folder or item was renamed/removed via the right-click menu — the
+    // persisted library state (folders() / projectMediaEntries()) changed.
+    void libraryChanged();
 
 private:
     void buildUi();
@@ -109,6 +122,10 @@ private:
     void handleItemDrop(QTreeWidgetItem* folderItem, const QString& itemId);
     QTreeWidgetItem* addFolderNode(QTreeWidgetItem* parent, LibraryFolder* folder);
     QTreeWidgetItem* addItemNode(QTreeWidgetItem* parent, const LibraryItem& item);
+    void renameFolder(const QUuid& id);
+    void removeFolder(const QUuid& id);
+    void renameItem(const QString& id);
+    void removeItem(const QString& id);
 
     // Peak cache shared by the waveform delegate, keyed by LibraryItem::id().
     // Populated lazily (and synchronously) on first paint of a row; a Loop

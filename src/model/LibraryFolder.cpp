@@ -50,6 +50,10 @@ void LibraryFolderTree::removeFolder(const QUuid& id) {
     removeFolderFrom(roots, id);
 }
 
+void LibraryFolderTree::renameFolder(const QUuid& id, const QString& name) {
+    if (auto* folder = findFolder(id)) folder->name = name;
+}
+
 void LibraryFolderTree::moveItem(const QString& itemId, LibraryFolder* to) {
     removeItemRefFrom(roots, itemId);
     if (to) to->itemRefs.push_back(itemId);

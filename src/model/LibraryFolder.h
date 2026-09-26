@@ -32,6 +32,9 @@ public:
     // the tree. No-op if the id isn't found.
     void removeFolder(const QUuid& id);
 
+    // Renames a folder wherever it is in the tree. No-op if the id isn't found.
+    void renameFolder(const QUuid& id, const QString& name);
+
     // Moves (or newly files) an item into `to`, removing any prior
     // reference to it elsewhere in the tree first. Passing nullptr for `to`
     // just un-files the item.
