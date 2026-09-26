@@ -19,6 +19,7 @@
 #include <QSlider>
 #include <QStringList>
 #include <QTimer>
+#include <QToolButton>
 #include <QStyle>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -204,9 +205,6 @@ MainWindow::MainWindow(QWidget* parent)
     auto* toolbar = addToolBar("Main");
     toolbar->setToolButtonStyle(Qt::ToolButtonIconOnly);
     toolbar->setMovable(false);
-    toolbar->addAction(m_recordAction);
-    toolbar->addAction(m_playAction);
-    toolbar->addAction(m_playFromStartAction);
     toolbar->addAction(m_stopAction);
     toolbar->addSeparator();
     toolbar->addAction(m_addTrackAction);
@@ -272,11 +270,122 @@ MainWindow::MainWindow(QWidget* parent)
     m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
     layout->addWidget(m_statusLabel);
 
+    // Recording section: record button + elapsed recording time + input
+    // meter, kept compact (~280px) as a self-contained unit. The time
+    // label only ticks while transport state is Recording (see
+    // updateMeters()); it's not a general playhead clock. The record
+    // button here replaces the one that used to live on the main toolbar
+    // (see toolbar->addAction() above, m_recordAction no longer added
+    // there) — it's the same QAction, just relocated next to the clock.
     auto* meterRow = new QWidget(central);
+    meterRow->setMaximumWidth(340); // widened from 280 to fit the added Play/Play-from-Start column
     auto* meterLayout = new QHBoxLayout(meterRow);
-    m_inputMeter = new LevelMeterWidget("In", meterRow);
-    meterLayout->addWidget(m_inputMeter);
-    layout->addWidget(meterRow);
+    meterLayout->setContentsMargins(0, 0, 0, 0);
+    meterLayout->setSpacing(4);
+
+    // Two stacked columns: Record/Stop on the left, Play/Play-from-Start on
+    // the right. Play and Play-from-Start used to live on the main toolbar
+    // (see toolbar->addAction() above, removed from there) — same
+    // QActions, just relocated next to Record/Stop.
+    auto* transportButtons = new QWidget(meterRow);
+    auto* transportButtonsLayout = new QHBoxLayout(transportButtons);
+    transportButtonsLayout->setContentsMargins(0, 0, 0, 0);
+    transportButtonsLayout->setSpacing(2);
+
+    auto* recordStopColumn = new QWidget(transportButtons);
+    auto* recordStopLayout = new QVBoxLayout(recordStopColumn);
+    recordStopLayout->setContentsMargins(0, 0, 0, 0);
+    recordStopLayout->setSpacing(2);
+    auto* recordButton = new QToolButton(recordStopColumn);
+    recordButton->setDefaultAction(m_recordAction);
+    recordButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    recordStopLayout->addWidget(recordButton);
+    // Same m_stopAction already on the main toolbar — this is a second
+    // button wired to it, placed here so Record/Stop are together as a
+    // pair within the recording section.
+    auto* stopButton = new QToolButton(recordStopColumn);
+    stopButton->setDefaultAction(m_stopAction);
+    stopButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    recordStopLayout->addWidget(stopButton);
+    transportButtonsLayout->addWidget(recordStopColumn);
+
+    auto* playColumn = new QWidget(transportButtons);
+    auto* playColumnLayout = new QVBoxLayout(playColumn);
+    playColumnLayout->setContentsMargins(0, 0, 0, 0);
+    playColumnLayout->setSpacing(2);
+    auto* playButton = new QToolButton(playColumn);
+    playButton->setDefaultAction(m_playAction);
+    playButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    playColumnLayout->addWidget(playButton);
+    auto* playFromStartButton = new QToolButton(playColumn);
+    playFromStartButton->setDefaultAction(m_playFromStartAction);
+    playFromStartButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    playColumnLayout->addWidget(playFromStartButton);
+    transportButtonsLayout->addWidget(playColumn);
+
+    meterLayout->addWidget(transportButtons);
+
+    m_recordingTimeLabel = new QLabel("00:00", meterRow);
+    m_recordingTimeLabel->setAlignment(Qt::AlignCenter);
+    // LCD-style counter box, matching a Pro Tools-style transport clock:
+    // dark bordered panel, large bold monospace digits.
+    QFont clockFont("Monospace");
+    clockFont.setStyleHint(QFont::Monospace);
+    clockFont.setPointSize(14);
+    clockFont.setBold(true);
+    m_recordingTimeLabel->setFont(clockFont);
+    m_recordingTimeLabel->setStyleSheet(
+        "QLabel { background-color: #1a1a1a; color: #33cc55; border: 1px solid #444; "
+        "border-radius: 3px; padding: 2px 6px; }");
+    meterLayout->addWidget(m_recordingTimeLabel);
+
+    // Vertical meter needs its own label since (unlike the horizontal
+    // constructor) it draws no text of its own.
+    auto* inputMeterColumn = new QWidget(meterRow);
+    auto* inputMeterColumnLayout = new QVBoxLayout(inputMeterColumn);
+    inputMeterColumnLayout->setContentsMargins(0, 0, 0, 0);
+    inputMeterColumnLayout->setSpacing(2);
+    inputMeterColumnLayout->setAlignment(Qt::AlignHCenter);
+    auto* inputMeterLabel = new QLabel("In", inputMeterColumn);
+    inputMeterLabel->setAlignment(Qt::AlignCenter);
+    inputMeterColumnLayout->addWidget(inputMeterLabel);
+    m_inputMeter = new LevelMeterWidget(LevelMeterWidget::Orientation::Vertical, inputMeterColumn);
+    inputMeterColumnLayout->addWidget(m_inputMeter, 0, Qt::AlignHCenter);
+    meterLayout->addWidget(inputMeterColumn);
+
+    // Quick record-target picker, next to the recording section: pick a
+    // track to arm it for recording (unarming all others) and see/change
+    // its input source, without needing that track's own mixer strip.
+    auto* recordTargetWidget = new QWidget(central);
+    auto* recordTargetLayout = new QHBoxLayout(recordTargetWidget);
+    recordTargetLayout->setContentsMargins(0, 0, 0, 0);
+    recordTargetLayout->setSpacing(4);
+    recordTargetLayout->addWidget(new QLabel("Track:", recordTargetWidget));
+    m_recordTrackCombo = new QComboBox(recordTargetWidget);
+    m_recordTrackCombo->setToolTip("Arm a track to record into");
+    connect(m_recordTrackCombo, &QComboBox::currentIndexChanged, this,
+            &MainWindow::onRecordTrackComboChanged);
+    recordTargetLayout->addWidget(m_recordTrackCombo);
+    recordTargetLayout->addWidget(new QLabel("Source:", recordTargetWidget));
+    m_recordSourceCombo = new QComboBox(recordTargetWidget);
+    m_recordSourceCombo->addItem("Mic", QVariant::fromValue(static_cast<int>(AudioSource::Mic)));
+    m_recordSourceCombo->addItem("Sys",
+                                  QVariant::fromValue(static_cast<int>(AudioSource::SystemAudio)));
+    m_recordSourceCombo->setEnabled(false); // no track selected until refreshRecordTrackCombo() runs
+    connect(m_recordSourceCombo, &QComboBox::currentIndexChanged, this,
+            &MainWindow::onRecordSourceComboChanged);
+    recordTargetLayout->addWidget(m_recordSourceCombo);
+
+    auto* recordingSectionRow = new QWidget(central);
+    auto* recordingSectionLayout = new QHBoxLayout(recordingSectionRow);
+    // +10px top/bottom (20px total) beyond content's natural height, to
+    // give the recording section some breathing room.
+    recordingSectionLayout->setContentsMargins(0, 10, 0, 10);
+    recordingSectionLayout->setSpacing(12);
+    recordingSectionLayout->addWidget(meterRow);
+    recordingSectionLayout->addWidget(recordTargetWidget);
+    recordingSectionLayout->addStretch();
+    layout->addWidget(recordingSectionRow);
 
     m_ruler = new TimeRulerWidget(central);
     m_ruler->setSampleRate(m_session->sampleRate);
@@ -530,6 +639,7 @@ void MainWindow::onAddTrackClicked() {
     m_timeline->addTrack(track);
     m_mixer->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
+    refreshRecordTrackCombo();
     updateStatusLabel();
     refreshMasterAndScale();
     updateUndoRedoButtons();
@@ -544,6 +654,7 @@ void MainWindow::onAddInstrumentTrackClicked() {
     m_timeline->addTrack(track);
     m_mixer->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
+    refreshRecordTrackCombo();
     updateStatusLabel();
     refreshMasterAndScale();
     updateUndoRedoButtons();
@@ -558,6 +669,7 @@ void MainWindow::onAddBusTrackClicked() {
     m_timeline->addTrack(track);
     m_mixer->addTrack(track);
     if (!m_activeTrack) m_activeTrack = track;
+    refreshRecordTrackCombo();
     updateStatusLabel();
     refreshMasterAndScale();
     updateUndoRedoButtons();
@@ -576,6 +688,7 @@ void MainWindow::onRemoveTrackClicked() {
     m_timeline->removeTrack(idToRemove);
     m_mixer->removeTrack(idToRemove);
     m_activeTrack = m_session->tracks.empty() ? nullptr : m_session->tracks.front();
+    refreshRecordTrackCombo();
     updateStatusLabel();
     refreshMasterAndScale();
     updateUndoRedoButtons();
@@ -731,6 +844,7 @@ void MainWindow::onRecordClicked() {
         m_engine->transport().setPunchLoopEnabled(true);
         m_engine->transport().setPositionSamples(
             std::max<int64_t>(0, punchRegion.startSample - preRollSamples));
+        m_recordingStartSample = m_engine->transport().positionSamples();
         m_engine->transport().setState(TransportState::Recording);
         m_playheadTimer->start();
 
@@ -762,6 +876,7 @@ void MainWindow::onRecordClicked() {
         m_activeSystemAudioRecordingClip = makeRecordingClip();
     }
 
+    m_recordingStartSample = m_engine->transport().positionSamples();
     m_engine->transport().setState(TransportState::Recording);
     m_ringDrainTimer->start();
     m_playheadTimer->start();
@@ -954,10 +1069,109 @@ void MainWindow::updatePlayhead() {
     m_masterWaveform->setPlayheadSample(pos);
 }
 
+static QString formatElapsedTime(int64_t totalSeconds) {
+    int64_t hours = totalSeconds / 3600;
+    int minutes = static_cast<int>((totalSeconds % 3600) / 60);
+    int seconds = static_cast<int>(totalSeconds % 60);
+    if (hours > 0) {
+        return QString("%1:%2:%3")
+            .arg(hours)
+            .arg(minutes, 2, 10, QChar('0'))
+            .arg(seconds, 2, 10, QChar('0'));
+    }
+    return QString("%1:%2").arg(minutes, 2, 10, QChar('0')).arg(seconds, 2, 10, QChar('0'));
+}
+
 void MainWindow::updateMeters() {
-    m_inputMeter->setLevels(m_engine->inputPeakL(), m_engine->inputPeakR());
+    // Only reflects live input while actually recording — previously it
+    // tracked mic input continuously (even stopped), but that made it
+    // ambiguous whether the app was capturing anything.
+    bool isRecording = m_engine->transport().state() == TransportState::Recording;
+    if (isRecording) {
+        m_inputMeter->setLevels(m_engine->inputPeakL(), m_engine->inputPeakR());
+    } else {
+        m_inputMeter->setLevels(0.0f, 0.0f);
+    }
     m_mixer->updateMeters(m_engine->outputPeakL(), m_engine->outputPeakR());
     m_timeline->updateBusMeters();
+
+    if (isRecording) {
+        int64_t elapsedSamples = m_engine->transport().positionSamples() - m_recordingStartSample;
+        int64_t elapsedSeconds = elapsedSamples / std::max(1, m_session->sampleRate);
+        m_recordingTimeLabel->setText(formatElapsedTime(elapsedSeconds));
+    } else {
+        m_recordingTimeLabel->setText("00:00");
+    }
+}
+
+void MainWindow::refreshRecordTrackCombo() {
+    QSignalBlocker blocker(m_recordTrackCombo);
+    QUuid previousSelected = m_recordTrackCombo->currentIndex() >= 0
+                                  ? m_recordTrackCombo->currentData().toUuid()
+                                  : QUuid();
+    m_recordTrackCombo->clear();
+    for (auto& track : m_session->tracks) {
+        if (track->kind != TrackKind::Audio) continue;
+        m_recordTrackCombo->addItem(track->name, track->id);
+    }
+    int idx = m_recordTrackCombo->findData(previousSelected);
+    m_recordTrackCombo->setCurrentIndex(idx);
+
+    QSignalBlocker sourceBlocker(m_recordSourceCombo);
+    auto selectedIt = idx >= 0 ? std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
+                                               [&](auto& t) { return t->id == previousSelected; })
+                                : m_session->tracks.end();
+    if (idx >= 0 && selectedIt != m_session->tracks.end()) {
+        m_recordSourceCombo->setCurrentIndex(
+            (*selectedIt)->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
+        m_recordSourceCombo->setEnabled(true);
+    } else {
+        m_recordSourceCombo->setCurrentIndex(0);
+        m_recordSourceCombo->setEnabled(false);
+    }
+}
+
+void MainWindow::onRecordTrackComboChanged(int index) {
+    QUuid selectedId = index >= 0 ? m_recordTrackCombo->itemData(index).toUuid() : QUuid();
+
+    for (auto& track : m_session->tracks) {
+        bool shouldArm = (track->id == selectedId);
+        if (track->recordArmed.load() == shouldArm) continue;
+        TrackState before = TrackState::capture(*track);
+        track->recordArmed.store(shouldArm, std::memory_order_relaxed);
+        m_commandStack.push(std::make_unique<TrackStateCommand>(
+            track, before, TrackState::capture(*track), "Arm Track"));
+    }
+    updateUndoRedoButtons();
+
+    QSignalBlocker sourceBlocker(m_recordSourceCombo);
+    if (index >= 0) {
+        auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
+                                [&](auto& t) { return t->id == selectedId; });
+        if (it != m_session->tracks.end()) {
+            m_recordSourceCombo->setCurrentIndex(
+                (*it)->inputSource.load() == AudioSource::SystemAudio ? 1 : 0);
+        }
+        m_recordSourceCombo->setEnabled(true);
+    } else {
+        m_recordSourceCombo->setEnabled(false);
+    }
+}
+
+void MainWindow::onRecordSourceComboChanged(int index) {
+    int comboIndex = m_recordTrackCombo->currentIndex();
+    if (comboIndex < 0) return;
+    QUuid selectedId = m_recordTrackCombo->itemData(comboIndex).toUuid();
+    auto it = std::find_if(m_session->tracks.begin(), m_session->tracks.end(),
+                            [&](auto& t) { return t->id == selectedId; });
+    if (it == m_session->tracks.end()) return;
+
+    auto& track = *it;
+    TrackState before = TrackState::capture(*track);
+    track->inputSource.store(index == 1 ? AudioSource::SystemAudio : AudioSource::Mic);
+    m_commandStack.push(std::make_unique<TrackStateCommand>(
+        track, before, TrackState::capture(*track), "Change Track Input Source"));
+    updateUndoRedoButtons();
 }
 
 void MainWindow::onZoomInClicked() {
@@ -1334,6 +1548,7 @@ void MainWindow::rebuildTimelineFromSession() {
         if (!m_activeTrack) m_activeTrack = track;
         ++m_trackCounter;
     }
+    refreshRecordTrackCombo();
 
     m_engine->transport().setPositionSamples(0);
     updateStatusLabel();

@@ -275,3 +275,82 @@ be planned separately later.
       screenshot review rounds: mixer master strip shows vertical L/R Out
       bars next to the volume slider; top bar still shows In meter alone
       in its old spot; master volume slider still controls output level.
+
+# Recording section: In meter + digital elapsed-time readout
+
+## Goal
+Turn the top-bar `meterRow` (MainWindow.cpp:275-279, currently just the
+`In` meter) into a small "recording section": the existing In meter plus a
+digital clock label showing elapsed recording time (mm:ss, hh:mm:ss once
+past an hour). The clock only ticks while `TransportState::Recording` is
+active (per user choice — not a general playhead/transport clock); it
+shows/resets to `00:00` otherwise. No existing time display exists
+anywhere in the app (confirmed by research) — this is the first one.
+
+## Steps
+- [x] Added `int64_t m_recordingStartSample = 0` to MainWindow.h. Set at
+      both places recording actually starts: the normal record path
+      (MainWindow.cpp, in `onRecordClicked()`, right before
+      `TransportState::Recording` is set) and the separate punch/loop
+      recording early-return path (also in `onRecordClicked()`, right
+      after `setPositionSamples()` for the pre-roll).
+- [x] Added `QLabel* m_recordingTimeLabel` to MainWindow.h, created next to
+      `m_inputMeter` in the `meterRow`/`meterLayout`, starting at "00:00".
+- [x] Added `formatElapsedTime(int64_t totalSeconds)` static helper in
+      MainWindow.cpp: `mm:ss` under an hour, `h:mm:ss` at/above.
+- [x] In `updateMeters()` (already ticking every 33ms via `m_meterTimer`),
+      if `m_engine->transport().state() == TransportState::Recording`,
+      compute elapsed samples as `positionSamples() -
+      m_recordingStartSample`, divide by `m_session->sampleRate`, format,
+      and set the label text. Otherwise set the label to `00:00`.
+- [x] Build clean (recording_studio + tests), all 50 tests pass; no new
+      automated tests for this pure-UI/manual-timing feature, per prior
+      explicit user choice to verify such things manually.
+- [x] Manual verification via GUI, confirmed by user across several
+      screenshot review rounds: clock counts up during Record and resets
+      on Stop; recording section layout (Record/Stop/Play/Play-from-Start,
+      clock, In meter, Track/Source picker) all confirmed visually.
+- [x] Styled `m_recordingTimeLabel` as an LCD-style counter box, per user
+      reference (Pro Tools-style transport clock digit display): dark
+      background panel with border, bold monospace green digits. Single
+      mm:ss/hh:mm:ss field only — not the full multi-field bars/tempo
+      counter from the reference image (explicitly out of scope, confirmed
+      with user).
+- [x] Moved the Record button off the main toolbar (removed
+      `toolbar->addAction(m_recordAction)`) into the recording section
+      itself, as a `QToolButton` with `setDefaultAction(m_recordAction)` —
+      same action/enabled-state wiring, just relocated. Reordered the
+      section to [Record button] [time clock] [In meter] and capped
+      `meterRow` at `setMaximumWidth(280)` with zero margins/tight spacing
+      to keep the whole recording section compact.
+- [x] Added a Stop button directly below the Record button (stacked in a
+      small `transportButtons` sub-widget with its own `QVBoxLayout`),
+      wired to the same `m_stopAction` already used by the main toolbar's
+      Stop button — same enabled-state wiring, just a second button.
+- [x] Added a Track+Source quick-picker next to the recording section
+      (`m_recordTrackCombo`, `m_recordSourceCombo` in MainWindow.h/.cpp):
+      lists Audio-kind tracks only (matches `filterRecordableTracks()`);
+      selecting a track arms it and unarms all others (exclusive, unlike
+      the per-track Arm checkboxes which allow multiple), each change
+      pushed as a `TrackStateCommand` for undo/redo, mirroring
+      MixerStripWidget's existing Arm/Source pattern. Source combo shows
+      the selected track's Mic/System Audio setting and edits it the same
+      way. `refreshRecordTrackCombo()` repopulates on every track
+      add/remove/session-load call site, preserving the current selection
+      by id when it still exists.
+- [x] Moved Play and Play-from-Start off the main toolbar into the
+      recording section too: `transportButtons` restructured into two
+      stacked columns (Record/Stop, Play/Play-from-Start) side by side,
+      same QActions just relocated. Widened `meterRow`'s cap 280px → 340px
+      to fit the extra column.
+- [x] Switched the recording section's "In" meter to vertical orientation
+      (was horizontal with a built-in "In" label; vertical draws no label
+      of its own, so paired it with a separate "In" `QLabel` above it in a
+      new `inputMeterColumn`). Added 10px top/bottom margins (20px total)
+      to `recordingSectionLayout` to give the whole recording section more
+      breathing room.
+- [x] Changed the In meter to only reflect live level while
+      `TransportState::Recording` is active (was: tracked mic input
+      continuously, even stopped — a prior deliberate choice per an old
+      code comment, explicitly superseded per user request). Shows flat
+      (0/0) otherwise.

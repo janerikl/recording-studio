@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QIcon>
@@ -87,6 +88,13 @@ private slots:
     void drainCaptureRing();
     void updatePlayhead();
     void updateMeters();
+    // Repopulates m_recordTrackCombo from m_session->tracks (Audio-kind
+    // only, matching filterRecordableTracks()). Call after any track
+    // add/remove/reload. Preserves the current selection if it still
+    // exists.
+    void refreshRecordTrackCombo();
+    void onRecordTrackComboChanged(int index);
+    void onRecordSourceComboChanged(int index);
     void onZoomInClicked();
     void onZoomOutClicked();
     void onZoomResetClicked();
@@ -124,6 +132,10 @@ private:
     static constexpr int kMaxRecentSessions = 5;
     std::shared_ptr<Track> m_activeTrack;
     std::shared_ptr<Clip> m_activeRecordingClip;
+    // Transport position (in samples) captured when recording starts, so
+    // updateMeters() can compute elapsed recording time for
+    // m_recordingTimeLabel by diffing against the current position.
+    int64_t m_recordingStartSample = 0;
     std::vector<std::shared_ptr<Track>> m_recordTargetTracks;
     // System-audio counterparts: a separate clip/target list fed by the
     // engine's second (system-audio) capture ring, so a Mic-armed track and
@@ -196,6 +208,12 @@ private:
     MixerPanel* m_mixer = nullptr;
     QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
+    QLabel* m_recordingTimeLabel = nullptr; // elapsed recording time; see updateMeters()
+    // Quick record-target picker in the recording section: choosing a track
+    // arms it (unarming all others) and shows/edits its input source. See
+    // refreshRecordTrackCombo(), onRecordTrackComboChanged().
+    QComboBox* m_recordTrackCombo = nullptr;
+    QComboBox* m_recordSourceCombo = nullptr;
     int m_trackCounter = 0;
     int m_busCounter = 0;
 };
