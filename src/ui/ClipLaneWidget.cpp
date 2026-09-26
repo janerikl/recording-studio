@@ -345,6 +345,17 @@ void ClipLaneWidget::paintRangeSelection(QPainter& painter) {
 void ClipLaneWidget::mousePressEvent(QMouseEvent* event) {
     setFocus(Qt::MouseFocusReason);
 
+    // Only the left button starts a selection/drag/range-select gesture.
+    // Right-click is handled entirely by contextMenuEvent (which does its
+    // own hit-testing) — letting it fall through here used to also arm a
+    // move/trim drag exactly like a left-click, and since a right-click's
+    // matching release doesn't reliably reach this widget before the popup
+    // menu's blocking exec() takes over, that drag state could survive the
+    // menu and cause the clip to jump to the mouse on the next move.
+    if (event->button() != Qt::LeftButton) {
+        return;
+    }
+
     if (event->modifiers() & Qt::ShiftModifier) {
         m_rangeSelecting = true;
         m_rangeSelectionStart = m_rangeSelectionEnd = xToSample(event->pos().x());
