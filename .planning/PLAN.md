@@ -85,3 +85,50 @@ Model/logic layers for all four features implemented and unit-tested
 behavior not manually verified for any of them — no automation harness
 available in this repo; recommend a quick manual pass or setting one up via
 /run-skill-generator.
+
+# MediaBrowserPanel: fix search filter, add rename/remove
+
+## Bug: search box doesn't filter
+Root cause (src/ui/MediaBrowserPanel.cpp): `m_filterEdit`'s `textChanged`
+signal is wired to `rebuildTree()`, but `rebuildTree()` reads directly from
+`m_projectItems`/`m_loopItems` without applying the filter text.
+`applyLoopFilter()` does the real text-matching but is only called from
+`rescanLoops()`/`chooseLoopFolder()`, never from the search-box handler.
+Project Media has no filtering logic at all. Confirmed visually by user
+(screenshots): typing "stereo" in Loops and "take" in Project Media both
+show the full unfiltered list.
+
+- [x] Write failing tests: tests/test_LibraryFilterMath.cpp for a new pure
+      `filterLibraryItems(items, filter)` helper (case-insensitive substring
+      match, empty filter keeps all) — extracted rather than testing
+      MediaBrowserPanel directly, following this repo's `*Math` pattern for
+      testable UI logic.
+- [x] Implement `filterLibraryItems()` in new src/ui/LibraryFilterMath.h/.cpp.
+      Renamed the old `applyLoopFilter()` to `rebuildLoopItems()` (it now
+      just rebuilds the full unfiltered m_loopItems list from m_allLoopFiles
+      instead of filtering — filtering happens once, uniformly, in
+      `rebuildTree()` via `filterLibraryItems()`, fixing Project Media (which
+      previously had no filtering at all) in the same pass). Full build
+      clean, all 48 tests pass (was 47; added LibraryFilterMathTests).
+- [ ] Manual verification: build, open Media Browser, type partial name in
+      both tabs, confirm list narrows to matches; clear search, confirm
+      full list returns. (Screenshots from user confirmed the bug before
+      the fix; still needs a post-fix manual pass.)
+
+## Feature: rename/remove via right-click context menu
+Applies to both library items (loops/project media) and virtual folders.
+Remove only detaches the reference (LibraryFolderTree::removeFolder for
+folders, vector erase for items) — never deletes the file on disk.
+
+- [ ] Write failing tests: `LibraryFolder::renameFolder(QUuid, QString)` in
+      tests/test_LibraryFolder.cpp; MediaBrowserPanel context-menu behavior
+      (rename mutates name, remove erases from m_projectItems/tree/folder).
+- [ ] Implement `renameFolder()` in src/model/LibraryFolder.h/.cpp.
+- [ ] Implement `BrowserTreeWidget::contextMenuEvent()` in
+      MediaBrowserPanel.cpp (pattern from ClipLaneWidget.cpp:604), checking
+      `kFolderRole`/`kItemIdRole` to show Rename/Remove for the right target
+      type; rename via inline edit or QInputDialog, remove via
+      `m_folders.removeFolder(id)` or vector erase + `rebuildTree()`.
+- [ ] Manual verification: right-click an item and a folder, rename each,
+      remove each, confirm files on disk untouched; save + reload session,
+      confirm renames/removals persisted.

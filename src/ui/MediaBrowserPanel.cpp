@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include "io/AudioFileIO.h"
+#include "ui/LibraryFilterMath.h"
 #include "ui/LibraryItemDelegate.h"
 #include "ui/MediaPreviewToggleMath.h"
 
@@ -212,20 +213,19 @@ void MediaBrowserPanel::rescanLoops() {
         while (it.hasNext()) m_allLoopFiles.append(it.next());
         m_allLoopFiles.sort(Qt::CaseInsensitive);
     }
-    applyLoopFilter();
+    rebuildLoopItems();
 }
 
-void MediaBrowserPanel::applyLoopFilter() {
+void MediaBrowserPanel::rebuildLoopItems() {
+    // Despite the name, this builds the full (unfiltered) Loop item list from
+    // the last rescan; the search-box text is applied uniformly to both tabs
+    // in rebuildTree() via filterLibraryItems().
     m_loopItems.clear();
-    QString filter = m_filterEdit ? m_filterEdit->text() : QString();
 
     for (const QString& path : m_allLoopFiles) {
-        QString baseName = QFileInfo(path).fileName();
-        if (!filter.isEmpty() && !baseName.contains(filter, Qt::CaseInsensitive)) continue;
-
         LibraryItem item;
         item.source = LibrarySource::Loop;
-        item.name = baseName;
+        item.name = QFileInfo(path).fileName();
         item.path = path;
         m_loopItems.push_back(item);
     }
@@ -274,8 +274,10 @@ void MediaBrowserPanel::rebuildTree() {
     if (!m_tree) return;
     m_tree->clear();
 
-    const QVector<LibraryItem>& items =
+    const QVector<LibraryItem>& allItems =
         m_activeSource == LibrarySource::ProjectMedia ? m_projectItems : m_loopItems;
+    QString filter = m_filterEdit ? m_filterEdit->text() : QString();
+    QVector<LibraryItem> items = filterLibraryItems(allItems, filter);
 
     // Build a lookup so filed items don't also show up unfiled.
     QSet<QString> filedIds;

@@ -101,7 +101,7 @@ signals:
 private:
     void buildUi();
     void rebuildTree();
-    void applyLoopFilter();
+    void rebuildLoopItems();
     void chooseLoopFolder();
     void rescanLoops();
     bool containsBuffer(const AudioBuffer* buffer) const;

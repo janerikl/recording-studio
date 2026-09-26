@@ -39,6 +39,7 @@ add_executable(recording_studio
     src/ui/ShortcutManager.cpp
     src/ui/ShortcutSettingsTab.cpp
     src/ui/MediaBrowserPanel.cpp
+    src/ui/LibraryFilterMath.cpp
     src/ui/LibraryItemDelegate.cpp
     src/model/LibraryFolder.cpp
     src/ui/EffectsPopoverWidget.cpp
