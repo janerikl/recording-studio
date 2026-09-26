@@ -377,6 +377,13 @@ MainWindow::MainWindow(QWidget* parent)
     recordingSectionLayout->setSpacing(12);
     recordingSectionLayout->addWidget(meterRow);
     recordingSectionLayout->addWidget(recordTargetWidget);
+
+    m_playbackTimeDisplay = new rsd::PlaybackTimeDisplay(recordingSectionRow);
+    m_playbackTimeDisplay->setSampleRate(static_cast<unsigned>(m_session->sampleRate));
+    connect(m_playbackTimeDisplay, &rsd::PlaybackTimeDisplay::seekRequested, this,
+            &MainWindow::onSeekRequested);
+    recordingSectionLayout->addWidget(m_playbackTimeDisplay);
+
     recordingSectionLayout->addStretch();
     layout->addWidget(recordingSectionRow);
 
@@ -1090,6 +1097,7 @@ void MainWindow::updatePlayhead() {
     m_timeline->setPlayheadSample(pos);
     m_ruler->setPlayheadSample(pos);
     m_masterWaveform->setPlayheadSample(pos);
+    m_playbackTimeDisplay->setPositionSamples(pos);
 }
 
 static QString formatElapsedTime(int64_t totalSeconds) {

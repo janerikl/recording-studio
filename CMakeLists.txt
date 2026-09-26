@@ -45,6 +45,7 @@ add_executable(recording_studio
     src/ui/LibraryItemDelegate.cpp
     src/model/LibraryFolder.cpp
     src/ui/EffectsPopoverWidget.cpp
+    src/ui/PlaybackTimeDisplay.cpp
     src/ui/PianoKeyboardWidget.cpp
     src/ui/DrumPadWidget.cpp
     src/ui/InstrumentPanel.cpp

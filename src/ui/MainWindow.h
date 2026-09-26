@@ -28,6 +28,7 @@
 #include "ui/WaveformWidget.h"
 #include "ui/MediaBrowserPanel.h"
 #include "ui/EffectsPopoverWidget.h"
+#include "ui/PlaybackTimeDisplay.h"
 #include "ui/InstrumentPanel.h"
 #include "ui/PianoRollPanel.h"
 #include "ui/ExportDialog.h"
@@ -214,6 +215,7 @@ private:
     QDockWidget* m_pianoRollDock = nullptr;
     LevelMeterWidget* m_inputMeter = nullptr;
     QLabel* m_recordingTimeLabel = nullptr; // elapsed recording time; see updateMeters()
+    rsd::PlaybackTimeDisplay* m_playbackTimeDisplay = nullptr; // playback position; see updatePlayhead()
     // Quick record-target picker in the recording section: choosing a track
     // arms it (unarming all others). Input source stays exclusively on that
     // track's own mixer strip. See refreshRecordTrackCombo(),
