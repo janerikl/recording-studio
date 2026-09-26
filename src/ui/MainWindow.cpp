@@ -248,6 +248,7 @@ MainWindow::MainWindow(QWidget* parent)
         m_session->bpm = v;
         m_session->dirty = true;
         m_pianoRollPanel->setBpm(v);
+        m_instrumentPanel->setBpm(v);
     });
 
     m_metronomeCheckBox = new QCheckBox("Metronome", this);
@@ -331,6 +332,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_instrumentPanel = new InstrumentPanel(m_instrumentDock);
     connect(m_instrumentPanel, &InstrumentPanel::noteOn, this, &MainWindow::onInstrumentNoteOn);
     connect(m_instrumentPanel, &InstrumentPanel::noteOff, this, &MainWindow::onInstrumentNoteOff);
+    connect(m_instrumentPanel, &InstrumentPanel::rhythmPlaybackRequested, this,
+            [this](std::shared_ptr<AudioBuffer> buffer) { m_engine->previewSample(buffer); });
     m_instrumentDock->setWidget(m_instrumentPanel);
     addDockWidget(Qt::RightDockWidgetArea, m_instrumentDock);
     // Floats as its own window by default (not tabbed with the other
@@ -346,6 +349,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_pianoRollPanel->setCommandStack(&m_commandStack);
     m_pianoRollPanel->setBpm(m_session->bpm);
     m_pianoRollPanel->setSampleRate(m_session->sampleRate);
+    m_instrumentPanel->setBpm(m_session->bpm);
     connect(m_pianoRollPanel, &PianoRollPanel::saveToLoopBrowserRequested, this,
             &MainWindow::onSaveToLoopBrowserRequested);
     m_pianoRollDock->setWidget(m_pianoRollPanel);
@@ -1270,6 +1274,7 @@ void MainWindow::rebuildTimelineFromSession() {
     m_deleteClipAction->setEnabled(false);
     m_pianoRollPanel->setBpm(m_session->bpm);
     m_pianoRollPanel->setSampleRate(m_session->sampleRate);
+    m_instrumentPanel->setBpm(m_session->bpm);
     m_mixer->setMasterBus(&m_session->masterBus);
     {
         const QSignalBlocker b1(m_bpmSpin);

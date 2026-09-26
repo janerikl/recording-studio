@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <memory>
 
+#include "model/AudioBuffer.h"
 #include "model/Track.h"
 
 class QCheckBox;
@@ -27,6 +28,7 @@ public:
     explicit InstrumentPanel(QWidget* parent = nullptr);
 
     void setTrack(std::shared_ptr<Track> track);
+    void setBpm(double bpm);
 
 signals:
     // Forwarded from whichever player widget is active; MainWindow routes
@@ -34,6 +36,10 @@ signals:
     // armed+recording) capture bookkeeping.
     void noteOn(int pitch, float velocity);
     void noteOff(int pitch);
+
+    // Forwarded from the embedded PracticePanel's Rhythm mode; MainWindow
+    // routes this to AudioEngine::previewSample().
+    void rhythmPlaybackRequested(std::shared_ptr<AudioBuffer> buffer);
 
 private:
     void rebuild();

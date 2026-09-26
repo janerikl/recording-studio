@@ -1142,6 +1142,110 @@ Verification plan (approved):
       rectangles (not sparse ticks); click "Save to Loop Browser", confirm
       a new WAV appears in the Loop Browser list and sounds correct.
 
+## In progress: Rhythm reading trainer (word-mnemonic dictation)
+
+Goal: teach rhythm/note-duration reading using the word-mnemonic method
+from a reference photo (word syllables mapped to a rhythmic notation
+pattern, e.g. "Mozzarella" = four 16th notes). Approved scope: full
+dictation trainer (show notation, play it audibly, user taps it back and
+gets scored), extends the existing Practice panel (new "Rhythm" mode
+alongside the existing pitch-exercise mode), 7 built-in word/pattern pairs
+matching the photo (approximate reading, approved as "close enough"):
+- Mozzarella: 4x 16th notes
+- Coconut: 2x 8th + 2x 16th
+- Strawberry: 2x 16th + 2x 8th
+- Cucumber: 8th + 2x 16th + 8th
+- Orange: 8th + 16th + 8th-rest + quarter-rest
+- Lemon: 8th + 8th + quarter
+- Mango: 8th + 16th + 16th + 8th
+
+Design (approved):
+- [x] `model/RhythmPattern.h` (pure data, tested first): `RhythmNote
+      {beats, isRest}`, `RhythmPattern {word, notes}`,
+      `builtInRhythmPatterns()` — the 7 patterns above.
+- [x] `audio/RhythmMath.h` (pure, tested first): `onsetBeats()` (cumulative
+      start beat of each non-rest note), `patternTotalBeats()`,
+      `beatsToSeconds()`, `classifyTapOffset()` (Hit/Early/Late vs.
+      tolerance), `scoreTaps()` (greedy nearest-match of tapped timestamps
+      to expected onsets → per-note verdicts + miss/extra counts + accuracy
+      %).
+- [x] `audio/RhythmClickTrack.h/.cpp` (integration-tested, mirrors
+      `Metronome`'s blip-synthesis style): renders a pattern to an
+      `AudioBuffer` (click at each onset) for audible playback via the
+      existing `AudioEngine::previewSample()` path — no new RT wiring
+      needed, reuses the preview mechanism already used by the Loop
+      Browser/Media Library.
+- [x] `ui/RhythmStaffWidget` (new, paint-only like `ClipLaneWidget` —
+      not unit tested): draws a simplified single-line rhythm staff
+      (noteheads + beam grouping by duration, secondary beam for 16th-note
+      sub-runs, rest glyphs) for the selected pattern.
+- [x] `PracticePanel`: new "Mode" combo (Pitch / Rhythm). Rhythm mode
+      swaps in the 7 word patterns, shows the staff widget, a "Play"
+      button (renders + requests playback via a new
+      `rhythmPlaybackRequested(buffer)` signal, forwarded through
+      `InstrumentPanel` to `MainWindow` → `AudioEngine::previewSample()`),
+      and a "Tap Back" button that arms tap capture — taps via a "Tap"
+      button or Spacebar, timestamped against a `QElapsedTimer` started
+      when tapping begins, auto-scored via `RhythmMath::scoreTaps()` once
+      the pattern's duration elapses (`QTimer::singleShot`). Results shown
+      as a per-note ✓/early/late/miss line plus overall accuracy %.
+      `PracticePanel`/`InstrumentPanel` gained `setBpm()` (same pattern as
+      `PianoRollPanel`), wired from both `MainWindow` BPM-sync points.
+
+Verification plan (approved):
+- [x] Automated (test-first): `tests/test_RhythmPattern.cpp` (built-in
+      pattern content sanity), `tests/test_RhythmMath.cpp` (onset/total
+      beat math, tap classification at tolerance boundaries, scoring:
+      perfect run, early/late/miss cases, extra taps), both written before
+      their implementations. `tests/test_RhythmClickTrack.cpp`
+      (integration-level, same style as `test_Metronome.cpp`: silence
+      before first onset, audio at each onset, correct buffer length).
+      Full suite (41/41 binaries) passes.
+- [x] Smoke-tested: app builds and launches cleanly under a real X
+      display.
+- [x] Caught via user feedback ("I don't get it, what is the user
+      supposed to do here?") on the first rendered screenshot: the word
+      mnemonic wasn't shown anywhere near its notation (only in the
+      selector combo above), so there was no visible link between e.g.
+      "Strawberry" and its rhythm. Fixed: `RhythmStaffWidget` now draws
+      the word directly to the left of its staff (matching the reference
+      photo's side-by-side layout); `PracticePanel` gained an intro
+      sentence explaining the say-it/play-it/tap-it-back flow, and the
+      status label now names the selected word. Verified by temporarily
+      defaulting the Mode combo to Rhythm (reverted after), since
+      automated clicks weren't reliably landing in this environment —
+      screenshot confirmed "Mozzarella" now renders beside its notation
+      with the new instructional text. Full suite (41/41 binaries) still
+      passes after the fix.
+- [x] User feedback after trying it live: "I hear some weird noise not
+      piano sound when I click Play" — the click/blip sound
+      (`renderRhythmClickBuffer`, a 1kHz decaying sine, same style as the
+      existing `Metronome`) was working as designed but not what was
+      wanted. Asked: click vs. real piano sound — user chose piano. Fixed:
+      new `audio/RhythmClickTrack.h/.cpp::renderRhythmPianoBuffer()`
+      (test-first: `tests/test_RhythmPianoPlayback.cpp`, integration-level
+      like `test_Synth.cpp` — audio shortly after onset, silence during a
+      leading rest, buffer covers duration + release tail) — renders the
+      pattern through a real `SynthEngine` (Acoustic Grand Piano, fixed at
+      middle C since rhythm reading doesn't depend on pitch), block-by-
+      block with noteOn/noteOff triggered at each note's onset/end sample,
+      mirroring `OfflineRenderer`'s block-loop style. `PracticePanel::
+      onPlayRhythmClicked()` switched to call this instead of the click
+      version (which stays in place, tested, unused by the UI for now).
+      Full suite (42/42 binaries) passes.
+- [ ] Full manual still not done this session: automated-click UI testing
+      in this environment proved unreliable (coordinate/window-geometry
+      mismatches across attempts, and one stale differently-named running
+      instance — `~/.local/bin/recording-studio` vs. this repo's build
+      output `recording_studio` — was accidentally screenshotted instead
+      of the freshly built binary before that was caught). Needs, by
+      hand: switch to Rhythm mode, select each of the 7 words and
+      sanity-check the staff drawing, press Play and confirm it now
+      sounds like piano notes (not a click) at the right rhythm, press
+      Tap Back and tap along (button or Spacebar), confirm scoring
+      reflects accurate vs. mistimed/missed taps, confirm switching back
+      to Pitch mode still works unchanged.
+
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.

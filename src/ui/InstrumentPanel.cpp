@@ -73,6 +73,8 @@ InstrumentPanel::InstrumentPanel(QWidget* parent) : QWidget(parent) {
             [this](int pitch, float) { m_practicePanel->checkNotePlayed(pitch); });
     connect(m_practicePanel, &PracticePanel::expectedPitchChanged, m_keyboard,
             &PianoKeyboardWidget::setExpectedPitch);
+    connect(m_practicePanel, &PracticePanel::rhythmPlaybackRequested, this,
+            &InstrumentPanel::rhythmPlaybackRequested);
     m_playerStack->addWidget(m_keyboard);
 
     m_drumPads = new DrumPadWidget(this);
@@ -89,6 +91,8 @@ void InstrumentPanel::setTrack(std::shared_ptr<Track> track) {
     m_track = std::move(track);
     rebuild();
 }
+
+void InstrumentPanel::setBpm(double bpm) { m_practicePanel->setBpm(bpm); }
 
 void InstrumentPanel::rebuild() {
     bool isInstrument = m_track && m_track->kind == TrackKind::Instrument;

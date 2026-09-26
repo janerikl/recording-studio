@@ -240,3 +240,31 @@ add_executable(media_preview_toggle_math_tests test_MediaPreviewToggleMath.cpp)
 target_include_directories(media_preview_toggle_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(media_preview_toggle_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME MediaPreviewToggleMathTests COMMAND media_preview_toggle_math_tests)
+
+add_executable(rhythm_pattern_tests test_RhythmPattern.cpp)
+target_include_directories(rhythm_pattern_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(rhythm_pattern_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME RhythmPatternTests COMMAND rhythm_pattern_tests)
+
+add_executable(rhythm_math_tests test_RhythmMath.cpp)
+target_include_directories(rhythm_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(rhythm_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME RhythmMathTests COMMAND rhythm_math_tests)
+
+add_executable(rhythm_click_track_tests
+    test_RhythmClickTrack.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/RhythmClickTrack.cpp
+)
+target_include_directories(rhythm_click_track_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(rhythm_click_track_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(rhythm_click_track_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
+add_test(NAME RhythmClickTrackTests COMMAND rhythm_click_track_tests)
+
+add_executable(rhythm_piano_playback_tests
+    test_RhythmPianoPlayback.cpp
+    ${CMAKE_SOURCE_DIR}/src/audio/RhythmClickTrack.cpp
+)
+target_include_directories(rhythm_piano_playback_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(rhythm_piano_playback_tests PRIVATE RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(rhythm_piano_playback_tests PRIVATE Qt6::Core Qt6::Test PkgConfig::FLUIDSYNTH)
+add_test(NAME RhythmPianoPlaybackTests COMMAND rhythm_piano_playback_tests)

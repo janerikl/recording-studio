@@ -21,6 +21,7 @@ add_executable(recording_studio
     src/audio/Effects.cpp
     src/audio/SessionMixer.cpp
     src/audio/OfflineRenderer.cpp
+    src/audio/RhythmClickTrack.cpp
     src/command/CommandStack.cpp
     src/io/AudioFileIO.cpp
     src/io/SessionIO.cpp
@@ -40,6 +41,7 @@ add_executable(recording_studio
     src/ui/DrumPadWidget.cpp
     src/ui/InstrumentPanel.cpp
     src/ui/PracticePanel.cpp
+    src/ui/RhythmStaffWidget.cpp
     src/ui/PianoRollGridWidget.cpp
     src/ui/PianoRollPanel.cpp
     src/ui/AutomationLaneWidget.cpp
