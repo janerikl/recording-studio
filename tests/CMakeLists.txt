@@ -275,6 +275,19 @@ target_include_directories(dialog_geometry_tests PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(dialog_geometry_tests PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 add_test(NAME DialogGeometryTests COMMAND dialog_geometry_tests)
 
+add_executable(library_item_tests test_LibraryItem.cpp)
+target_include_directories(library_item_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(library_item_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME LibraryItemTests COMMAND library_item_tests)
+
+add_executable(library_folder_tests
+    test_LibraryFolder.cpp
+    ${CMAKE_SOURCE_DIR}/src/model/LibraryFolder.cpp
+)
+target_include_directories(library_folder_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(library_folder_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME LibraryFolderTests COMMAND library_folder_tests)
+
 add_executable(rhythm_piano_playback_tests
     test_RhythmPianoPlayback.cpp
     ${CMAKE_SOURCE_DIR}/src/audio/RhythmClickTrack.cpp
