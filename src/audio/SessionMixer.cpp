@@ -1,6 +1,7 @@
 #include "SessionMixer.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 
@@ -12,12 +13,66 @@
 
 namespace rsd {
 
+namespace {
+
+constexpr int kCcModulation = 1;  // FluidSynth default modulator: vibrato LFO pitch depth
+constexpr int kCcExpression = 11;
+
+int automationToCc(float value) {
+    return static_cast<int>(std::lround(std::clamp(value, 0.0f, 1.0f) * 127.0f));
+}
+
+// One note on/off within the current block. `phase` orders events that
+// share an offset: note-offs of already-sounding notes first (so a note
+// ending exactly where a same-pitch note starts releases before the new
+// one triggers), then note-ons, then note-offs of zero-length notes (which
+// must follow their own note-on).
+struct BlockNoteEvent {
+    unsigned int offset;
+    unsigned char phase; // 0 = off, 1 = on, 2 = zero-length off
+    int pitch;
+    float velocity;
+};
+
+// Upper bound on note events scheduled sample-accurately in one block.
+// Fixed-size (stack) so the RT path never allocates; any events past this
+// (absurdly dense material) fall back to firing at the block start.
+constexpr size_t kMaxBlockNoteEvents = 1024;
+
+// When a note is released. Normally its written end, but if another note
+// of the same pitch starts while it's still held, it's released right at
+// that note's start instead: a synth voice is keyed by pitch, so letting
+// the earlier note's later note-off through would cut the newer note.
+// For two same-pitch notes starting on the same sample, only the longer
+// one (or, for equal lengths, the later one in the list) sounds: the other
+// gets an effective end equal to its start and is skipped entirely.
+int64_t effectiveNoteEnd(const Track::MidiNoteList& notes, size_t index) {
+    const MidiNote& note = *notes[index];
+    int64_t end = note.startSample + note.lengthSamples;
+    for (size_t j = 0; j < notes.size(); ++j) {
+        if (j == index) continue;
+        const MidiNote& other = *notes[j];
+        if (other.pitch != note.pitch) continue;
+        if (other.startSample > note.startSample && other.startSample < end) {
+            end = other.startSample;
+        } else if (other.startSample == note.startSample && note.lengthSamples > 0) {
+            bool otherWins = other.lengthSamples > note.lengthSamples ||
+                             (other.lengthSamples == note.lengthSamples && j > index);
+            if (otherWins) end = note.startSample;
+        }
+    }
+    return end;
+}
+
+} // namespace
+
 void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channels, int64_t pos,
                       unsigned int nFrames, bool playbackActive, float* out) {
     size_t needed = static_cast<size_t>(nFrames) * channels;
     std::memset(out, 0, sizeof(float) * needed);
 
     bool isInstrument = track.kind == TrackKind::Instrument;
+    auto lanes = track.automationLanesSnapshot();
 
     if (isInstrument) {
         bool isDrumKit = track.synthParams.isDrumKit.load(std::memory_order_relaxed);
@@ -29,23 +84,92 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
                 track.synthEngine.noteOff(ev.pitch, isDrumKit);
             }
         }
+
+        // Sample-accurate scheduling: collect this block's note events with
+        // their exact frame offsets, then render the synth in sub-segments
+        // split at those offsets, firing each segment's events just before
+        // rendering it. (FluidSynth itself still processes events on its
+        // internal 64-frame grid, ~1.3ms at 48kHz.)
+        std::array<BlockNoteEvent, kMaxBlockNoteEvents> events;
+        size_t eventCount = 0;
         if (playbackActive) {
-            // Block-level timing granularity (not sample-accurate): a note
-            // triggers/releases wherever its start/end lands in this block.
             auto notes = track.midiClipsSnapshot();
             int64_t blockEnd = pos + static_cast<int64_t>(nFrames);
-            for (auto& note : *notes) {
-                int64_t noteEnd = note->startSample + note->lengthSamples;
-                if (note->startSample >= pos && note->startSample < blockEnd) {
-                    track.synthEngine.noteOn(note->pitch, note->velocity,
-                                              static_cast<float>(sampleRate), isDrumKit);
+            auto push = [&](int64_t at, unsigned char phase, const MidiNote& note) {
+                if (eventCount < events.size()) {
+                    events[eventCount++] = {static_cast<unsigned int>(at - pos), phase, note.pitch, note.velocity};
+                } else if (phase == 1) {
+                    track.synthEngine.noteOn(note.pitch, note.velocity, static_cast<float>(sampleRate), isDrumKit);
+                } else {
+                    track.synthEngine.noteOff(note.pitch, isDrumKit);
                 }
-                if (noteEnd >= pos && noteEnd < blockEnd) {
-                    track.synthEngine.noteOff(note->pitch, isDrumKit);
+            };
+            for (size_t i = 0; i < notes->size(); ++i) {
+                const MidiNote& note = *(*notes)[i];
+                int64_t writtenEnd = note.startSample + note.lengthSamples;
+                // Neither its start nor any possible (<= written) end falls here.
+                if (note.startSample >= blockEnd || writtenEnd < pos) continue;
+                if (note.lengthSamples <= 0) {
+                    if (note.startSample >= pos) {
+                        push(note.startSample, 1, note);
+                        push(note.startSample, 2, note);
+                    }
+                    continue;
                 }
+                int64_t end = effectiveNoteEnd(*notes, i);
+                if (end <= note.startSample) continue; // superseded same-pitch duplicate
+                if (note.startSample >= pos) push(note.startSample, 1, note);
+                if (end >= pos && end < blockEnd) push(end, 0, note);
+            }
+            // Insertion sort: tiny arrays, no allocation.
+            for (size_t i = 1; i < eventCount; ++i) {
+                BlockNoteEvent e = events[i];
+                size_t j = i;
+                while (j > 0 && (events[j - 1].offset > e.offset ||
+                                 (events[j - 1].offset == e.offset && events[j - 1].phase > e.phase))) {
+                    events[j] = events[j - 1];
+                    --j;
+                }
+                events[j] = e;
             }
         }
-        track.synthEngine.render(out, nFrames, channels, track.synthParams);
+
+        const AutomationLane* expressionLane = nullptr;
+        const AutomationLane* vibratoLane = nullptr;
+        for (auto& lane : *lanes) {
+            if (lane->points.empty()) continue;
+            if (lane->target == AutomationTarget::Expression) expressionLane = lane.get();
+            else if (lane->target == AutomationTarget::Vibrato) vibratoLane = lane.get();
+        }
+
+        size_t nextEvent = 0;
+        unsigned int cursor = 0;
+        while (cursor < nFrames) {
+            while (nextEvent < eventCount && events[nextEvent].offset <= cursor) {
+                const auto& e = events[nextEvent++];
+                if (e.phase == 1) {
+                    track.synthEngine.noteOn(e.pitch, e.velocity, static_cast<float>(sampleRate), isDrumKit);
+                } else {
+                    track.synthEngine.noteOff(e.pitch, isDrumKit);
+                }
+            }
+            unsigned int segmentEnd = nextEvent < eventCount ? events[nextEvent].offset : nFrames;
+
+            // Expression/vibrato CCs, evaluated at each segment start. No
+            // lane = MIDI defaults, so deleting a lane restores them.
+            // controlChange() skips unchanged values.
+            int64_t at = pos + cursor;
+            track.synthEngine.controlChange(
+                kCcExpression,
+                automationToCc(expressionLane ? evaluateAutomation(expressionLane->points, at, 1.0f) : 1.0f));
+            track.synthEngine.controlChange(
+                kCcModulation,
+                automationToCc(vibratoLane ? evaluateAutomation(vibratoLane->points, at, 0.0f) : 0.0f));
+
+            track.synthEngine.render(out + static_cast<size_t>(cursor) * channels, segmentEnd - cursor, channels,
+                                     track.synthParams);
+            cursor = segmentEnd;
+        }
     } else if (playbackActive) {
         auto clips = track.clipsSnapshot();
         for (auto& clip : *clips) {
@@ -65,7 +189,6 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
     // track's static atomic for both ends (i.e. no ramp).
     float staticVolume = track.volume.load(std::memory_order_relaxed);
     float staticPan = track.pan.load(std::memory_order_relaxed);
-    auto lanes = track.automationLanesSnapshot();
     float volumeStart = staticVolume, volumeEnd = staticVolume;
     float panStart = staticPan, panEnd = staticPan;
     for (auto& lane : *lanes) {

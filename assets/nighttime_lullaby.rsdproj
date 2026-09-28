@@ -1,0 +1,1233 @@
+{
+    "bpm": 60,
+    "channels": 2,
+    "libraryFolders": [
+    ],
+    "markers": [
+    ],
+    "masterEffects": [
+    ],
+    "masterVolume": 1,
+    "mediaLibrary": [
+    ],
+    "metronomeEnabled": false,
+    "sampleRate": 48000,
+    "tracks": [
+        {
+            "automationLanes": [
+            ],
+            "clips": [
+            ],
+            "effects": [
+            ],
+            "id": "{65ad33a6-e4d0-4627-8529-4dd3d8604178}",
+            "instrumentProgram": 10,
+            "isDrumKit": false,
+            "kind": "instrument",
+            "midiNotes": [
+                {
+                    "id": "{00033bd5-9d49-4ad1-ba00-2f4decc2d9a1}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "0",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{42ad368d-fd82-459b-b6f0-0165b67ab7bb}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "48000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{62292bda-a03a-430f-acaa-aa02e2012cb9}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "96000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{869e66b0-c7b0-4b26-a6bf-9982f45e6abb}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "144000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{3102f7ac-5eff-4616-9ef6-8fda398cb2a7}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "192000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{0062197f-0b15-4e12-a6d5-27673b468b48}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "240000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{15d28773-8af7-45a3-bbf5-60910874e3b5}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "288000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{70a96d29-b3b4-4768-b47b-a0422051f68c}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "336000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{9cfa5fc0-ce66-4fa4-b853-278a0b7284fd}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "384000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{82252c79-2975-4c42-b380-2fbbe5ed31f0}",
+                    "lengthSamples": "96000",
+                    "pitch": 67,
+                    "startSample": "432000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{3c8fa77a-58d9-4fb6-b10f-0dbe815b6b05}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "528000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{e564c22f-d0bf-47a9-8758-c1c3e5741c75}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "576000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{50bfbc4d-e30b-4fe2-a07b-a26e2902aaec}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "624000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{e8a128e9-24b5-4c8c-97c2-a3edf91f0b4f}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "672000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{ebe89415-6bcd-4446-b9a2-b7237913c018}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "720000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{104223d9-25b8-4f44-a4f0-8a1d96088dd9}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "768000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{0505d6c9-f927-47b1-9b3b-4f6a86206195}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "816000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{a7a680fc-cfa8-4d1e-a7d3-2d7152774ed6}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "864000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{d0a34f62-ef4d-44cd-a562-c86df25ed05b}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "912000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{dd744852-d035-4284-8cc2-9607756dec3b}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "960000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{c4febc16-0b3b-4f7c-bcf1-234eb66c1eb2}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "1008000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{5591966a-aafb-476d-96ac-d14ea1ff5632}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "1152000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{74de9e2f-faf0-4fac-8eb0-ef16b490802e}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "1200000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{62c10474-fb43-43c9-b261-d0225047cead}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "1248000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{8b8e81ff-5f26-40b6-9276-15c65a326b95}",
+                    "lengthSamples": "48000",
+                    "pitch": 69,
+                    "startSample": "1296000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{32856c91-a2e3-40e6-9890-e8829d33ac0d}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "1344000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{183453c5-2862-40a6-b91e-693f16e72be8}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "1392000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{7744f501-8e61-4d49-b7d7-bd5e559c95d5}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "1440000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{a8e9d19d-3178-4eaf-91ec-177493012458}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "1488000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{b67a44af-8038-4f72-ab38-f2b9386911e1}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "1536000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{a0239ab1-82d8-46a9-8cd2-8012f648c067}",
+                    "lengthSamples": "96000",
+                    "pitch": 67,
+                    "startSample": "1584000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{ff22c7b8-7cca-4f73-95c4-b62dd7b578bd}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "1680000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{98cf8d7f-1820-43f8-a31d-1cd94e849a9e}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "1728000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{fe8df768-2192-40f9-9337-1f2feaee6b99}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "1776000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{6c099c42-89b1-4451-95f2-b537b232495e}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "1824000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{47ac96cb-4978-432a-bc80-955ddce68766}",
+                    "lengthSamples": "48000",
+                    "pitch": 69,
+                    "startSample": "1872000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{f843a02e-5af4-459b-af96-fdd864585cc0}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "1920000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{8e8c168e-20dc-4bd6-89a6-754e4bdcc0be}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "1968000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{af749540-1456-4dcf-b655-c40b8bfe9ff1}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "2016000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{f1c27e43-228b-4fb5-ac6f-72f8e4c2b587}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "2064000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{030f8dfd-ce50-414e-9c0e-3a502865eba8}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "2112000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{6ad9b65b-9f5d-4cb8-a7d4-bfa2240b3aa2}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "2160000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{2fcc8701-7bd7-4aec-8f55-3e475765938b}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "2304000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{ff76c8fc-916d-49e6-9e53-b2c06e9212ab}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "2352000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{46e4e8fc-f269-469b-b3d9-9b03310b70ca}",
+                    "lengthSamples": "48000",
+                    "pitch": 72,
+                    "startSample": "2400000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{4e7d96c1-642f-4715-a71b-1b623b3e1a9e}",
+                    "lengthSamples": "48000",
+                    "pitch": 71,
+                    "startSample": "2448000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{3884c6ac-33db-46b7-8ce9-6f4616fdad8f}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "2496000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{5809c4ca-6dc2-44c2-a153-ca4504320566}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "2544000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{c574b5ff-3e42-448d-95e1-fed9f1462338}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "2592000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{bb45d387-66fe-43f6-9198-213ca4dc2064}",
+                    "lengthSamples": "48000",
+                    "pitch": 69,
+                    "startSample": "2640000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{1fe35c80-96ce-4293-886d-4a595b6f24c8}",
+                    "lengthSamples": "48000",
+                    "pitch": 72,
+                    "startSample": "2688000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{e1916cbd-393e-404c-bb98-85c56397b761}",
+                    "lengthSamples": "96000",
+                    "pitch": 72,
+                    "startSample": "2736000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{516dac95-220a-406a-9963-0cae96e22212}",
+                    "lengthSamples": "48000",
+                    "pitch": 71,
+                    "startSample": "2832000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{4d9786b2-ebf4-40b9-9a76-8e3845e303e1}",
+                    "lengthSamples": "48000",
+                    "pitch": 69,
+                    "startSample": "2880000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{37dd352b-4461-45b8-ba93-e47fc76f49db}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "2928000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{b023262a-a921-4731-9fa6-2f959c6ffa14}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "2976000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{449ed131-4bb2-4fe4-86cf-427a432a4a0f}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "3024000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{f067baf6-80d9-4b86-9876-f781fd30f9d5}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "3072000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{b298e2a9-59fb-4762-a3e4-af72758d9be6}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "3120000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{a589491d-cf98-460c-87b7-bd615a16c503}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "3168000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{9ece294d-1b26-434b-9b7f-3e2332957c2a}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "3216000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{5194a4f8-c9c0-4fb9-a107-058b3836a959}",
+                    "lengthSamples": "48000",
+                    "pitch": 59,
+                    "startSample": "3264000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{39e3e196-461c-4ce1-9b26-e2e217903cd0}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "3312000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{37c66344-f63a-4b5c-a842-e977946f1130}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "3456000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{13540bb0-6607-4525-971a-04e7c29d4e7e}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "3504000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{38c5a51f-ec69-4e9f-b09f-f04200591597}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "3552000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{0ee2c3fd-45b1-496a-9a67-60ebf656f796}",
+                    "lengthSamples": "48000",
+                    "pitch": 65,
+                    "startSample": "3600000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{73dc2cb8-1903-4d48-bd02-c749951de2a2}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "3648000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{0396718e-fe6a-4a9e-ae66-bfa9fa8c7fb6}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "3696000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{1058879a-7a67-4331-955c-ac46e09f4ce7}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "3744000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{7f3020e4-5921-450c-a84b-efad717fa2c3}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "3792000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{f5198d8c-d616-4ee1-a1f2-e547fe5d4bae}",
+                    "lengthSamples": "48000",
+                    "pitch": 67,
+                    "startSample": "3840000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{b314fc22-1a76-4a9b-b924-61711ef95b17}",
+                    "lengthSamples": "96000",
+                    "pitch": 67,
+                    "startSample": "3888000",
+                    "velocity": 0.550000011920929
+                },
+                {
+                    "id": "{b278d134-438d-4a16-9ec4-4ec9036775f2}",
+                    "lengthSamples": "48000",
+                    "pitch": 64,
+                    "startSample": "3984000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{69e189a2-ccbb-4dbe-8042-012c67de130c}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "4032000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{c0d07453-92f9-4612-a0aa-38ed73d8a81c}",
+                    "lengthSamples": "48000",
+                    "pitch": 60,
+                    "startSample": "4080000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{2569aed9-7756-4a37-a037-8f0ff5be0b5c}",
+                    "lengthSamples": "48000",
+                    "pitch": 62,
+                    "startSample": "4128000",
+                    "velocity": 0.699999988079071
+                },
+                {
+                    "id": "{4d3cdebd-4514-4649-a190-3ec3d32e5952}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "4176000",
+                    "velocity": 0.550000011920929
+                }
+            ],
+            "muted": true,
+            "name": "Lullaby Melody",
+            "pan": 0,
+            "sendLevel": 0,
+            "soloed": false,
+            "volume": 1
+        },
+        {
+            "automationLanes": [
+            ],
+            "clips": [
+            ],
+            "effects": [
+            ],
+            "id": "{f615be34-20ef-4b0a-8a07-d5d17640e92f}",
+            "instrumentProgram": 0,
+            "isDrumKit": false,
+            "kind": "instrument",
+            "midiNotes": [
+                {
+                    "id": "{145cb432-907c-42da-902b-57bd7e886d3f}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "0",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{a4f1bcbd-85df-4d0f-b25d-5db4648b7813}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "0",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{ffc8b772-9724-4d4e-bc22-c40f289e2594}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "0",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{86a8e511-2330-4290-9bb1-cd05aca4596c}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "144000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{75f0e8ed-d877-49ab-acf6-7f48cba5c2de}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "144000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0172be0a-f5a0-4765-95d9-b7d3d9404452}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "144000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{a6932dac-f9ca-4c21-9777-09c977f2c1fa}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "288000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{b54eb48a-a724-4305-a772-5279773e12a4}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "288000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{f0ed6631-7a67-4318-9f09-bbd74eff2f3a}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "288000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{ec37f6e6-5068-4afd-a301-458abddbdc29}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "432000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{e6bfdaca-de56-4008-ab6d-e6197d7ceceb}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "432000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{8e6efd08-c307-4201-803e-28b20941afd5}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "432000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{bcce92f9-4af3-4989-930a-054002dcfc17}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "576000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{33d1e4f8-4406-4a61-b9cb-cb78279a8fc4}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "576000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{1351690d-dac6-454a-ab93-b3a90778a24f}",
+                    "lengthSamples": "144000",
+                    "pitch": 64,
+                    "startSample": "576000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0555f53c-8cf7-4c6b-baed-354f69cd7fea}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "720000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{b9990ad5-3abd-45d9-8487-2b687f29f3d4}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "720000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{21c13b0d-d667-4d54-b6fb-17c91cfe5d82}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "720000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{34f879de-3b58-404e-9b43-0b3f04cf7e50}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "864000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{26a1d6ad-3e86-457e-9182-e55d9ecb17a1}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "864000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{4407902e-6e13-4ba4-a12e-8d90012a5cf1}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "864000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{fb235cfd-2ccd-4481-a39c-c9e5b4096ad9}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "1008000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{6ff4a733-5025-4a23-914a-b96395724baf}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "1008000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{eef06bae-1ed6-4477-ab1f-7bf54c63525f}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "1008000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0ee620a3-ce0d-412c-939f-39aa24b8ca9f}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "1152000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{76784b21-d0be-4e83-b9dd-129b503c4d5b}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "1152000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{c92bf78c-7060-4dc9-9c2b-4a54f29ce3dd}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "1152000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{4f519980-c9ca-4eef-93b2-599eac72be58}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "1296000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{e3060ad0-256b-48a0-bad8-9ee6c8328635}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "1296000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{160f5054-713a-4e1a-ad08-41df92b8aeba}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "1296000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{eba75459-e477-4b60-923c-ea45fdba7e3d}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "1440000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{ae9ccf6a-f28c-44b9-b3d7-f5b14907d73c}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "1440000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{2c295ab3-ceef-4c45-9198-92f0dfb3888f}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "1440000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{38c5d968-bbde-49ef-818b-c1ce4170a492}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "1584000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{50d77a2f-2deb-4043-8d92-64a5133436d4}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "1584000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{d7a726d3-981b-447d-afe7-d203b81fdddc}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "1584000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{853db2b9-b045-40a0-b6c9-08ceed7d60a7}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "1728000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{734a74c8-0407-43d7-ba1f-ff96a72ecc3b}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "1728000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{fa859a1d-aa78-4982-8214-25859b521256}",
+                    "lengthSamples": "144000",
+                    "pitch": 64,
+                    "startSample": "1728000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{e8d19089-7589-4467-83d4-bc181ac1d50d}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "1872000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{70379613-dc6e-47b5-bd21-58ef864a2d9a}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "1872000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{44fa558d-819b-4beb-a2de-c56dda8f7260}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "1872000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{d6598472-85fc-4d50-8543-4d36bf95c9fd}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "2016000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{f309fd00-e2f4-478a-89b6-a59bcd6059ae}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "2016000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{ff806784-c683-4dfd-967a-2e6f1129bb85}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "2016000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{568b4fad-c44c-415b-9555-adbe61c684e8}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "2160000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0b661e7c-e4f1-4f08-9ccb-c67f988f490b}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "2160000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{eb9dc3d1-78af-42d4-8e61-9b7d1dfee4c7}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "2160000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{2339562f-9a55-41fd-94e9-4c34ef5ce58e}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "2304000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0cae864f-7709-468a-babc-be604e2fc03f}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "2304000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{53494b4b-b0fe-477b-904e-430a8c4268ad}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "2304000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{2ad4b6e2-f38a-418d-a01b-822b15ee0b49}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "2448000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{fd4230c0-a640-42ac-82bc-4f8ae65dfea3}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "2448000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{641fdc08-d1b2-4b90-b215-b0a7f7457410}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "2448000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{65fcd246-837e-44f5-82be-4c555f330331}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "2592000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{8e4e3087-2d7f-4c40-b909-e46d0a3074a9}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "2592000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{256182d7-3336-4130-b78f-8ec0c0eb8fb5}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "2592000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{1600280c-a8a2-4ed3-8744-ae3fa3c5c010}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "2736000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{d69865aa-5265-44ca-a429-644d2d65ea06}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "2736000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{a5365a1b-001d-4573-8397-ef5477699255}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "2736000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{8ba0ec9c-3a08-47ec-9fe8-349ee6a3693a}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "2880000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{4b424087-8dd9-47ef-adab-adea970011aa}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "2880000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{f0beb955-25d1-44fb-9c9b-7b7030619c84}",
+                    "lengthSamples": "144000",
+                    "pitch": 64,
+                    "startSample": "2880000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{1e782e35-58e2-400e-a690-9a9e06a1bc3a}",
+                    "lengthSamples": "144000",
+                    "pitch": 50,
+                    "startSample": "3024000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{757f5557-e8a0-4188-87bd-1d10737f890e}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "3024000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{dca11237-6eee-42f6-9cc5-c09c41a3b812}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "3024000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{66f95a22-e3a6-4962-8598-55796b5beefc}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "3168000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{05bda889-a08e-4276-8b2b-0a131f219461}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "3168000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{5475f7c5-c475-45c8-b336-cc733ccd919a}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "3168000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{d734e337-c7b7-406f-aa6b-f00f794aca34}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "3312000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{417b79f4-f47a-465e-972d-edcd533d678d}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "3312000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{38250f00-d5b8-49ca-b11b-52e6003d161e}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "3312000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{07a0a040-3a15-4fe1-b4a4-aeabac63e2bf}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "3456000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{f0ab08b8-37b3-4ec1-9300-cabf7972c1ad}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "3456000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0ec36a22-793c-4888-b3f6-1064fe2fe4fb}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "3456000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{1c96c5bf-9850-4156-acf5-65a13082b48b}",
+                    "lengthSamples": "144000",
+                    "pitch": 53,
+                    "startSample": "3600000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{f29cf7d3-3093-408b-902b-7a506c167ab5}",
+                    "lengthSamples": "144000",
+                    "pitch": 57,
+                    "startSample": "3600000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{0dae0c1b-d45e-45cf-97f2-7a8152d476e2}",
+                    "lengthSamples": "144000",
+                    "pitch": 60,
+                    "startSample": "3600000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{d08aa75d-6dab-489a-ad2f-0bcdc36705cc}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "3744000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{32a4611e-dea4-47cb-ba00-5d759501b2c8}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "3744000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{db362a22-cf89-4c3e-8806-5e42a991e290}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "3744000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{d19484c3-3e02-4fa3-98a8-4f49aaacc6eb}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "3888000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{713487bd-3d75-49af-befe-e6dfc9a503a6}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "3888000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{fa27548c-78ab-4aa2-bfe2-b6339e3a661a}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "3888000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{b344ab64-45d6-485d-982b-ecfd50f8e81b}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "4032000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{e3cf7bf4-a57e-4388-9e8d-412172a44724}",
+                    "lengthSamples": "144000",
+                    "pitch": 59,
+                    "startSample": "4032000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{5052c61c-9e4f-41ce-b461-5b84395d146a}",
+                    "lengthSamples": "144000",
+                    "pitch": 62,
+                    "startSample": "4032000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{48476cb0-9dae-412f-8ec6-ff75d9441f90}",
+                    "lengthSamples": "144000",
+                    "pitch": 48,
+                    "startSample": "4176000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{76086215-b16e-454a-9a92-ee3d42a6d99e}",
+                    "lengthSamples": "144000",
+                    "pitch": 52,
+                    "startSample": "4176000",
+                    "velocity": 0.4000000059604645
+                },
+                {
+                    "id": "{560eac3c-666c-4ec5-9a22-3df614a8c012}",
+                    "lengthSamples": "144000",
+                    "pitch": 55,
+                    "startSample": "4176000",
+                    "velocity": 0.4000000059604645
+                }
+            ],
+            "muted": false,
+            "name": "Lullaby Chords",
+            "pan": 0,
+            "sendLevel": 0,
+            "soloed": false,
+            "volume": 2
+        }
+    ]
+}

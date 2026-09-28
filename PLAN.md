@@ -1398,6 +1398,442 @@ passes.
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.
 
+## Completed: MIDI note persistence + generated nighttime lullaby
+
+Goal: `SessionIO` currently saves/loads audio clips but not MIDI notes on
+instrument tracks (gap found while asked to compose a children's nighttime
+song using the app's own tools). Fixing this is required before any
+project file with a MIDI melody can round-trip through the app.
+
+Design (approved):
+- Add `midiNotes` array (id, pitch, velocity, startSample, lengthSamples)
+  to the instrument-track JSON schema in `SessionIO.cpp`, alongside the
+  existing `clips` array.
+- Composition: 30 bars of 3/4 at 60 BPM (= 90s) in C major. Melody on
+  Music Box (GM program 10), sustained root-position triads on Piano
+  (GM 0) following a I–IV–V–vi progression. Phrase form: bars 1–8, 9–16
+  (variant), 17–24 (contrasting, higher register), 25–30 (return home,
+  final cadence).
+- One-off generator tool `tools/generate_lullaby.cpp` (built via CMake)
+  constructs the two tracks with the composed notes and calls
+  `SessionIO::save()` to write `assets/nighttime_lullaby.rsdproj`.
+
+Verification plan (approved):
+- [x] Automated: new case in `tests/test_SessionIO.cpp` — round-trip
+      save/load of an instrument track's `midiNotes` (pitch, velocity,
+      startSample, lengthSamples all preserved). Written before the
+      `SessionIO.cpp` fix (confirmed failing first: loaded
+      `instrumentProgram` came back 0 instead of 10). Full suite
+      (51/51 binaries) passes after the fix.
+- [x] Full manual: opened `nighttime_lullaby.rsdproj` in the running app
+      (real X display, real PipeWire/ALSA output — not just a smoke
+      test), both tracks appeared correctly, pressed play, confirmed the
+      transport advanced cleanly through the full 90s with no errors,
+      and recorded 4s of the actual sink output to confirm it was
+      genuinely non-silent (RMS 254, peak 1469/32767).
+
+Generated via `tools/generate_lullaby.cpp` (new `generate_lullaby` CMake
+target, links `SessionIO`/`AudioFileIO`/`Effects`/`LibraryFolder`) — run
+once to produce `assets/nighttime_lullaby.rsdproj` (78 melody notes, 90
+chord notes, confirmed exactly 90 seconds at 60 BPM/30 bars of 3/4).
+
+## Completed: Generated country song
+
+Goal: same generator pattern as the lullaby, different style — user
+asked for a country song reusing the now-working MIDI persistence path.
+No new engineering needed (SessionIO MIDI round-trip already fixed and
+tested above); this is composition + a new one-off generator tool.
+
+Design (approved: instrumentation Acoustic Guitar (steel, GM 25) +
+Banjo (GM 105), 120 BPM, G major, ~90s):
+- 45 bars of 4/4 at 120 BPM (= 90s exactly). I-IV-I-V country
+  progression (G-C-G-D / C-G-D-G) with a ii/vi bridge (Em-C-G-D-Am-C-D-G)
+  for contrast. `tools/generate_country.cpp` (new CMake target) writes
+  `assets/country_song.rsdproj` — melody track (153 notes) + sustained
+  rhythm-chord track (135 notes).
+
+Verification plan (approved, reusing the lullaby's proven method):
+- [x] Automated: no new test needed (same SessionIO round-trip path
+      already covered by `roundTripsInstrumentTrackMidiNotesAndSynthParams`
+      above). Full suite (51/51) still green after adding the new tool.
+- [x] Full manual: verified 90.0s exact duration and correct GM program
+      numbers (25, 105) via the generated JSON. Full playback-in-app
+      verification (like the lullaby's) was superseded by the jazz song
+      below once the user changed direction mid-task — not re-run for
+      country specifically, but the identical code path (SessionIO +
+      SynthEngine) was verified end-to-end via both the lullaby and the
+      jazz song.
+
+## Completed: Generated smoky jazz song ("impress me")
+
+Goal: user asked to replace the country direction with a 2-minute smoky
+jazz piece using 4 different instruments, explicitly asking to be
+impressed. Same MIDI-persistence path, more ambitious arrangement.
+
+Design (approved: 4 instruments, 2 minutes, "impress me" — instrument
+choices and arrangement below were my own composition call, not asked
+individually):
+- 48 bars of 4/4 at 96 BPM (= 120s exactly). Form: head (A A B A, 32
+  bars) + an 8-bar sax solo over the A changes + an 8-bar Cm7/G7 vamp
+  tag resolving to a noir C minor-major7 chord. Chord chart uses proper
+  4-note jazz voicings (root/3rd/5th/7th) via a `ChordSym{root,
+  quality}` + interval-table helper, not fixed triads like the earlier
+  two songs.
+- Four instrument tracks in `tools/generate_jazz.cpp` (new CMake
+  target), writing `assets/jazz_song.rsdproj` / copied to
+  `/home/janel/Music/smoky_jazz.rsdproj`:
+  - **Sax Melody** (Tenor Sax, GM 66): hand-composed head/solo/tag with
+    swung eighth notes (2:1 long-short ratio) — the one hand-written
+    voice, everything else below is derived programmatically from the
+    chord chart.
+  - **Rhodes Comping** (Electric Piano 1, GM 4): Charleston-rhythm
+    comping (hits on beat 1 and the "and" of beat 2), full 4-note chord
+    voicing per hit, derived from the chord chart.
+  - **Walking Bass** (Acoustic Bass, GM 32): quarter-note walking line
+    (root-3rd-5th-chromatic approach to next bar's root), derived from
+    the same chord chart — no manual bass authoring needed.
+  - **Brushed Drums** (`isDrumKit=true`, GM percussion channel): ride
+    every beat, snare on 2 & 4, soft kick anchoring alternate bars.
+
+Verification plan (approved, same method as the lullaby):
+- [x] Automated: no new test needed, same SessionIO/SynthEngine path
+      already covered. Full suite (51/51) still green.
+- [x] Full manual: opened `smoky_jazz.rsdproj` in a fresh dev-build
+      instance (careful to leave the user's own already-running
+      `~/.local/bin/recording-studio` instance untouched throughout —
+      confirmed distinct PIDs before touching anything), all 4 tracks
+      loaded correctly at BPM 96, pressed play, confirmed the transport
+      advanced cleanly through the arrangement with no errors, and
+      recorded a sample of the actual sink output confirming genuinely
+      non-silent audio (RMS 549, peak 2535/32767 — louder than the
+      lullaby, consistent with 4 layered voices).
+- Note: while driving the GUI for this and the country verification, I
+  misread scaled vs. real screen coordinates for the File menu's "Load
+  Session..." row several times (clicked y=89-90 from a *displayed*
+  screenshot instead of the *real* pixel row at y=235), which silently
+  no-op'd instead of opening the dialog. Fixed by cropping the exact
+  region to read real coordinates directly rather than eyeballing a
+  scaled full-screen capture.
+
+All three generated songs live in `/home/janel/Music/`:
+`nighttime_lullaby.rsdproj`, `country_song.rsdproj`, `smoky_jazz.rsdproj`.
+
+## Completed: Generated techno remix of Vivaldi's "Winter"
+
+Goal: user asked for a techno version of Vivaldi's music, ~1.5 minutes.
+Same MIDI-persistence path as the previous three songs; the new work is
+composition (a real classical-to-techno reinterpretation, not just a
+new instrument palette) plus a new one-off generator tool.
+
+Design (approved: Winter/L'Inverno RV 297 mvt. 1 as source theme, 132
+BPM "harder/faster" variant, 4-on-the-floor kit + synth bass + saw lead
++ strings):
+- 50 bars of 4/4 at 132 BPM (~90.9s — 132 BPM doesn't divide 90s into a
+  whole number of bars; 50 bars was the closest fit, flagged rather than
+  silently rounding). F minor, i-VI-VII-i (Fm-Db-Eb-Fm) ritornello cycle.
+- Real arrangement structure (intro/build/drop/breakdown/recap/outro),
+  not just one loop repeated: 4-bar kick-building intro → 8-bar "Shiver"
+  section (16th-note tremolo strings echoing the piece's famous
+  shivering-strings effect, sparse lead stabs) → 8-bar Theme section
+  (hand-composed melody echoing Winter's driving minor-key line, over
+  sustained string chords) → 8-bar Build (16th-note arpeggio, busier
+  hats, octave-jumping bass) → 8-bar breakdown (kick/bass drop out,
+  theme plays softly) → 8-bar full-energy Recap → 6-bar fading outro.
+- `tools/generate_techno_vivaldi.cpp` (new CMake target): only the lead
+  melody (Theme + outro tag) is hand-composed; the tremolo strings,
+  walking-style bass pulse, arpeggio, and drum patterns are all derived
+  programmatically per-bar from a `SectionBar` table + the chord chart
+  (same "derive from the chart" approach as the jazz song's comping/
+  bass/drums). Four tracks: Techno Lead (Lead 2 sawtooth, GM 81),
+  Shiver Strings (String Ensemble 1, GM 48), Synth Bass (Synth Bass 1,
+  GM 38), Techno Kit (`isDrumKit=true`).
+- Written to `/home/janel/Music/techno_vivaldi_winter.rsdproj` per the
+  user's "save into music folder" request from the previous songs
+  (note: `/janel/music` as literally typed doesn't exist on this
+  machine; used `/home/janel/Music`, flagged to the user at the time).
+
+Verification plan (approved, same method as the previous three songs):
+- [x] Automated: no new test needed, same SessionIO/SynthEngine path
+      already covered by `roundTripsInstrumentTrackMidiNotesAndSynthParams`.
+      Full suite (51/51) still green after adding the new tool.
+- [x] Full manual: opened `techno_vivaldi_winter.rsdproj` in a fresh
+      dev-build instance (confirmed distinct PID from the user's own
+      already-running `~/.local/bin/recording-studio`, left untouched
+      throughout), all 4 tracks loaded correctly at BPM 132, pressed
+      play, confirmed the transport advanced cleanly through the full
+      arrangement (checked at ~13s and again at ~68s, well past the
+      intro/shiver/theme sections and into build/breakdown) with no
+      errors, and recorded a sample of the actual sink output
+      confirming genuinely non-silent audio (RMS 606, peak
+      3187/32767 — the loudest of the four songs so far, consistent
+      with the denser techno arrangement).
+
+## Genre-driven song-generation skill (in progress)
+
+Goal: a Claude Code skill that takes an arbitrary genre name (not just the
+four hand-built songs above) and produces both a `.rsdproj` and an actual
+rendered `.wav`, exercising as much of the app's feature surface as
+practical (multi-track, instruments, effects, bus sends, markers) rather
+than a bare melody+chords loop.
+
+Status: [x] done
+
+Steps:
+1. [x] `tools/generate_song.cpp` — new CLI (CMake target like the existing
+   `generate_*` tools), args: genre name + output path (writes
+   `<output>.rsdproj` and `<output>.wav`). Wired in `CMakeLists.txt`
+   alongside the other `generate_*` targets, additionally linking
+   `src/audio/OfflineRenderer.cpp`, `src/audio/SessionMixer.cpp`, and
+   `src/audio/Mixer.cpp` since it renders audio (the older `generate_*`
+   tools only ever wrote a `.rsdproj`).
+2. [x] Genre preset table in `src/model/GenrePreset.h` (`presetForGenre`):
+   tempo/key/scale-degree chord progression/GM lead+harmony instrument
+   programs/drum-kit flag for country, jazz, lullaby, rock, pop, blues,
+   techno, classical, reggae, metal, plus a deterministic FNV-1a
+   hash-based fallback (clamped to valid MIDI/BPM ranges, never crashes)
+   for any unrecognized genre string.
+3. [x] Procedural multi-track `Session` build from the chosen preset in
+   `generate_song.cpp`: a Lead instrument track (arpeggiated chord tones)
+   and a Harmony instrument track (sustained triads), an optional Drums
+   instrument track (kick/snare/hihat pattern, when the preset calls for
+   a drum kit), all three sending to a Bus track (which carries a
+   `ReverbEffect`); the Lead track carries an `EqEffect`, the Harmony
+   track a `CompressorEffect`; per-track volume/pan set; two markers
+   (Intro at bar 0, Main a quarter of the way in). Bar count is scaled to
+   the preset's BPM to land in the 60-120s range (clamped 16-96 bars).
+4. [x] Saved via `SessionIO::saveSession()`.
+5. [x] Rendered via `sessionContentLengthSamples()` +
+   `OfflineRenderer::renderSessionMixdown()` + `AudioFileIO::writeFile()`
+   (`Wav32Float`) — same path as File > Export, including resetting each
+   track's `SynthEngine` first per `MainWindow::onExportClicked`'s
+   precaution. Also required manually calling each added `Effect`'s
+   `prepare()` (normally done by `SessionIO::loadSession`) — omitting
+   this segfaulted `ReverbEffect::Comb::process` on an unsized buffer;
+   fixed by calling `prepare(kSampleRate)` right after constructing each
+   effect.
+6. [x] `.claude/skills/compose-song/SKILL.md` — takes a genre argument,
+   builds `generate_song` via
+   `cmake -S . -B build -DBUILD_TESTS=ON && cmake --build build --target generate_song`,
+   runs it, and reports the resulting `.rsdproj`/`.wav` paths.
+
+Verification plan (approved) — all done:
+- [x] Automated, written first (TDD): `tests/test_GenrePreset.cpp` (14
+  cases) — known-genre tempo/instrument-family checks (country, jazz,
+  lullaby, techno), case-insensitive matching, all 10 known genres
+  produce valid in-range presets, unrecognized-genre determinism (same
+  string -> identical preset across calls), different unrecognized
+  strings tend to differ, and non-crashing on empty string / unicode /
+  a 5000-char string. `genre_preset_tests` CMake target added to
+  `tests/CMakeLists.txt` (Qt6::Core + Qt6::Test only, no fluidsynth/
+  sndfile deps). All 14 pass.
+- [x] Full existing suite: `ctest` in `build/` — 52/52 tests pass (100%),
+  no regressions.
+- [x] Integration: ran `./build/generate_song <genre> <path>` for three
+  genres into the session scratchpad (not `assets/`, which already had
+  two untracked sample `.rsdproj` files left alone): `reggae` (known
+  preset, 4 tracks, bpm=84, bars=31, 88.57s), `vaporwave` (unrecognized
+  -> deterministic hash fallback, 3 tracks since the hash gave
+  `useDrumKit=false`, bpm=123, bars=46, 89.75s), `metal` (known preset,
+  4 tracks, bpm=160, bars=60, 90.00s). For each: parsed the `.rsdproj`
+  as JSON (valid, track counts as above) and manually parsed the
+  IEEE-float WAV (Python's `wave` module doesn't support format-3/float
+  WAVs and no `sox`/`soundfile` was available, so parsed the RIFF/fmt/
+  data chunks directly) — confirmed 48kHz stereo, correct durations,
+  file sizes consistent with real float32 audio (~34MB each), and RMS
+  energy of 0.009-0.020 (clearly above near-silence).
+- [ ] Manual: opening a generated `.rsdproj` in the actual app is left
+  for the user — not done here per instructions to avoid the GUI.
+
+## Vivaldi Spring (piano + violin duo) (in progress)
+
+Goal: a hand-composed one-off, not a generic genre preset — Vivaldi's
+Four Seasons, "Spring", 1st movement (Allegro), arranged for exactly two
+instrument tracks: Violin (lead melody, incl. the famous birdsong/storm
+episodes) and Piano (reduced harmony/bass, no other tracks/bus/drums).
+Full movement length (~3:30), not the ~90s convention of the other
+one-off tools.
+
+Status: [x] done
+
+Steps:
+1. [x] `tools/generate_vivaldi_spring.cpp` — new CLI, same house style as
+   `generate_country.cpp`/`generate_jazz.cpp`/`generate_techno_vivaldi.cpp`
+   (chord-chart-driven "derive from the chart" composition, hand-composed
+   lead melody). Exactly 2 instrument tracks: Violin (GM program 40)
+   carrying the melody, Piano (GM program 0, Acoustic Grand) playing the
+   reduced orchestral harmony/bass. No drum track, no bus track — both
+   tracks mix direct to master, matching the "only piano and violin"
+   request literally.
+   - 120 BPM, 4/4 (1 bar = 96000 samples = 2.0s exactly), 105 bars total
+     = 210.0s exactly.
+   - Ritornello form: A1 Ritornello full (bars 0-11, 12 bars) - B "Il
+     Canto de gl'Augelli"/birds (bars 12-29, 18 bars) - A2 Ritornello
+     partial (bars 30-37, 8 bars) - C "Correnti"/streams (bars 38-55, 18
+     bars) - A3 Ritornello partial (bars 56-63, 8 bars) - D "Lampi e
+     tuoni"/storm (bars 64-81, 18 bars, minor-inflected vi-IV-V-vi,
+     tremolo, higher velocity) - A4 Ritornello full close (bars 82-104,
+     23 bars).
+   - Key E major throughout except the minor-inflected storm episode;
+     hand-composed 4-bar ritornello theme (bouncing-eighth incipit,
+     violin doubled by piano octaves/chords), birdsong/streams/storm
+     figuration all derived per-bar from the chord chart
+     (`chordForBar`), same technique as generate_jazz.cpp/
+     generate_techno_vivaldi.cpp.
+2. [x] Save via `SessionIO::saveSession()`, generated to
+   `assets/vivaldi_spring_piano_violin.rsdproj` then moved (with its
+   `_audiofiles/` companion dir) to
+   `/home/janel/Music/vivaldi_spring_piano_violin.rsdproj` per the
+   user's "save into music folder" request (same as techno_vivaldi_winter
+   above; `/janel/music`/`/home/janel/music` as typed doesn't exist on
+   this machine, used `/home/janel/Music`).
+3. [x] Render via `OfflineRenderer::renderSessionMixdown()` +
+   `AudioFileIO::writeFile()`, generated to
+   `assets/vivaldi_spring_piano_violin.wav` then moved to
+   `/home/janel/Music/vivaldi_spring_piano_violin.wav` (210.0s exactly,
+   verified).
+4. [x] Add the CMake target (`generate_vivaldi_spring`, same
+   SessionIO/AudioFileIO/Effects/Mixer/SessionMixer/OfflineRenderer/
+   LibraryFolder sources + Qt6::Core/sndfile/fluidsynth deps as
+   `generate_song`).
+
+Verification plan (approved) — results:
+- [x] Automated: no new unit test (content, not logic). Full `ctest`
+  suite: 100% tests passed, 0 failed out of 52.
+- [x] Integration: `.rsdproj` parses as valid JSON with exactly 2 tracks,
+  both `kind: "instrument"` (Violin, Piano), no bus/drum track. `.wav` is
+  IEEE-float 32-bit, 48kHz stereo, duration 210.0s exactly, RMS
+  0.01348, peak 0.1297 (clearly above near-silence; manually parsed
+  RIFF/fmt/data chunks with Python since the `wave` module can't read
+  float format).
+- [ ] Manual: user opens the `.rsdproj` in the app and listens.
+
+## Vivaldi Spring — solo violin, first 30s (in progress)
+
+Goal: a faithful re-composition of the opening of Spring (1st mvt, E
+major) for a single Violin track (GM 40): ritornello theme, its soft
+echo, and the start of the birdsong entry. Double-stops carry the
+harmony without accompaniment; velocity contrast gives the forte/piano
+echo. Exactly 30.0s.
+
+Status: [x] done (manual listen pending)
+
+Steps:
+1. [x] `tools/generate_vivaldi_spring_violin.cpp` + CMake target (same
+   deps as `generate_vivaldi_spring`). 96 BPM, 4/4, 12 bars x 2.5s =
+   30.0s exactly (all durations are multiples of a 32nd = 3750 samples;
+   the tool refuses to write if the composed length drifts). Bars 0-3
+   ritornello forte (vel 0.9) with double-stops on long notes and an
+   E major triple-stop (B3/G#4/E5) at the cadence; bars 4-7 the same
+   theme echoed piano (vel 0.45); bars 8-11 birdsong entry (32nd-note
+   trills on E6/G#6/B5, repeated G#6 chirps, vel 0.6). Markers:
+   Ritornello, Echo, Birds.
+2. [x] Output to `/home/janel/Music/vivaldi_spring_violin_30s.rsdproj` +
+   `.wav`.
+
+Verification plan (approved) — results:
+- [x] Full `ctest` suite: 52/52 pass.
+- [x] `.rsdproj` valid JSON, exactly 1 track (Violin, instrument,
+  program 40), 146 notes.
+- [x] `.wav`: 48kHz stereo, 30.000s, RMS 0.01197, peak 0.1230.
+- [x] Note range MIDI 59-95 (B3-B6); lowest is above G3 (55).
+- [x] Manual: user listened — "better but not really good". Melody was
+  from memory (only bars 1-3 matched the real score) and sounded
+  robotic. Superseded by the section below.
+
+## Expressive solo violin from a real score (in progress)
+
+Goal: the opening of Spring for solo violin, with notes taken from a real
+score and less mechanical playback.
+
+Source: `assets/scores/vivaldi_spring_mvt1_mutopia.mid` (Mutopia Project,
+CC BY-SA 3.0 — see `assets/scores/README.md`). Track 1 `solo`, 4/4 at
+115 BPM, 384 PPQ. Use bars 1-15 (~31.3s, ends on a bar line). Notes played
+as written (no added trills); the file has flat velocity 90 everywhere, so
+all dynamics come from the expression layer.
+
+Why it sounded robotic (engine findings):
+- Note on/off snapped to 1024-sample blocks (~21ms grid) —
+  `OfflineRenderer.cpp:10`, `SessionMixer.cpp:32-46`.
+- `SynthEngine` sends only noteon/noteoff; no CC or pitch bend, and
+  `MidiNote` has no expression fields.
+- Same-pitch overlapping notes: the first noteOff cuts the second.
+
+Status: [x] done (manual listen pending)
+
+Steps:
+1. [x] Engine: sample-accurate note scheduling (split each block at note
+   event offsets) — affects live playback and export.
+   `renderTrackBlock` (SessionMixer.cpp) collects the block's note on/off
+   events with exact frame offsets into a fixed-size stack array (1024
+   events, insertion-sorted; no allocation/locks on the RT path), then
+   renders the synth in sub-segments split at those offsets, firing each
+   offset's events first (offs, then ons, then zero-length offs). Same code
+   serves AudioEngine::rtCallback (via mixSessionBlock), offline mixdown and
+   stems. Residual granularity is FluidSynth's internal 64-frame grid
+   (~1.3ms). Same-pitch overlap handled in the scheduler: a note's release
+   moves to the start of any same-pitch note that begins while it's held
+   (off fires before the new on); same-start same-pitch duplicates keep
+   only the longer one.
+2. [x] Engine: new automation targets `expression` (CC11) and `vibrato`
+   (CC1) alongside volume/pan, sent to the track's synth per block, saved
+   and loaded by `SessionIO` (old projects without them still load).
+   Evaluated at every sub-segment start; no lane = MIDI defaults (1.0/0.0).
+   `SynthEngine::controlChange(cc, value)` calls `fluid_synth_cc` on the
+   melodic channel and skips unchanged values. Measured on FluidR3 violin
+   (GM 40, A4): expression 0.3 = RMS 0.00063 vs 0.00705 at 1.0 (~-21dB,
+   FluidSynth's concave CC11 curve); vibrato CC1=127 gives ~82 cents
+   peak-to-peak pitch swing vs ~7 cents at 0. UI: AutomationLaneWidget's
+   combo still offers only Volume/Pan, so the new lanes are invisible
+   there and left untouched by edits.
+3. [x] Tool `tools/generate_vivaldi_spring_violin_expressive.cpp` + CMake
+   target (same sources/deps as `generate_vivaldi_spring_violin`). Built-in
+   SMF reader (chunks, VLQ, running status, meta/sysex skip, note-on vel 0
+   = off, FIFO on/off pairing); refuses tempo changes inside bars 1-15.
+   Keeps the `solo` track's 110 notes starting in bars 1-15, clipped to the
+   bar-15 end; session BPM 115 (file tempo 115.00003 rounded), one Violin
+   track (GM 40, volume 1.5 to make up for the CC11 attenuation), no
+   bus/effects. Expression lane (FluidSynth CC11 gain = e^2): bars 1-3
+   1.0, echo bars 4-6 0.66, bars 7-13 arch 0.74-0.88, bars 14-15 0.66; notes
+   >= 0.4s swell 0.84 -> 1.0 (45%) -> 0.94 (80%) -> 0.86 (end-15ms), short
+   notes flat. Vibrato lane: notes > 0.3s get 0 for 180ms then a 250ms ramp
+   to 0.42 (0.34 in the echo); short notes 0. Legato: +20ms overlap into a
+   different-pitch successor (gap <= 40ms), same pitch never overlaps.
+   Velocity: phrase base (0.80/0.62/0.72/0.64) +-0.03 from a fixed-seed
+   LCG, +0.06 on beat 1. Markers: Ritornello, Echo, Ritornello continues,
+   Birdsong. Header credits Mutopia piece 301, CC BY-SA 3.0 (output is an
+   adaptation under the same license).
+4. [x] Output `/home/janel/Music/vivaldi_spring_violin_expressive.rsdproj`
+   + `.wav` (default path; optional argv[1] overrides the base path).
+   Output is reproducible (identical .wav md5 across runs).
+
+Verification plan (approved) — results:
+- [x] Tests first (each seen failing before the implementation):
+  session_mixer_tests +7 — note starting mid-block (frame 700, and
+  1024+900) silent before its start and sounding within 160 frames; note
+  ending mid-block identical to a held note until its end sample;
+  same-pitch overlap doesn't cut the later note; expression 0.3 vs 1.0
+  (RMS 0.00063 vs 0.00705); expression ramp mid-note vs unautomated;
+  vibrato CC1 1.0 vs 0.0 (deterministic control render identical; pitch
+  swing ~82 vs ~7 cents). session_io_tests +2 — all four lane targets
+  round-trip; an old file with only volume/pan lanes loads.
+- [x] Full `ctest` suite green: 52/52 targets (new tests are functions in
+  existing targets).
+- [x] Output: 1 track (Violin, instrument, program 40), expression and
+  vibrato lanes (260 points each), no effects/clips. `.wav` IEEE float
+  32-bit, 48kHz stereo, 31.304s, RMS 0.01236, peak 0.0876 (per phrase RMS:
+  bars 1-3 0.0214, echo 0.0057, bars 7-13 0.0124, birdsong 0.0069). Pitch
+  sequence (sorted by start) equals the MIDI solo track's bars 1-15 (110
+  notes, reference Python parser). 83 legato overlaps, all 20ms, 0
+  same-pitch overlaps.
+- [x] Orchestrator re-check: 52/52 ctest; notes match MIDI bars 1-15
+  (110/110). The `.rsdproj` first found in ~/Music was stale (both lanes
+  saved as `volume` — would have applied the expression/vibrato curves
+  as volume in the app); regenerated with the current build, lanes now
+  saved as `expression`/`vibrato` (260 points each), 31.304s, RMS
+  0.01236. Audio data identical across runs (only libsndfile's PEAK
+  chunk timestamp differs in the header).
+- [ ] Manual: user listens.
+
 ## Fix: mic recording stalls after ~2 seconds
 
 Root cause (confirmed by investigation, see conversation): while recording,
@@ -1529,3 +1965,5 @@ start, matching the existing System-Audio-unavailable warning.
   AudioEngine.cpp.
 - [x] Added the "Nothing to Record" guard in `onRecordClicked()`.
 - [x] Full `ctest` green after cleanup (54/54).
+- [ ] Final manual confirmation: user records normally now that
+  nerd-dictation is gone.

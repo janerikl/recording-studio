@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <iterator>
 #include <vector>
 
 #include <fluidsynth.h>
@@ -29,13 +30,21 @@ public:
     static constexpr int kDrumChannel = 9;
 
     SynthEngine() {
+        std::fill(std::begin(m_lastCc), std::end(m_lastCc), -1);
         m_settings = new_fluid_settings();
         fluid_settings_setnum(m_settings, "synth.sample-rate", 48000.0);
         fluid_settings_setint(m_settings, "synth.threadsafe-api", 0);
-        fluid_settings_setint(m_settings, "synth.reverb.active", 0);
-        fluid_settings_setint(m_settings, "synth.chorus.active", 0);
+        fluid_settings_setint(m_settings, "synth.reverb.active", 1);
+        fluid_settings_setint(m_settings, "synth.chorus.active", 1);
         m_synth = new_fluid_synth(m_settings);
-        fluid_synth_sfload(m_synth, RSD_SOURCE_DIR "/assets/soundfonts/TimGM6mb.sf2", 1);
+        // Prefer the full-quality FluidR3_GM soundfont (apt: fluid-soundfont-gm)
+        // when present on the system — its multi-sampled instruments sound far
+        // more authentic than the bundled TimGM6mb.sf2, which is a deliberately
+        // tiny (6MB) placeholder. Fall back to the bundled one so the app still
+        // runs on a machine without that package installed.
+        if (fluid_synth_sfload(m_synth, "/usr/share/sounds/sf2/FluidR3_GM.sf2", 1) == -1) {
+            fluid_synth_sfload(m_synth, RSD_SOURCE_DIR "/assets/soundfonts/TimGM6mb.sf2", 1);
+        }
         fluid_synth_bank_select(m_synth, kDrumChannel, 128);
         fluid_synth_program_change(m_synth, kDrumChannel, 0);
     }
@@ -57,6 +66,19 @@ public:
     void noteOff(int pitch, bool isDrumKit = false) {
         int channel = isDrumKit ? kDrumChannel : kMelodicChannel;
         fluid_synth_noteoff(m_synth, channel, std::clamp(pitch, 0, 127));
+    }
+
+    // Sends MIDI control change `cc` (0-127) with `value` (clamped 0-127)
+    // on the melodic channel. Skips the FluidSynth call when the value
+    // equals the last one sent for that controller, so callers can invoke
+    // it every block/segment cheaply. Used for CC11 (expression) and CC1
+    // (modulation -> vibrato depth via SF2 default modulators).
+    void controlChange(int cc, int value) {
+        if (cc < 0 || cc > 127) return;
+        value = std::clamp(value, 0, 127);
+        if (m_lastCc[cc] == value) return;
+        m_lastCc[cc] = value;
+        fluid_synth_cc(m_synth, kMelodicChannel, cc, value);
     }
 
     // Adds nFrames of rendered audio into `out` (interleaved, `channels`
@@ -106,6 +128,7 @@ private:
     fluid_settings_t* m_settings = nullptr;
     fluid_synth_t* m_synth = nullptr;
     int m_lastProgram = -1;
+    int m_lastCc[128]; // last value sent per controller; -1 = never sent
     std::vector<float> m_scratchL;
     std::vector<float> m_scratchR;
 };

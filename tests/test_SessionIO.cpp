@@ -289,6 +289,136 @@ private slots:
         QVERIFY(!loadedLibrary[0].itemId.isEmpty());
     }
 
+    void roundTripsInstrumentTrackMidiNotesAndSynthParams() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        auto track = session.addTrack("Melody");
+        track->kind = TrackKind::Instrument;
+        track->synthParams.instrumentProgram.store(10); // Music Box
+        track->synthParams.isDrumKit.store(false);
+
+        auto note1 = std::make_shared<MidiNote>();
+        note1->pitch = 60;
+        note1->velocity = 0.7f;
+        note1->startSample = 0;
+        note1->lengthSamples = 48000;
+        track->addMidiNote(note1);
+
+        auto note2 = std::make_shared<MidiNote>();
+        note2->pitch = 64;
+        note2->velocity = 0.5f;
+        note2->startSample = 48000;
+        note2->lengthSamples = 24000;
+        track->addMidiNote(note2);
+
+        QVector<LibraryEntry> emptyLibrary;
+        QVERIFY(SessionIO::saveSession(path, session, emptyLibrary));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        QCOMPARE(loaded.tracks.size(), size_t(1));
+        auto loadedTrack = loaded.tracks.front();
+        QCOMPARE(loadedTrack->kind, TrackKind::Instrument);
+        QCOMPARE(loadedTrack->synthParams.instrumentProgram.load(), 10);
+        QCOMPARE(loadedTrack->synthParams.isDrumKit.load(), false);
+
+        auto notes = loadedTrack->midiClipsSnapshot();
+        QCOMPARE(notes->size(), size_t(2));
+
+        auto loadedNote1 = notes->at(0);
+        QCOMPARE(loadedNote1->pitch, 60);
+        QVERIFY(qFuzzyCompare(loadedNote1->velocity, 0.7f));
+        QCOMPARE(loadedNote1->startSample, int64_t(0));
+        QCOMPARE(loadedNote1->lengthSamples, int64_t(48000));
+
+        auto loadedNote2 = notes->at(1);
+        QCOMPARE(loadedNote2->pitch, 64);
+        QVERIFY(qFuzzyCompare(loadedNote2->velocity, 0.5f));
+        QCOMPARE(loadedNote2->startSample, int64_t(48000));
+        QCOMPARE(loadedNote2->lengthSamples, int64_t(24000));
+    }
+
+    void roundTripsAllAutomationLaneTargets() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("session.rsdproj");
+
+        Session session;
+        auto track = session.addTrack("Violin");
+        track->kind = TrackKind::Instrument;
+        struct Expected {
+            AutomationTarget target;
+            std::vector<AutomationPoint> points;
+        };
+        const std::vector<Expected> expected = {
+            {AutomationTarget::Volume, {{0, 1.0f}, {48000, 0.5f}}},
+            {AutomationTarget::Pan, {{0, -0.25f}}},
+            {AutomationTarget::Expression, {{0, 0.3f}, {12000, 0.8f}, {5000000000LL, 0.6f}}},
+            {AutomationTarget::Vibrato, {{9600, 0.0f}, {24000, 0.55f}}},
+        };
+        for (const auto& e : expected) {
+            track->replaceAutomationLane(std::make_shared<AutomationLane>(AutomationLane{e.target, e.points}));
+        }
+
+        QVector<LibraryEntry> emptyLibrary;
+        QVERIFY(SessionIO::saveSession(path, session, emptyLibrary));
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+
+        auto lanes = loaded.tracks.front()->automationLanesSnapshot();
+        QCOMPARE(lanes->size(), expected.size());
+        for (const auto& e : expected) {
+            auto it = std::find_if(lanes->begin(), lanes->end(),
+                                   [&](const auto& lane) { return lane->target == e.target; });
+            QVERIFY(it != lanes->end());
+            QCOMPARE((*it)->points.size(), e.points.size());
+            for (size_t i = 0; i < e.points.size(); ++i) {
+                QCOMPARE((*it)->points[i].sample, e.points[i].sample);
+                QVERIFY(qFuzzyCompare((*it)->points[i].value, e.points[i].value) ||
+                        qFuzzyIsNull((*it)->points[i].value - e.points[i].value));
+            }
+        }
+    }
+
+    void loadsOldFileWithOnlyVolumeAndPanLanes() {
+        // A project written before expression/vibrato existed.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        QString path = dir.filePath("old.rsdproj");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"({
+            "sampleRate": 48000, "channels": 2, "bpm": 120,
+            "tracks": [{
+                "id": "{6f1c1f7e-0000-4000-8000-000000000001}", "name": "Old", "kind": "instrument",
+                "volume": 1.0, "pan": 0.0,
+                "automationLanes": [
+                    {"target": "volume", "points": [{"sample": "0", "value": 0.7}]},
+                    {"target": "pan", "points": [{"sample": "480", "value": -0.5}]}
+                ],
+                "clips": []
+            }]
+        })");
+        file.close();
+
+        Session loaded;
+        QVector<LibraryEntry> loadedLibrary;
+        QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
+        QCOMPARE(loaded.tracks.size(), size_t(1));
+        auto lanes = loaded.tracks.front()->automationLanesSnapshot();
+        QCOMPARE(lanes->size(), size_t(2));
+        QCOMPARE(lanes->at(0)->target, AutomationTarget::Volume);
+        QCOMPARE(lanes->at(1)->target, AutomationTarget::Pan);
+        QCOMPARE(lanes->at(1)->points.front().sample, int64_t(480));
+    }
+
     void roundTripsLibraryFolderTreeAndItemMembership() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

@@ -157,6 +157,11 @@ target_include_directories(gm_instruments_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(gm_instruments_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME GMInstrumentsTests COMMAND gm_instruments_tests)
 
+add_executable(genre_preset_tests test_GenrePreset.cpp)
+target_include_directories(genre_preset_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(genre_preset_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME GenrePresetTests COMMAND genre_preset_tests)
+
 add_executable(gm_drum_map_tests test_GMDrumMap.cpp)
 target_include_directories(gm_drum_map_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(gm_drum_map_tests PRIVATE Qt6::Core Qt6::Test)

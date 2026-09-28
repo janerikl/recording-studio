@@ -25,6 +25,11 @@ AutomationLaneWidget::AutomationLaneWidget(std::shared_ptr<Track> track, QWidget
     setStyleSheet("background: #161616;");
 
     m_targetCombo = new QComboBox(this);
+    // Only Volume/Pan are editable here. Expression/Vibrato lanes (written
+    // by generator tools, see AutomationLane.h) are never selectable, so
+    // this widget neither draws nor touches them; replaceAutomationLane()
+    // keys by target, so editing Volume/Pan leaves them intact and they
+    // still play back and save/load.
     m_targetCombo->addItem("Volume", static_cast<int>(AutomationTarget::Volume));
     m_targetCombo->addItem("Pan", static_cast<int>(AutomationTarget::Pan));
     m_targetCombo->setGeometry(2, 2, 70, kComboHeight);

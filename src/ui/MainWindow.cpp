@@ -17,6 +17,7 @@
 #include <QShortcut>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QStatusBar>
 #include <QStringList>
 #include <QTimer>
 #include <QToolButton>
@@ -276,8 +277,8 @@ MainWindow::MainWindow(QWidget* parent)
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
 
-    m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", central);
-    layout->addWidget(m_statusLabel);
+    m_statusLabel = new QLabel("Stopped — 0 tracks, 0 clips", this);
+    statusBar()->addWidget(m_statusLabel);
 
     // Recording section: record button + elapsed recording time + input
     // meter, kept compact (~280px) as a self-contained unit. The time
@@ -1099,9 +1100,18 @@ void MainWindow::onStopClicked() {
     // meter would otherwise keep showing whatever level was last mixed
     // before Stop, forever — nothing else ever overwrites them. Input is
     // left alone; it's meant to keep tracking live mic signal while stopped.
+    //
+    // Instrument tracks' SynthEngine has the same problem but audibly, not
+    // just visually: renderTrackBlock() calls synthEngine.render() every
+    // block regardless of playback state (SessionMixer.cpp), so any note
+    // still sounding (or mid-release) at the moment Stop is pressed keeps
+    // rendering forever with nothing to silence it — heard as a stuck hum.
+    // reset() is the same call already trusted at the export/loop-browser
+    // call sites right after onStopClicked().
     for (auto& track : m_session->tracks) {
         track->postFaderPeakL.store(0.0f, std::memory_order_relaxed);
         track->postFaderPeakR.store(0.0f, std::memory_order_relaxed);
+        if (track->kind == TrackKind::Instrument) track->synthEngine.reset();
     }
     m_engine->resetOutputMeter();
     updateMeters();
@@ -1819,8 +1829,11 @@ void MainWindow::updateStatusLabel() {
     for (auto& track : m_session->tracks) {
         totalClips += static_cast<int>(track->clipsSnapshot()->size());
     }
-    m_statusLabel->setText(
-        QString("Stopped — %1 track(s), %2 clip(s)").arg(m_session->tracks.size()).arg(totalClips));
+    QString fileName = m_currentSessionPath.isEmpty() ? "Untitled" : QFileInfo(m_currentSessionPath).fileName();
+    m_statusLabel->setText(QString("Stopped — %1 track(s), %2 clip(s) — %3")
+                                .arg(m_session->tracks.size())
+                                .arg(totalClips)
+                                .arg(fileName));
 }
 
 QIcon MainWindow::recordIcon() {

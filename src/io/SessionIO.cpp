@@ -145,6 +145,25 @@ static std::shared_ptr<Effect> effectFromJson(const QJsonObject& json, double sa
     return effect;
 }
 
+static QString automationTargetToString(AutomationTarget t) {
+    switch (t) {
+    case AutomationTarget::Volume: return "volume";
+    case AutomationTarget::Pan: return "pan";
+    case AutomationTarget::Expression: return "expression";
+    case AutomationTarget::Vibrato: return "vibrato";
+    }
+    return "volume";
+}
+
+// Unknown/missing strings fall back to Volume, matching the pre-expression
+// loader's behavior for anything that wasn't "pan".
+static AutomationTarget automationTargetFromString(const QString& s) {
+    if (s == "pan") return AutomationTarget::Pan;
+    if (s == "expression") return AutomationTarget::Expression;
+    if (s == "vibrato") return AutomationTarget::Vibrato;
+    return AutomationTarget::Volume;
+}
+
 static QString audioFilesDirFor(const QString& projectPath) {
     QFileInfo info(projectPath);
     return info.absolutePath() + "/" + info.completeBaseName() + "_audiofiles";
@@ -188,7 +207,7 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
         QJsonArray automationLanesJson;
         for (auto& lane : *track->automationLanesSnapshot()) {
             QJsonObject laneJson;
-            laneJson["target"] = lane->target == AutomationTarget::Volume ? "volume" : "pan";
+            laneJson["target"] = automationTargetToString(lane->target);
             QJsonArray pointsJson;
             for (auto& point : lane->points) {
                 QJsonObject pointJson;
@@ -237,6 +256,21 @@ bool SessionIO::saveSession(const QString& projectPath, const Session& session,
         }
 
         trackJson["clips"] = clipsJson;
+
+        trackJson["instrumentProgram"] = track->synthParams.instrumentProgram.load();
+        trackJson["isDrumKit"] = track->synthParams.isDrumKit.load();
+
+        QJsonArray midiNotesJson;
+        for (auto& note : *track->midiClipsSnapshot()) {
+            QJsonObject noteJson;
+            noteJson["id"] = note->id.toString();
+            noteJson["pitch"] = note->pitch;
+            noteJson["velocity"] = note->velocity;
+            noteJson["startSample"] = QString::number(note->startSample);
+            noteJson["lengthSamples"] = QString::number(note->lengthSamples);
+            midiNotesJson.append(noteJson);
+        }
+        trackJson["midiNotes"] = midiNotesJson;
 
         QJsonArray effectsJson;
         for (auto& effect : *track->effectsSnapshot()) {
@@ -365,8 +399,7 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
         for (const auto& laneVal : trackJson["automationLanes"].toArray()) {
             QJsonObject laneJson = laneVal.toObject();
             auto lane = std::make_shared<AutomationLane>();
-            lane->target =
-                laneJson["target"].toString() == "pan" ? AutomationTarget::Pan : AutomationTarget::Volume;
+            lane->target = automationTargetFromString(laneJson["target"].toString());
             for (const auto& pointVal : laneJson["points"].toArray()) {
                 QJsonObject pointJson = pointVal.toObject();
                 lane->points.push_back(
@@ -412,6 +445,20 @@ bool SessionIO::loadSession(const QString& projectPath, Session& outSession,
             clip->fadeOutCurve = parseFadeCurve(clipJson["fadeOutCurve"].toString());
 
             track->addClip(clip);
+        }
+
+        track->synthParams.instrumentProgram.store(trackJson["instrumentProgram"].toInt(0));
+        track->synthParams.isDrumKit.store(trackJson["isDrumKit"].toBool(false));
+
+        for (const auto& noteVal : trackJson["midiNotes"].toArray()) {
+            QJsonObject noteJson = noteVal.toObject();
+            auto note = std::make_shared<MidiNote>();
+            note->id = QUuid(noteJson["id"].toString());
+            note->pitch = noteJson["pitch"].toInt(60);
+            note->velocity = static_cast<float>(noteJson["velocity"].toDouble(1.0));
+            note->startSample = noteJson["startSample"].toString().toLongLong();
+            note->lengthSamples = noteJson["lengthSamples"].toString().toLongLong();
+            track->addMidiNote(note);
         }
 
         for (const auto& effectVal : trackJson["effects"].toArray()) {

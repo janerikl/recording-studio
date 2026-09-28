@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 COMPONENTS Widgets REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(RTAUDIO REQUIRED IMPORTED_TARGET rtaudio)
 pkg_check_modules(SNDFILE REQUIRED IMPORTED_TARGET sndfile)
@@ -68,6 +68,154 @@ target_compile_definitions(recording_studio PRIVATE
 target_link_libraries(recording_studio PRIVATE
     Qt6::Widgets
     PkgConfig::RTAUDIO
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_lullaby
+    tools/generate_lullaby.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_lullaby PRIVATE src)
+target_compile_definitions(generate_lullaby PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_lullaby PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_country
+    tools/generate_country.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_country PRIVATE src)
+target_compile_definitions(generate_country PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_country PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_jazz
+    tools/generate_jazz.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_jazz PRIVATE src)
+target_compile_definitions(generate_jazz PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_jazz PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_techno_vivaldi
+    tools/generate_techno_vivaldi.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_techno_vivaldi PRIVATE src)
+target_compile_definitions(generate_techno_vivaldi PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_techno_vivaldi PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_song
+    tools/generate_song.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/audio/Mixer.cpp
+    src/audio/SessionMixer.cpp
+    src/audio/OfflineRenderer.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_song PRIVATE src)
+target_compile_definitions(generate_song PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_song PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_vivaldi_spring
+    tools/generate_vivaldi_spring.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/audio/Mixer.cpp
+    src/audio/SessionMixer.cpp
+    src/audio/OfflineRenderer.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_vivaldi_spring PRIVATE src)
+target_compile_definitions(generate_vivaldi_spring PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_vivaldi_spring PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_vivaldi_spring_violin
+    tools/generate_vivaldi_spring_violin.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/audio/Mixer.cpp
+    src/audio/SessionMixer.cpp
+    src/audio/OfflineRenderer.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_vivaldi_spring_violin PRIVATE src)
+target_compile_definitions(generate_vivaldi_spring_violin PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_vivaldi_spring_violin PRIVATE
+    Qt6::Core
+    PkgConfig::SNDFILE
+    PkgConfig::FLUIDSYNTH
+)
+
+add_executable(generate_vivaldi_spring_violin_expressive
+    tools/generate_vivaldi_spring_violin_expressive.cpp
+    src/io/SessionIO.cpp
+    src/io/AudioFileIO.cpp
+    src/audio/Effects.cpp
+    src/audio/Mixer.cpp
+    src/audio/SessionMixer.cpp
+    src/audio/OfflineRenderer.cpp
+    src/model/LibraryFolder.cpp
+)
+target_include_directories(generate_vivaldi_spring_violin_expressive PRIVATE src)
+target_compile_definitions(generate_vivaldi_spring_violin_expressive PRIVATE
+    RSD_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+target_link_libraries(generate_vivaldi_spring_violin_expressive PRIVATE
+    Qt6::Core
     PkgConfig::SNDFILE
     PkgConfig::FLUIDSYNTH
 )

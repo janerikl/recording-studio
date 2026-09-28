@@ -227,10 +227,12 @@ public:
         m_midiNotes.store(std::const_pointer_cast<const MidiNoteList>(updated));
     }
 
-    // Automation curves for Volume/Pan: same copy-on-write/atomic-swap
-    // pattern as `clips`/`midiClips`. At most one lane per AutomationTarget;
+    // Automation curves (Volume/Pan, plus Expression/Vibrato CCs for
+    // Instrument tracks): same copy-on-write/atomic-swap pattern as
+    // `clips`/`midiClips`. At most one lane per AutomationTarget;
     // AudioEngine reads this snapshot each block and, for a target with no
-    // lane (or an empty one), falls back to the static volume/pan atomics.
+    // lane (or an empty one), falls back to the static volume/pan atomics
+    // (or the MIDI CC defaults).
     std::shared_ptr<const AutomationLaneList> automationLanesSnapshot() const {
         return m_automationLanes.load();
     }
