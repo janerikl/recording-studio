@@ -216,6 +216,12 @@ private:
     std::map<std::tuple<const void*, int64_t, int64_t, int, int>, QVector<WaveformCache::PeakPair>>
         m_peakCache;
 
+    // Incremental LOD peaks for still-growing live-recording clips (see
+    // WaveformCache::extendBlockPeaks) — keyed by clip id + channel, swept
+    // for entries whose clip is no longer live at the end of paintEvent.
+    static constexpr int64_t kLiveLodBlockFrames = 512;
+    std::map<std::pair<QUuid, int>, WaveformCache::BlockPeaks> m_liveLodPeaks;
+
     bool m_rangeSelecting = false;    // actively dragging out a new range (Shift held)
     bool m_hasRangeSelection = false;
     int64_t m_rangeSelectionStart = 0;

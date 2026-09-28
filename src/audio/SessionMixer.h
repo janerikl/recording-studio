@@ -37,7 +37,7 @@ void renderTrackBlock(Track& track, unsigned int sampleRate, unsigned int channe
 // effects/volume then mix into the master buffer; finally the master bus's
 // own effects/volume apply, writing the result into `out` (overwritten,
 // size >= nFrames*channels). This is the exact mixing logic
-// AudioEngine::rtCallback uses for live playback, extracted so an offline
+// AudioEngine::rtOutputCallback uses for live playback, extracted so an offline
 // export sounds identical — see OfflineRenderer.h.
 // `isRecording`: while true, every track that isn't record-armed is
 // skipped entirely (silent output), same as a muted track. Prevents two

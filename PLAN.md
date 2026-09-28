@@ -1397,3 +1397,135 @@ passes.
 - Each feature gets a verification plan proposed and approved before
   implementation starts (per standing workflow rule).
 - Test-first: write tests before implementation for each feature.
+
+## Fix: mic recording stalls after ~2 seconds
+
+Root cause (confirmed by investigation, see conversation): while recording,
+`ClipLaneWidget::paintEvent` recomputes that live clip's waveform peaks from
+scratch every ~30ms drain tick — copying the *entire* accumulated buffer and
+rescanning it in `WaveformCache::computePeaks` — because the existing
+`m_peakCache` is keyed on the clip's sample range, which changes every tick
+for a still-growing clip and so never hits. Cost is O(total samples so far)
+per repaint, O(n^2) over a recording: cheap at first, then bad enough by ~2s
+to back up the Qt event loop on the same thread that runs the 30ms
+`drainCaptureRing` timer, stalling capture too. The short/duplicate clips
+the user saw are a symptom of restarting recording after it appeared to
+hang.
+
+Fix: give live-recording clips an incremental block-level LOD peak cache
+(`WaveformCache::BlockPeaks` + `extendBlockPeaks`/`downsampleBlockPeaks`)
+that only rescans newly-arrived samples each tick, instead of the whole
+buffer, then downsamples the (much smaller) block array to display columns.
+Finished clips keep using the existing full-recompute-cached path unchanged.
+
+1. [x] Tests first: `tests/test_WaveformCache.cpp` — incremental
+   `extendBlockPeaks` calls (simulating repeated drain ticks) produce the
+   same block peaks as one non-incremental call over the final buffer;
+   `downsampleBlockPeaks` correctness on a small known block array. Seen
+   failing (API didn't exist) before implementation.
+2. [x] Implement `WaveformCache::BlockPeaks`/`extendBlockPeaks`/
+   `downsampleBlockPeaks` in src/waveform/WaveformCache.{h,cpp}.
+3. [x] Wire into `ClipLaneWidget`: live-recording clips use the incremental
+   LOD path (keyed by clip id + channel), finished clips unchanged; sweep
+   stale LOD entries for clips no longer live at the end of paintEvent.
+4. [x] Registered new test target in tests/CMakeLists.txt; full ctest
+   green (53/53).
+5. [ ] Manual: record 15-20s of mic audio, confirm no stall/freeze and the
+   captured clip's length matches elapsed time.
+
+Verification plan (approved by user before starting):
+- [x] New unit tests seen failing (API doesn't exist yet) before
+  implementation, then passing after (7/7 WaveformCacheTests).
+- [x] Full `ctest` suite green (53/53).
+- [ ] Manual mic recording test as above.
+
+### Follow-up: real root cause is a duplex ALSA stream, not just repaint
+
+The waveform fix above was a genuine, separate perf bug, but the recording
+still fragmented after it. Terminal output while reproducing:
+```
+RtApiAlsa::getDeviceInfo: snd_pcm_open error for device (hw:2,0), Device or resource busy.
+RtApiAlsa::probeDeviceOpen: unable to synchronize input and output devices.
+```
+`AudioEngine` opens ONE duplex RtAudio stream (`openStream(&outParams,
+&inParams, ...)`, AudioEngine.cpp ~228) covering both playback and mic
+capture in a single callback, kept open for the app's whole lifetime.
+"Unable to synchronize input and output devices" is RtAudio/ALSA saying the
+input and output devices are different physical hardware that can't share
+one duplex stream's clock — that's the actual stall source, not (only) UI
+repaint cost. User confirmed: fine with recording being fully silent (no
+other tracks, no metronome) while Recording, in exchange for splitting
+record/playback into two independent, always-open, single-direction
+streams — never one combined duplex open. This also directly satisfies "no
+playback while recording and vice versa."
+
+Design (mirrors the existing, working `m_rtAudioSys`/`rtSystemAudioCallback`
+second-stream pattern already in this file for system-audio capture):
+- `m_rtAudio` becomes an OUTPUT-ONLY stream (`rtOutputCallback`): mixes
+  session audio, metronome, and preview-sample audition, but only while
+  `state == Playing`; renders pure silence and skips all of that otherwise
+  (also skips it while `Recording`, since no playback allowed then). Only
+  this callback advances transport position while `state == Playing`.
+- New `m_rtAudioIn`/`rtInputCallback`: writes to `m_captureRing` /
+  `m_punchRecorder`, and updates input peak meters, only while
+  `state == Recording` — moved verbatim from the old combined callback.
+  Only this callback advances transport position while `state ==
+  Recording`. Runs continuously (like today's input peak metering "even
+  when stopped") so input level shows before Record is pressed.
+- Both streams opened with only one direction's `StreamParameters` each —
+  never both together — so RtAudio never needs to synchronize two
+  different physical devices.
+- Small pure-logic seam for unit testing (mirrors `RecordRouting.h`'s
+  style): `src/audio/StreamRoleMath.h` with `outputStreamShouldMix(state)`
+  and `inputStreamShouldCapture(state)` predicates, used by both the real
+  callbacks and tests, so the "never double-advance transport / never mix
+  during Recording" invariant is covered without needing real hardware.
+
+1. [x] Tests first: `tests/test_StreamRoleMath.cpp` for the two predicates
+   (each TransportState value covered). Seen failing (header didn't exist)
+   before implementation.
+2. [x] Add `src/audio/StreamRoleMath.h`.
+3. [x] Split `AudioEngine::start()`/`stop()` and the callback into
+   `rtOutputCallback`/`rtInputCallback` per the design above; update
+   AudioEngine.h members. Output stream opens output-only, input stream
+   (new `m_rtAudioIn`, mirrors the existing `m_rtAudioSys` pattern) opens
+   input-only — never one combined openStream(&out,&in,...) call.
+4. [x] Full `ctest` green (54/54).
+5. [ ] Manual: record with an existing track already having audio/a
+   metronome running — confirm recording is silent (no bleed/monitoring)
+   and no more stalls/fragmentation; confirm playback still works
+   normally when not recording.
+
+Verification plan (approved by user before starting):
+- [x] New `StreamRoleMathTests` seen failing (file doesn't exist) before
+  implementation, then passing after (5/5).
+- [x] Full `ctest` suite green (54/54).
+- [x] Manual recording test — see actual root cause below.
+
+### Actual root cause (found via temporary [DIAG] logging, now removed)
+
+Both fixes above were real and legitimate, and diagnostic logging confirmed
+the capture pipeline itself was clean (continuous frame growth, zero ring
+buffer drops) once isolated. The remaining "stalls"/"jumped tracks" were
+`nerd-dictation` (a background speech-to-text tool, PID found via `pgrep
+-fa nerd-dictation`) running continuously: it held the mic open via
+PipeWire (the literal source of the `Device or resource busy` errors,
+competing with the app's own input stream) and typed recognized speech —
+including a space between every word — into whatever window had focus.
+Each phantom space keystroke hit the app's Space=Play/Stop shortcut,
+repeatedly stopping/restarting recording mid-take. Confirmed via
+`[DIAG] TRIGGER SOURCE: spaceShortcut activated` firing rapidly with no
+real key press, and resolved by stopping and fully uninstalling
+nerd-dictation (`~/.local/share/nerd-dictation`, `~/bin/nerd-dictation*`,
+`~/.config/nerd-dictation`, ~68MB total, all confirmed removed).
+
+Along the way, found and fixed a real minor bug: `onRecordClicked()` would
+silently enter `Recording` state with nothing armed to capture into (e.g.
+the active track was Instrument-kind, filtered out by
+`filterRecordableTracks`) — now warns "Nothing to Record" and refuses to
+start, matching the existing System-Audio-unavailable warning.
+
+- [x] Removed all temporary `[DIAG]` logging from MainWindow.cpp/
+  AudioEngine.cpp.
+- [x] Added the "Nothing to Record" guard in `onRecordClicked()`.
+- [x] Full `ctest` green after cleanup (54/54).

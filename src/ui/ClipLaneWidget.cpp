@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <set>
 
 #include "command/EditCommands.h"
 #include "model/EditClipboard.h"
@@ -336,22 +337,36 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
                     // tracks). A still-growing live-recording clip gets a
                     // new clampedLen each tick, so it naturally bypasses the
                     // cache and stays live.
-                    auto key = std::make_tuple(static_cast<const void*>(clip->buffer.get()),
-                                                srcStart, clampedLen, w, channel);
                     QVector<WaveformCache::PeakPair> peaks;
-                    auto cacheIt = m_peakCache.find(key);
-                    if (cacheIt != m_peakCache.end()) {
-                        peaks = cacheIt->second;
+                    if (clip->isLiveRecording) {
+                        // Still growing every drain tick: rescanning the
+                        // whole buffer from scratch each repaint (the path
+                        // below) gets slower as the recording gets longer,
+                        // eventually stalling the UI thread. Instead extend
+                        // a block-level LOD incrementally (only new samples
+                        // cost anything) and downsample that much smaller
+                        // array for display.
+                        auto& state = m_liveLodPeaks[{clip->id, channel}];
+                        WaveformCache::extendBlockPeaks(*clip->buffer, channel, kLiveLodBlockFrames,
+                                                         state);
+                        peaks = WaveformCache::downsampleBlockPeaks(state.blocks, w);
                     } else {
-                        AudioBuffer sub;
-                        sub.channels = clip->buffer->channels;
-                        sub.sampleRate = clip->buffer->sampleRate;
-                        sub.samples.assign(
-                            clip->buffer->samples.begin() + srcStart * sub.channels,
-                            clip->buffer->samples.begin() + (srcStart + clampedLen) * sub.channels);
-                        peaks = WaveformCache::computePeaks(sub, w, channel);
-                        if (m_peakCache.size() > 5000) m_peakCache.clear(); // bound unbounded growth
-                        m_peakCache[key] = peaks;
+                        auto key = std::make_tuple(static_cast<const void*>(clip->buffer.get()),
+                                                    srcStart, clampedLen, w, channel);
+                        auto cacheIt = m_peakCache.find(key);
+                        if (cacheIt != m_peakCache.end()) {
+                            peaks = cacheIt->second;
+                        } else {
+                            AudioBuffer sub;
+                            sub.channels = clip->buffer->channels;
+                            sub.sampleRate = clip->buffer->sampleRate;
+                            sub.samples.assign(
+                                clip->buffer->samples.begin() + srcStart * sub.channels,
+                                clip->buffer->samples.begin() + (srcStart + clampedLen) * sub.channels);
+                            peaks = WaveformCache::computePeaks(sub, w, channel);
+                            if (m_peakCache.size() > 5000) m_peakCache.clear(); // bound unbounded growth
+                            m_peakCache[key] = peaks;
+                        }
                     }
                     // Gain scales the drawn waveform directly (can visually
                     // clip against the lane bounds above unity, same as
@@ -426,6 +441,23 @@ void ClipLaneWidget::paintEvent(QPaintEvent*) {
         painter.drawLine(px, 0, px, height());
     }
     paintRangeSelection(painter);
+
+    // Drop LOD state for clips that finished recording (or were removed)
+    // since the last paint — they're either gone or now served by the
+    // regular m_peakCache path above.
+    if (!m_liveLodPeaks.empty()) {
+        std::set<QUuid> liveIds;
+        for (auto& clip : *clips) {
+            if (clip->isLiveRecording) liveIds.insert(clip->id);
+        }
+        for (auto it = m_liveLodPeaks.begin(); it != m_liveLodPeaks.end();) {
+            if (liveIds.count(it->first.first) == 0) {
+                it = m_liveLodPeaks.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
 }
 
 void ClipLaneWidget::paintRangeSelection(QPainter& painter) {

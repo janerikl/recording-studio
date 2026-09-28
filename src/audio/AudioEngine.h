@@ -106,18 +106,34 @@ public:
     }
 
 private:
-    static int rtCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
-                           double streamTime, RtAudioStreamStatus status, void* userData);
+    // Recording (mic capture) and playback (session mix, metronome, preview
+    // audition) run on two independent, always-open, single-direction
+    // streams rather than one combined duplex stream — the input and output
+    // devices may be different physical hardware, which RtAudio/ALSA can't
+    // duplex-synchronize (this used to be one openStream(&outParams,
+    // &inParams, ...) call and would intermittently fail/stall for exactly
+    // that reason). See StreamRoleMath.h for the state predicates each one
+    // uses to decide whether it's "active" this block.
+    static int rtOutputCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
+                                 double streamTime, RtAudioStreamStatus status, void* userData);
+    static int rtInputCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
+                                double streamTime, RtAudioStreamStatus status, void* userData);
     static int rtSystemAudioCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
                                       double streamTime, RtAudioStreamStatus status, void* userData);
 
+    bool startInputStream();
+    void stopInputStream();
     bool startSystemAudioStream();
     void stopSystemAudioStream();
 
-    std::unique_ptr<RtAudio> m_rtAudio;
+    std::unique_ptr<RtAudio> m_rtAudio; // output-only
     unsigned int m_sampleRate = 48000;
     unsigned int m_channels = 2;
     bool m_running = false;
+
+    // Independent input-only stream for mic capture (see rtInputCallback).
+    std::unique_ptr<RtAudio> m_rtAudioIn;
+    bool m_inputRunning = false;
 
     unsigned int m_preferredOutputDevice = kUseSystemDefault;
     unsigned int m_preferredInputDevice = kUseSystemDefault;

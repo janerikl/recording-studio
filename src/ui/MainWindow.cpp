@@ -827,6 +827,17 @@ void MainWindow::onRecordClicked() {
         m_systemAudioRecordTargetTracks.clear();
     }
 
+    if (m_recordTargetTracks.empty() && m_systemAudioRecordTargetTracks.empty()) {
+        // Every armed/fallback track got filtered out (e.g. it's an
+        // Instrument or Bus track, not Audio) or lost its only source
+        // above — without this, transport would still enter Recording with
+        // nothing to actually capture into, silently doing nothing.
+        QMessageBox::warning(this, "Nothing to Record",
+                              "No armed track can record audio (it may not be an Audio track, or "
+                              "its input source is unavailable).");
+        return;
+    }
+
     PunchRegion punchRegion = m_ruler->punchRegion();
     if (m_loopRecordCheckBox->isChecked() && punchRegion.isValid()) {
         // Punch/loop recording only supports the mic capture path (a single

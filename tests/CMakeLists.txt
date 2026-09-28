@@ -198,6 +198,18 @@ target_include_directories(preview_playback_math_tests PRIVATE ${CMAKE_SOURCE_DI
 target_link_libraries(preview_playback_math_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME PreviewPlaybackMathTests COMMAND preview_playback_math_tests)
 
+add_executable(stream_role_math_tests test_StreamRoleMath.cpp)
+target_include_directories(stream_role_math_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(stream_role_math_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME StreamRoleMathTests COMMAND stream_role_math_tests)
+
+add_executable(waveform_cache_tests
+    test_WaveformCache.cpp
+    ${CMAKE_SOURCE_DIR}/src/waveform/WaveformCache.cpp)
+target_include_directories(waveform_cache_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(waveform_cache_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME WaveformCacheTests COMMAND waveform_cache_tests)
+
 add_executable(session_mixer_tests
     test_SessionMixer.cpp
     ${CMAKE_SOURCE_DIR}/src/audio/SessionMixer.cpp

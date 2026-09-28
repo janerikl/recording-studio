@@ -9,6 +9,7 @@
 #include "Mixer.h"
 #include "PreviewPlaybackMath.h"
 #include "SessionMixer.h"
+#include "StreamRoleMath.h"
 
 namespace rsd {
 
@@ -38,53 +39,26 @@ AudioEngine::~AudioEngine() {
     stop();
 }
 
-int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int nFrames,
-                             double /*streamTime*/, RtAudioStreamStatus status, void* userData) {
+int AudioEngine::rtOutputCallback(void* outputBuffer, void* /*inputBuffer*/, unsigned int nFrames,
+                                   double /*streamTime*/, RtAudioStreamStatus status, void* userData) {
     auto* self = static_cast<AudioEngine*>(userData);
     auto* out = static_cast<float*>(outputBuffer);
-    const auto* in = static_cast<const float*>(inputBuffer);
 
     if (status) {
-        std::cerr << "RtAudio stream over/underflow detected\n";
+        std::cerr << "RtAudio output stream over/underflow detected\n";
     }
 
     std::memset(out, 0, sizeof(float) * nFrames * self->m_channels);
 
     const TransportState state = self->m_transport.state();
-
-    if (state == TransportState::Recording && in) {
-        if (self->m_transport.punchLoopEnabled() && self->m_transport.punchRegion().isValid()) {
-            // Punch/loop mode: capture only within the region, overwriting
-            // each pass in place. Position is read before advance() below.
-            self->m_punchRecorder.process(self->m_transport.positionSamples(), in, nFrames);
-        } else {
-            self->m_captureRing.write(in, static_cast<size_t>(nFrames) * self->m_channels);
-        }
-    }
-
-    // Measured regardless of transport state so a level meter can show
-    // input signal before the user even hits Record.
-    if (in) {
-        float peakL = 0.0f, peakR = 0.0f;
-        for (unsigned int i = 0; i < nFrames; ++i) {
-            peakL = std::max(peakL, std::abs(in[i * self->m_channels]));
-            unsigned int rCh = self->m_channels > 1 ? 1u : 0u;
-            peakR = std::max(peakR, std::abs(in[i * self->m_channels + rCh]));
-        }
-        self->m_inputPeakL.store(peakL, std::memory_order_relaxed);
-        self->m_inputPeakR.store(peakR, std::memory_order_relaxed);
-    } else {
-        self->m_inputPeakL.store(0.0f, std::memory_order_relaxed);
-        self->m_inputPeakR.store(0.0f, std::memory_order_relaxed);
-    }
-
-    const bool playbackActive = state == TransportState::Playing || state == TransportState::Recording;
-    const bool isRecording = state == TransportState::Recording;
+    const bool shouldMix = outputStreamShouldMix(state); // Playing only — never while Recording
     int64_t pos = self->m_transport.positionSamples();
 
     if (self->m_session) {
-        mixSessionBlock(*self->m_session, self->m_sampleRate, self->m_channels, pos, nFrames,
-                         playbackActive, out, self->m_mixScratch, isRecording);
+        if (shouldMix) {
+            mixSessionBlock(*self->m_session, self->m_sampleRate, self->m_channels, pos, nFrames,
+                             /*playbackActive=*/true, out, self->m_mixScratch, /*isRecording=*/false);
+        }
 
         // Loop browser audition: mixed straight onto the final output,
         // independent of transport state/session tracks, one throwaway
@@ -106,11 +80,10 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
         }
 
         self->m_metronome.render(out, nFrames, self->m_channels, self->m_sampleRate, pos,
-                                  self->m_session->bpm,
-                                  playbackActive && self->m_session->metronomeEnabled);
+                                  self->m_session->bpm, shouldMix && self->m_session->metronomeEnabled);
     }
 
-    if (playbackActive) self->m_transport.advance(nFrames);
+    if (shouldMix) self->m_transport.advance(nFrames);
 
     float outPeakL = 0.0f, outPeakR = 0.0f;
     for (unsigned int i = 0; i < nFrames; ++i) {
@@ -120,6 +93,49 @@ int AudioEngine::rtCallback(void* outputBuffer, void* inputBuffer, unsigned int 
     }
     self->m_outputPeakL.store(outPeakL, std::memory_order_relaxed);
     self->m_outputPeakR.store(outPeakR, std::memory_order_relaxed);
+
+    return 0;
+}
+
+int AudioEngine::rtInputCallback(void* /*outputBuffer*/, void* inputBuffer, unsigned int nFrames,
+                                  double /*streamTime*/, RtAudioStreamStatus status, void* userData) {
+    auto* self = static_cast<AudioEngine*>(userData);
+    const auto* in = static_cast<const float*>(inputBuffer);
+
+    if (status) {
+        std::cerr << "RtAudio input stream over/underflow detected\n";
+    }
+
+    const TransportState state = self->m_transport.state();
+    if (inputStreamShouldCapture(state)) { // Recording only — never while Playing
+        if (in) {
+            if (self->m_transport.punchLoopEnabled() && self->m_transport.punchRegion().isValid()) {
+                // Punch/loop mode: capture only within the region,
+                // overwriting each pass in place. Position is read before
+                // advance() below.
+                self->m_punchRecorder.process(self->m_transport.positionSamples(), in, nFrames);
+            } else {
+                self->m_captureRing.write(in, static_cast<size_t>(nFrames) * self->m_channels);
+            }
+        }
+        self->m_transport.advance(nFrames);
+    }
+
+    // Measured regardless of transport state so a level meter can show
+    // input signal before the user even hits Record.
+    if (in) {
+        float peakL = 0.0f, peakR = 0.0f;
+        for (unsigned int i = 0; i < nFrames; ++i) {
+            peakL = std::max(peakL, std::abs(in[i * self->m_channels]));
+            unsigned int rCh = self->m_channels > 1 ? 1u : 0u;
+            peakR = std::max(peakR, std::abs(in[i * self->m_channels + rCh]));
+        }
+        self->m_inputPeakL.store(peakL, std::memory_order_relaxed);
+        self->m_inputPeakR.store(peakR, std::memory_order_relaxed);
+    } else {
+        self->m_inputPeakL.store(0.0f, std::memory_order_relaxed);
+        self->m_inputPeakR.store(0.0f, std::memory_order_relaxed);
+    }
 
     return 0;
 }
@@ -204,36 +220,23 @@ bool AudioEngine::start() {
                               : m_rtAudio->getDefaultOutputDevice();
     outParams.nChannels = m_channels;
 
-    RtAudio::StreamParameters inParams;
-    bool haveInput = m_preferredInputDevice != kNoInputDevice;
-    if (haveInput) {
-        inParams.deviceId = m_preferredInputDevice != kUseSystemDefault
-                                 ? m_preferredInputDevice
-                                 : m_rtAudio->getDefaultInputDevice();
-        inParams.nChannels = m_channels;
-        // Confirm the resolved device actually supports input — a bare
-        // device index isn't enough evidence (index 0 is a real device in
-        // this RtAudio version, and might be output-only).
-        RtAudio::DeviceInfo devInfo = m_rtAudio->getDeviceInfo(inParams.deviceId);
-        if (!devInfo.probed || devInfo.inputChannels == 0) haveInput = false;
-    }
-    if (!haveInput) {
-        std::cerr << "No input device found; recording will be unavailable, playback only.\n";
-    }
-
     m_sampleRate = m_preferredSampleRate;
     unsigned int bufferFrames = 512;
 
     try {
-        m_rtAudio->openStream(&outParams, haveInput ? &inParams : nullptr, RTAUDIO_FLOAT32,
-                               m_sampleRate, &bufferFrames, &AudioEngine::rtCallback, this);
+        m_rtAudio->openStream(&outParams, nullptr, RTAUDIO_FLOAT32, m_sampleRate, &bufferFrames,
+                               &AudioEngine::rtOutputCallback, this);
         m_rtAudio->startStream();
     } catch (const std::exception& e) {
-        std::cerr << "RtAudio error: " << e.what() << "\n";
+        std::cerr << "RtAudio output stream error: " << e.what() << "\n";
         return false;
     }
 
     m_running = true;
+
+    // Best-effort: no mic input just means recording is unavailable, not a
+    // reason to fail engine startup (playback still works).
+    startInputStream();
 
     if (m_preferredSystemAudioDevice != kNoInputDevice && !startSystemAudioStream()) {
         std::cerr << "System audio device unavailable; that stream will be skipped.\n";
@@ -242,8 +245,56 @@ bool AudioEngine::start() {
     return true;
 }
 
+bool AudioEngine::startInputStream() {
+    if (m_inputRunning) return true;
+    if (m_preferredInputDevice == kNoInputDevice) return false;
+
+    m_rtAudioIn = std::make_unique<RtAudio>(RtAudio::LINUX_ALSA);
+    if (m_rtAudioIn->getDeviceCount() < 1) return false;
+
+    RtAudio::StreamParameters inParams;
+    inParams.deviceId = m_preferredInputDevice != kUseSystemDefault
+                             ? m_preferredInputDevice
+                             : m_rtAudioIn->getDefaultInputDevice();
+    inParams.nChannels = m_channels;
+
+    // Confirm the resolved device actually supports input — a bare device
+    // index isn't enough evidence (index 0 is a real device in this RtAudio
+    // version, and might be output-only).
+    RtAudio::DeviceInfo devInfo = m_rtAudioIn->getDeviceInfo(inParams.deviceId);
+    if (!devInfo.probed || devInfo.inputChannels == 0) {
+        std::cerr << "No input device found; recording will be unavailable, playback only.\n";
+        return false;
+    }
+
+    unsigned int bufferFrames = 512;
+    try {
+        m_rtAudioIn->openStream(nullptr, &inParams, RTAUDIO_FLOAT32, m_preferredSampleRate,
+                                 &bufferFrames, &AudioEngine::rtInputCallback, this);
+        m_rtAudioIn->startStream();
+    } catch (const std::exception& e) {
+        std::cerr << "RtAudio input stream error: " << e.what() << "\n";
+        return false;
+    }
+
+    m_inputRunning = true;
+    return true;
+}
+
+void AudioEngine::stopInputStream() {
+    if (!m_inputRunning) return;
+    try {
+        if (m_rtAudioIn->isStreamRunning()) m_rtAudioIn->stopStream();
+        if (m_rtAudioIn->isStreamOpen()) m_rtAudioIn->closeStream();
+    } catch (const std::exception& e) {
+        std::cerr << "RtAudio input stream stop error: " << e.what() << "\n";
+    }
+    m_inputRunning = false;
+}
+
 void AudioEngine::stop() {
     stopSystemAudioStream();
+    stopInputStream();
 
     if (!m_running) return;
     try {
