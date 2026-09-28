@@ -167,6 +167,113 @@ void CompressorEffect::process(float* buffer, unsigned int nFrames, unsigned int
 
 // --- DelayEffect ------------------------------------------------------
 
+void NoiseGateEffect::prepare(double sampleRate) {
+    m_sampleRate = sampleRate;
+    m_envelope = 1.0f;
+    m_holdCounter = 0;
+}
+
+void NoiseGateEffect::process(float* buffer, unsigned int nFrames, unsigned int channels) {
+    float threshold = thresholdDb.load(std::memory_order_relaxed);
+    float attackMsV = std::max(attackMs.load(std::memory_order_relaxed), 0.001f);
+    float releaseMsV = std::max(releaseMs.load(std::memory_order_relaxed), 0.001f);
+    float rangeLin = std::pow(10.0f, rangeDb.load(std::memory_order_relaxed) / 20.0f);
+    size_t holdSamples =
+        static_cast<size_t>(std::max(holdMs.load(std::memory_order_relaxed), 0.0f) * 0.001f *
+                             static_cast<float>(m_sampleRate));
+
+    float attackCoeff = std::exp(-1.0f / (0.001f * attackMsV * static_cast<float>(m_sampleRate)));
+    float releaseCoeff = std::exp(-1.0f / (0.001f * releaseMsV * static_cast<float>(m_sampleRate)));
+
+    for (unsigned int i = 0; i < nFrames; ++i) {
+        float peak = 0.0f;
+        for (unsigned int ch = 0; ch < channels; ++ch) {
+            peak = std::max(peak, std::abs(buffer[i * channels + ch]));
+        }
+        float peakDb = 20.0f * std::log10(std::max(peak, 1e-9f));
+
+        float target;
+        if (peakDb > threshold) {
+            target = 1.0f;
+            m_holdCounter = holdSamples;
+        } else if (m_holdCounter > 0) {
+            target = 1.0f;
+            --m_holdCounter;
+        } else {
+            target = rangeLin;
+        }
+
+        float coeff = (target > m_envelope) ? attackCoeff : releaseCoeff;
+        m_envelope = coeff * m_envelope + (1.0f - coeff) * target;
+
+        for (unsigned int ch = 0; ch < channels; ++ch) {
+            buffer[i * channels + ch] *= m_envelope;
+        }
+    }
+}
+
+void LimiterEffect::prepare(double sampleRate) {
+    m_sampleRate = sampleRate;
+    float ms = std::max(lookaheadMs.load(std::memory_order_relaxed), 0.1f);
+    m_lookaheadSamples = std::max<size_t>(1, static_cast<size_t>(ms * 0.001 * sampleRate));
+    for (int ch = 0; ch < kMaxChannels; ++ch) {
+        m_delayBuf[ch].assign(m_lookaheadSamples, 0.0f);
+    }
+    m_peakWindow.assign(m_lookaheadSamples, 0.0f);
+    m_pos = 0;
+    m_currentGain = 1.0f;
+}
+
+void LimiterEffect::process(float* buffer, unsigned int nFrames, unsigned int channels) {
+    size_t n = m_lookaheadSamples;
+    if (n == 0) return;
+
+    float ceilingLin = std::pow(10.0f, ceilingDb.load(std::memory_order_relaxed) / 20.0f);
+    float releaseMsV = std::max(releaseMs.load(std::memory_order_relaxed), 0.001f);
+    float releaseCoeff = std::exp(-1.0f / (0.001f * releaseMsV * static_cast<float>(m_sampleRate)));
+
+    for (unsigned int i = 0; i < nFrames; ++i) {
+        float peak = 0.0f;
+        for (unsigned int ch = 0; ch < channels; ++ch) {
+            peak = std::max(peak, std::abs(buffer[i * channels + ch]));
+        }
+
+        // Read the sample that's about to be overwritten: it was written
+        // exactly `n` steps ago, so this is the delayed output.
+        float delayed[kMaxChannels];
+        for (int ch = 0; ch < kMaxChannels; ++ch) delayed[ch] = m_delayBuf[ch][m_pos];
+
+        for (unsigned int ch = 0; ch < channels; ++ch) {
+            int slot = std::min(static_cast<int>(ch), kMaxChannels - 1);
+            m_delayBuf[slot][m_pos] = buffer[i * channels + ch];
+        }
+        m_peakWindow[m_pos] = peak;
+
+        // Deliberately simple O(lookahead) scan each sample, mirroring the
+        // rest of this file's preference for clarity over micro-optimizing
+        // a small, fixed-size window (a few hundred samples at most).
+        float windowPeak = 0.0f;
+        for (float v : m_peakWindow) windowPeak = std::max(windowPeak, v);
+
+        float targetGain = windowPeak > 1e-9f ? std::min(1.0f, ceilingLin / windowPeak) : 1.0f;
+        if (targetGain < m_currentGain) {
+            // Drop immediately: the lookahead window already saw this peak
+            // coming, so there's no reason to smooth the attack.
+            m_currentGain = targetGain;
+        } else {
+            m_currentGain = releaseCoeff * m_currentGain + (1.0f - releaseCoeff) * targetGain;
+        }
+
+        for (unsigned int ch = 0; ch < channels; ++ch) {
+            int slot = std::min(static_cast<int>(ch), kMaxChannels - 1);
+            float out = delayed[slot] * m_currentGain;
+            buffer[i * channels + ch] = std::clamp(out, -ceilingLin, ceilingLin);
+        }
+
+        m_pos = (m_pos + 1) % n;
+    }
+}
+
 void DelayEffect::prepare(double sampleRate) {
     m_sampleRate = sampleRate;
     size_t maxDelaySamples = static_cast<size_t>(sampleRate * 2.0) + 1; // up to 2s

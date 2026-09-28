@@ -25,6 +25,8 @@ QString effectTypeName(EffectType t) {
         case EffectType::Compressor: return "Compressor";
         case EffectType::Delay: return "Delay";
         case EffectType::Reverb: return "Reverb";
+        case EffectType::Limiter: return "Limiter";
+        case EffectType::Gate: return "Gate";
     }
     return "Effect";
 }
@@ -127,6 +129,36 @@ void addParamControls(QVBoxLayout* paramsLayout, const std::shared_ptr<Effect>& 
             paramsLayout, "Mix", 0.0f, 1.0f, [w]() { return w.lock() ? w.lock()->mix.load() : 0.25f; },
             [w](float v) { if (auto e = w.lock()) e->mix.store(v); }, stack, "Set Reverb Mix");
         (void)reverb;
+    } else if (auto* lim = dynamic_cast<LimiterEffect*>(effect.get())) {
+        std::weak_ptr<LimiterEffect> w = std::static_pointer_cast<LimiterEffect>(effect);
+        addFloatControl(
+            paramsLayout, "Ceiling (dB)", -12.0f, 0.0f,
+            [w]() { return w.lock() ? w.lock()->ceilingDb.load() : -0.3f; },
+            [w](float v) { if (auto e = w.lock()) e->ceilingDb.store(v); }, stack, "Set Limiter Ceiling");
+        addFloatControl(
+            paramsLayout, "Release (ms)", 10.0f, 500.0f,
+            [w]() { return w.lock() ? w.lock()->releaseMs.load() : 50.0f; },
+            [w](float v) { if (auto e = w.lock()) e->releaseMs.store(v); }, stack, "Set Limiter Release");
+        (void)lim;
+    } else if (auto* gate = dynamic_cast<NoiseGateEffect*>(effect.get())) {
+        std::weak_ptr<NoiseGateEffect> w = std::static_pointer_cast<NoiseGateEffect>(effect);
+        addFloatControl(
+            paramsLayout, "Threshold (dB)", -80.0f, 0.0f,
+            [w]() { return w.lock() ? w.lock()->thresholdDb.load() : -40.0f; },
+            [w](float v) { if (auto e = w.lock()) e->thresholdDb.store(v); }, stack, "Set Gate Threshold");
+        addFloatControl(
+            paramsLayout, "Attack (ms)", 0.1f, 100.0f,
+            [w]() { return w.lock() ? w.lock()->attackMs.load() : 1.0f; },
+            [w](float v) { if (auto e = w.lock()) e->attackMs.store(v); }, stack, "Set Gate Attack");
+        addFloatControl(
+            paramsLayout, "Hold (ms)", 0.0f, 500.0f,
+            [w]() { return w.lock() ? w.lock()->holdMs.load() : 50.0f; },
+            [w](float v) { if (auto e = w.lock()) e->holdMs.store(v); }, stack, "Set Gate Hold");
+        addFloatControl(
+            paramsLayout, "Release (ms)", 10.0f, 1000.0f,
+            [w]() { return w.lock() ? w.lock()->releaseMs.load() : 100.0f; },
+            [w](float v) { if (auto e = w.lock()) e->releaseMs.store(v); }, stack, "Set Gate Release");
+        (void)gate;
     }
 }
 
@@ -160,6 +192,8 @@ EffectsPopoverWidget::EffectsPopoverWidget(QWidget* parent) : QWidget(parent, Qt
     m_addTypeCombo->addItem("Compressor", static_cast<int>(EffectType::Compressor));
     m_addTypeCombo->addItem("Delay", static_cast<int>(EffectType::Delay));
     m_addTypeCombo->addItem("Reverb", static_cast<int>(EffectType::Reverb));
+    m_addTypeCombo->addItem("Limiter", static_cast<int>(EffectType::Limiter));
+    m_addTypeCombo->addItem("Gate", static_cast<int>(EffectType::Gate));
     auto* addButton = new QPushButton("Add");
     connect(addButton, &QPushButton::clicked, this, [this]() {
         addEffectOfType(static_cast<EffectType>(m_addTypeCombo->currentData().toInt()));
@@ -255,6 +289,8 @@ void EffectsPopoverWidget::addEffectOfType(EffectType type) {
         case EffectType::Compressor: effect = std::make_shared<CompressorEffect>(); break;
         case EffectType::Delay: effect = std::make_shared<DelayEffect>(); break;
         case EffectType::Reverb: effect = std::make_shared<ReverbEffect>(); break;
+        case EffectType::Limiter: effect = std::make_shared<LimiterEffect>(); break;
+        case EffectType::Gate: effect = std::make_shared<NoiseGateEffect>(); break;
     }
     effect->prepare(m_sampleRate);
 

@@ -172,6 +172,19 @@ private slots:
         comp->ratio.store(3.5f);
         track->addEffect(comp);
 
+        auto lim = std::make_shared<LimiterEffect>();
+        lim->prepare(48000.0);
+        lim->ceilingDb.store(-1.5f);
+        lim->releaseMs.store(75.0f);
+        track->addEffect(lim);
+
+        auto gate = std::make_shared<NoiseGateEffect>();
+        gate->prepare(48000.0);
+        gate->thresholdDb.store(-35.0f);
+        gate->holdMs.store(25.0f);
+        gate->rangeDb.store(-50.0f);
+        track->addEffect(gate);
+
         QVector<LibraryEntry> emptyLibrary;
         QVERIFY(SessionIO::saveSession(path, session, emptyLibrary));
 
@@ -180,7 +193,7 @@ private slots:
         QVERIFY(SessionIO::loadSession(path, loaded, loadedLibrary));
 
         auto effects = loaded.tracks.front()->effectsSnapshot();
-        QCOMPARE(effects->size(), size_t(2));
+        QCOMPARE(effects->size(), size_t(4));
 
         auto loadedEq = std::dynamic_pointer_cast<EqEffect>(effects->at(0));
         QVERIFY(loadedEq);
@@ -193,6 +206,17 @@ private slots:
         QVERIFY(loadedComp);
         QVERIFY(qFuzzyCompare(loadedComp->thresholdDb.load(), -12.0f));
         QVERIFY(qFuzzyCompare(loadedComp->ratio.load(), 3.5f));
+
+        auto loadedLim = std::dynamic_pointer_cast<LimiterEffect>(effects->at(2));
+        QVERIFY(loadedLim);
+        QVERIFY(qFuzzyCompare(loadedLim->ceilingDb.load(), -1.5f));
+        QVERIFY(qFuzzyCompare(loadedLim->releaseMs.load(), 75.0f));
+
+        auto loadedGate = std::dynamic_pointer_cast<NoiseGateEffect>(effects->at(3));
+        QVERIFY(loadedGate);
+        QVERIFY(qFuzzyCompare(loadedGate->thresholdDb.load(), -35.0f));
+        QVERIFY(qFuzzyCompare(loadedGate->holdMs.load(), 25.0f));
+        QVERIFY(qFuzzyCompare(loadedGate->rangeDb.load(), -50.0f));
     }
 
     void roundTripsBusRoutingAndMasterBus() {

@@ -33,6 +33,14 @@ without relying on chat history. Update status as items complete.
 12. [x] Mixer view: dockable strip at the bottom with a vertical fader, pan,
     mute/solo, and effect slots per track (Pro Tools/Ableton-style), toggled
     via the View menu
+13. [x] Lookahead brickwall limiter effect (prevents clipping on the master
+    bus/any track)
+14. [x] Noise gate effect (cuts hiss/bleed below a threshold, useful on mic
+    tracks)
+15. [ ] RMS/LUFS loudness metering (current meters are peak-only; add true
+    perceived-loudness measurement alongside them)
+16. [ ] Normalize tool (one-shot: scale a clip/track to a target peak or
+    loudness level)
 
 ## Completed: Clip-level gain handle (trim/fade already existed)
 
@@ -1967,3 +1975,96 @@ start, matching the existing System-Audio-unavailable warning.
 - [x] Full `ctest` green after cleanup (54/54).
 - [ ] Final manual confirmation: user records normally now that
   nerd-dictation is gone.
+
+## Completed: Lookahead brickwall limiter effect
+
+Goal (feature #13): prompted by "does sound have a concept of levels/sound
+correction" — the effects rack already had EQ/Compressor/Delay/Reverb but no
+limiter, the one clearly missing high-value piece for guaranteeing the
+master bus never clips on export/playback. Chose (asked first) a true
+lookahead brickwall design over a zero-latency envelope limiter: a small
+fixed output delay in exchange for a hard guarantee against overshoot.
+
+Design (approved):
+- [x] New `EffectType::Limiter` / `LimiterEffect` in `src/audio/Effects.h`/
+      `.cpp`, same atomics-plus-RT-safe-process shape as `CompressorEffect`:
+      `ceilingDb` (-0.3 default), `lookaheadMs` (fixed 5ms, not exposed in
+      the UI yet), `releaseMs` (50ms default). Internal per-channel circular
+      delay buffer sized to the lookahead window plus a sliding peak-window
+      scan (deliberately simple O(lookahead) per sample, matching the file's
+      existing preference for clarity over micro-optimization); gain drops
+      immediately when the lookahead reveals a peak (no attack needed) and
+      releases smoothly; output is also hard-clamped to the ceiling as a
+      final safety net.
+- [x] Known limitation documented in a code comment: adds `lookaheadMs` of
+      output latency. Fine for the master bus (the whole mix shifts
+      together) but a single track with a limiter in its chain will play
+      that much later than untouched tracks — no plugin-delay-compensation
+      exists elsewhere in the engine to correct for it.
+- [x] Wired into `EffectsPopoverWidget.cpp` (type-name label, add-type combo
+      entry, param sliders for Ceiling/Release, add-effect factory) and
+      `SessionIO.cpp` (type string, JSON serialize/deserialize for
+      ceilingDb/lookaheadMs/releaseMs) — the same 4+3 switch-statement spots
+      every existing effect type touches.
+
+Verification plan (approved):
+- [x] Automated (written first): 4 new cases in `tests/test_Effects.cpp` —
+      no overshoot on a sudden loud transient (proves the lookahead
+      advantage over a zero-latency design), sustained loud signal clamped
+      to the ceiling, quiet signal passes through unaffected, bypass leaves
+      the buffer untouched. Extended `test_SessionIO.cpp`'s existing
+      `roundTripsTrackEffectChain` case to also cover a Limiter. Full suite
+      (54/54 binaries) passes.
+- [x] Full app build (`recording_studio` + every `generate_*` tool target)
+      compiles clean with the new effect type.
+- [ ] Full manual (not done from this session): add a Limiter to the master
+      bus via the mixer's effects popover, play back audio that would
+      otherwise clip, confirm via the existing master `LevelMeterWidget`
+      that peaks no longer exceed the ceiling; save/reload a session with a
+      Limiter to confirm it round-trips in a real project file (not just
+      the unit test's in-memory round-trip).
+
+## Completed: Noise gate effect
+
+Goal (feature #14): cut hiss/bleed on mic tracks when the signal drops below
+a threshold. Same `Effect` pattern as `CompressorEffect`/`LimiterEffect`.
+
+Design (approved):
+- [x] New `EffectType::Gate` / `NoiseGateEffect` in `src/audio/Effects.h`/
+      `.cpp`. Atomics: `thresholdDb` (-40 default), `attackMs` (1),
+      `holdMs` (50), `releaseMs` (100), `rangeDb` (-60 default — floor
+      attenuation when closed, not full silence, per approved choice).
+      Private state: `m_sampleRate`, `m_envelope` (current gain,
+      audio-thread-only, mirrors `CompressorEffect::m_envelopeDb` but
+      linear here), `m_holdCounter` (size_t, samples remaining before the
+      gate is allowed to start closing).
+- [x] `process()` per sample (peak detection across channels, per approved
+      choice): if peak dB > threshold, target gain = 1.0 and reset
+      `m_holdCounter` to `holdMs` worth of samples; else if
+      `m_holdCounter > 0`, target = 1.0 and decrement; else target =
+      `rangeLin` (linear form of `rangeDb`). Smooth current gain toward
+      target with an attack coefficient (opening) or release coefficient
+      (closing) — same `exp(-1/(0.001*ms*sampleRate))` shape as the
+      compressor's envelope. No lookahead, no allocation, no buffers.
+- [x] Wire into `src/ui/EffectsPopoverWidget.cpp` (effectTypeName() label,
+      addTypeCombo entry, addParamControls() branch with 4 sliders for
+      Threshold/Attack/Hold/Release — Range left at its default for v1,
+      not exposed as a slider, matching Limiter's un-exposed lookaheadMs —
+      addEffectOfType() factory case) and `src/io/SessionIO.cpp`
+      (effectTypeToString "gate", effectToJson/effectFromJson serializing
+      all 5 atomics including rangeDb even though it's not UI-exposed yet).
+
+Verification plan (approved):
+- [x] Automated (written first, in `tests/test_Effects.cpp`): signal above
+      threshold passes through unaffected; sustained signal below threshold
+      settles at `rangeDb` attenuation (not silence); hold keeps the gate
+      open for `holdMs` after level drops before it starts closing; bypass
+      leaves the buffer untouched. Extended `test_SessionIO.cpp`'s
+      `roundTripsTrackEffectChain` case to also cover a Gate. Full suite
+      (54/54 binaries) passes.
+- [x] Full app build (`recording_studio` + every `generate_*` tool target)
+      compiles clean with the new effect type.
+- [ ] Full manual (not done from this session): add a Gate to a mic track,
+      confirm background hiss between phrases is audibly reduced without
+      chopping off word onsets/tails; save/reload a session with a Gate to
+      confirm it round-trips in a real project file.

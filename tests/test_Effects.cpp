@@ -121,6 +121,154 @@ private slots:
         QVERIFY(std::abs(buf.back() - 0.05f) < 0.001f);
     }
 
+    // --- LimiterEffect ----------------------------------------------------
+
+    void limiterNeverExceedsCeilingEvenOnFirstAffectedSample() {
+        LimiterEffect lim;
+        lim.ceilingDb.store(-3.0f); // ~0.7079 linear
+        lim.lookaheadMs.store(5.0f);
+        lim.releaseMs.store(50.0f);
+        lim.prepare(48000.0);
+
+        float ceilingLin = std::pow(10.0f, -3.0f / 20.0f);
+
+        // Sudden loud transient: silence, then a full-scale step. A
+        // zero-latency design would let the very first loud sample(s)
+        // through before the envelope reacts; lookahead must prevent that
+        // entirely, from the first affected sample onward.
+        std::vector<float> buf(4000, 0.0f);
+        for (size_t i = 500; i < buf.size(); ++i) buf[i] = 1.0f;
+        lim.process(buf.data(), static_cast<unsigned int>(buf.size()), 1);
+
+        for (float v : buf) {
+            QVERIFY(std::abs(v) <= ceilingLin + 1e-4f);
+        }
+    }
+
+    void limiterClampsSustainedLoudSignalToCeiling() {
+        LimiterEffect lim;
+        lim.ceilingDb.store(-1.0f);
+        lim.lookaheadMs.store(5.0f);
+        lim.releaseMs.store(20.0f);
+        lim.prepare(48000.0);
+
+        float ceilingLin = std::pow(10.0f, -1.0f / 20.0f);
+
+        std::vector<float> buf(4000, 1.0f); // constant 0dBFS, above ceiling
+        lim.process(buf.data(), static_cast<unsigned int>(buf.size()), 1);
+
+        for (float v : buf) {
+            QVERIFY(std::abs(v) <= ceilingLin + 1e-4f);
+        }
+        // Once settled, the sustained signal should sit close to the
+        // ceiling rather than being over-reduced.
+        QVERIFY(std::abs(buf.back()) > ceilingLin * 0.9f);
+    }
+
+    void limiterLeavesQuietSignalUnaffected() {
+        LimiterEffect lim;
+        lim.ceilingDb.store(-1.0f);
+        lim.lookaheadMs.store(5.0f);
+        lim.releaseMs.store(20.0f);
+        lim.prepare(48000.0);
+
+        std::vector<float> buf(4000, 0.1f); // well below ceiling
+        lim.process(buf.data(), static_cast<unsigned int>(buf.size()), 1);
+
+        // Ignoring the initial lookahead-window fill (which starts from
+        // silence), the settled output should match the input almost
+        // exactly.
+        QVERIFY(std::abs(buf.back() - 0.1f) < 0.001f);
+    }
+
+    void limiterBypassLeavesBufferUntouched() {
+        auto lim = std::make_shared<LimiterEffect>();
+        lim->ceilingDb.store(-6.0f);
+        lim->bypassed.store(true);
+        lim->prepare(48000.0);
+
+        std::vector<float> input(2000, 1.0f);
+        auto processed = input;
+
+        EffectChain chain{lim};
+        processEffectChain(chain, processed.data(), static_cast<unsigned int>(processed.size()), 1);
+        QCOMPARE(processed, input);
+    }
+
+    // --- NoiseGateEffect ----------------------------------------------------
+
+    void gateLeavesSignalAboveThresholdUnaffected() {
+        NoiseGateEffect gate;
+        gate.thresholdDb.store(-40.0f);
+        gate.attackMs.store(1.0f);
+        gate.holdMs.store(50.0f);
+        gate.releaseMs.store(100.0f);
+        gate.rangeDb.store(-60.0f);
+        gate.prepare(48000.0);
+
+        std::vector<float> buf(2000, 0.5f); // well above -40dB threshold
+        gate.process(buf.data(), static_cast<unsigned int>(buf.size()), 1);
+
+        QVERIFY(std::abs(buf.back() - 0.5f) < 0.001f);
+    }
+
+    void gateAttenuatesSustainedSignalBelowThresholdTowardRange() {
+        NoiseGateEffect gate;
+        gate.thresholdDb.store(-40.0f);
+        gate.attackMs.store(1.0f);
+        gate.holdMs.store(5.0f);
+        gate.releaseMs.store(20.0f);
+        gate.rangeDb.store(-60.0f);
+        gate.prepare(48000.0);
+
+        // Constant quiet signal, well below threshold and past hold+release.
+        std::vector<float> buf(48000, 0.001f); // ~ -60dB
+        gate.process(buf.data(), static_cast<unsigned int>(buf.size()), 1);
+
+        float rangeLin = 0.001f * std::pow(10.0f, -60.0f / 20.0f);
+        QVERIFY(std::abs(buf.back() - rangeLin) < rangeLin * 0.5f + 1e-6f);
+        // Should be attenuated, not silenced (per approved "range" design).
+        QVERIFY(buf.back() != 0.0f);
+    }
+
+    void gateHoldKeepsSignalOpenBrieflyAfterDroppingBelowThreshold() {
+        NoiseGateEffect gate;
+        gate.thresholdDb.store(-20.0f);
+        gate.attackMs.store(0.1f);
+        gate.holdMs.store(20.0f);
+        gate.releaseMs.store(5.0f);
+        gate.rangeDb.store(-60.0f);
+        gate.prepare(48000.0);
+
+        // Loud for a while (opens the gate), then quiet. Hold should keep
+        // the gate open for ~20ms (~960 samples at 48kHz) after the drop,
+        // before release starts closing it.
+        std::vector<float> buf(3000, 0.5f);
+        for (size_t i = 1000; i < buf.size(); ++i) buf[i] = 0.001f;
+        gate.process(buf.data(), static_cast<unsigned int>(buf.size()), 1);
+
+        // Shortly after the drop (still within the hold window), gain
+        // should still be near unity, not yet closing.
+        QVERIFY(std::abs(buf[1500] / 0.001f - 1.0f) < 0.2f);
+        // By the end (hold expired, release elapsed), it should have
+        // moved toward the range floor.
+        QVERIFY(std::abs(buf.back() / 0.001f) < 0.5f);
+    }
+
+    void gateBypassLeavesBufferUntouched() {
+        auto gate = std::make_shared<NoiseGateEffect>();
+        gate->thresholdDb.store(-10.0f);
+        gate->bypassed.store(true);
+        gate->prepare(48000.0);
+
+        std::vector<float> input(2000, 0.001f); // would otherwise be gated
+        auto processed = input;
+
+        EffectChain chain{gate};
+        processEffectChain(chain, processed.data(), static_cast<unsigned int>(processed.size()), 1);
+        QCOMPARE(processed, input);
+    }
+
     // --- DelayEffect ------------------------------------------------------
 
     void delayProducesEchoAtExpectedOffset() {

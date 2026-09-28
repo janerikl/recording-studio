@@ -7,7 +7,7 @@
 
 namespace rsd {
 
-enum class EffectType { EQ, Compressor, Delay, Reverb };
+enum class EffectType { EQ, Compressor, Delay, Reverb, Limiter, Gate };
 
 // One node in a track's effect chain. Structural changes to the chain itself
 // (add/remove/reorder) go through Track's copy-on-write snapshot swap, same
@@ -104,6 +104,59 @@ public:
 private:
     double m_sampleRate = 48000.0;
     float m_envelopeDb = 0.0f; // audio-thread-only state
+};
+
+// Noise gate: attenuates the signal toward `rangeDb` when its level drops
+// below `thresholdDb`, holding open for `holdMs` after the drop before
+// starting to close (avoids chatter on decaying tails), with independent
+// attack/release smoothing. Unlike a hard mute, the closed state settles at
+// `rangeDb` rather than silence, so it reduces rather than eliminates
+// bleed/hiss.
+class NoiseGateEffect : public Effect {
+public:
+    NoiseGateEffect() : Effect(EffectType::Gate) {}
+
+    std::atomic<float> thresholdDb{-40.0f};
+    std::atomic<float> attackMs{1.0f};
+    std::atomic<float> holdMs{50.0f};
+    std::atomic<float> releaseMs{100.0f};
+    std::atomic<float> rangeDb{-60.0f};
+
+    void prepare(double sampleRate) override;
+    void process(float* buffer, unsigned int nFrames, unsigned int channels) override;
+
+private:
+    double m_sampleRate = 48000.0;
+    float m_envelope = 1.0f;     // audio-thread-only state, linear gain
+    size_t m_holdCounter = 0;    // samples remaining before release may begin
+};
+
+// Lookahead brickwall limiter. Delays the signal by a small fixed window so
+// gain reduction can react to a peak before it arrives, guaranteeing the
+// output never exceeds the ceiling (backed by a final hard clamp as a safety
+// net). Note this introduces `lookaheadMs` of output latency: fine when
+// applied to the master bus (the whole mix shifts together) but a track with
+// a limiter in its chain will play that much later than untouched tracks,
+// since the engine has no plugin-delay-compensation to correct for it.
+class LimiterEffect : public Effect {
+public:
+    LimiterEffect() : Effect(EffectType::Limiter) {}
+
+    std::atomic<float> ceilingDb{-0.3f};
+    std::atomic<float> lookaheadMs{5.0f};
+    std::atomic<float> releaseMs{50.0f};
+
+    void prepare(double sampleRate) override;
+    void process(float* buffer, unsigned int nFrames, unsigned int channels) override;
+
+private:
+    static constexpr int kMaxChannels = 2;
+    double m_sampleRate = 48000.0;
+    std::vector<float> m_delayBuf[kMaxChannels];
+    std::vector<float> m_peakWindow;
+    size_t m_lookaheadSamples = 0;
+    size_t m_pos = 0;
+    float m_currentGain = 1.0f; // audio-thread-only state
 };
 
 // Stereo delay line with feedback and wet/dry mix.

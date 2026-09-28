@@ -49,6 +49,8 @@ static QString effectTypeToString(EffectType t) {
         case EffectType::Compressor: return "compressor";
         case EffectType::Delay: return "delay";
         case EffectType::Reverb: return "reverb";
+        case EffectType::Limiter: return "limiter";
+        case EffectType::Gate: return "gate";
     }
     return "eq";
 }
@@ -94,6 +96,22 @@ static QJsonObject effectToJson(const Effect& effect) {
             json["mix"] = reverb.mix.load();
             break;
         }
+        case EffectType::Limiter: {
+            auto& lim = static_cast<const LimiterEffect&>(effect);
+            json["ceilingDb"] = lim.ceilingDb.load();
+            json["lookaheadMs"] = lim.lookaheadMs.load();
+            json["releaseMs"] = lim.releaseMs.load();
+            break;
+        }
+        case EffectType::Gate: {
+            auto& gate = static_cast<const NoiseGateEffect&>(effect);
+            json["thresholdDb"] = gate.thresholdDb.load();
+            json["attackMs"] = gate.attackMs.load();
+            json["holdMs"] = gate.holdMs.load();
+            json["releaseMs"] = gate.releaseMs.load();
+            json["rangeDb"] = gate.rangeDb.load();
+            break;
+        }
     }
     return json;
 }
@@ -135,6 +153,20 @@ static std::shared_ptr<Effect> effectFromJson(const QJsonObject& json, double sa
         reverb->damping.store(static_cast<float>(json["damping"].toDouble(0.5)));
         reverb->mix.store(static_cast<float>(json["mix"].toDouble(0.25)));
         effect = reverb;
+    } else if (typeStr == "limiter") {
+        auto lim = std::make_shared<LimiterEffect>();
+        lim->ceilingDb.store(static_cast<float>(json["ceilingDb"].toDouble(-0.3)));
+        lim->lookaheadMs.store(static_cast<float>(json["lookaheadMs"].toDouble(5.0)));
+        lim->releaseMs.store(static_cast<float>(json["releaseMs"].toDouble(50.0)));
+        effect = lim;
+    } else if (typeStr == "gate") {
+        auto gate = std::make_shared<NoiseGateEffect>();
+        gate->thresholdDb.store(static_cast<float>(json["thresholdDb"].toDouble(-40.0)));
+        gate->attackMs.store(static_cast<float>(json["attackMs"].toDouble(1.0)));
+        gate->holdMs.store(static_cast<float>(json["holdMs"].toDouble(50.0)));
+        gate->releaseMs.store(static_cast<float>(json["releaseMs"].toDouble(100.0)));
+        gate->rangeDb.store(static_cast<float>(json["rangeDb"].toDouble(-60.0)));
+        effect = gate;
     } else {
         return nullptr;
     }
